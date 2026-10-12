@@ -37,4 +37,5 @@ xfail_strict = true
 markers = [
     "jax: needs jax; skipped when jax is not importable",
     "golden: reads the release goldens (golden/) or shipped data (data/)",
+    "slow: heavy constructions (opt-in: -m slow; the D-C Verify commands pass -m 'not slow')",
 ]
