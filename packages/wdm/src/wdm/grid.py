@@ -22,6 +22,8 @@ from dataclasses import dataclass
 import numpy as np
 from numpy.typing import NDArray
 
+from .backend import Backend, get_backend
+
 type Array = NDArray[np.floating]
 type BoolArray = NDArray[np.bool_]
 type IntArray = NDArray[np.integer]
@@ -36,8 +38,13 @@ __all__ = [
     "delta_F",
     "delta_T",
     "delta_omega",
+    "edge_columns",
+    "endpoint_weights",
     "n_samples",
+    "pack",
+    "packed_cells",
     "sanitize_psd",
+    "unpack",
     "time_pixel_centers",
     "validate_dt",
     "validate_finite",
@@ -603,3 +610,80 @@ def count_active(Nf: int, Nt: int) -> int:
     128
     """
     return int(np.sum(active_mask(Nf, Nt)))
+
+
+# ---------------------------------------------------------------------------
+# Packed (band-order) cell vectors -- wdm-paper 1.0
+# ---------------------------------------------------------------------------
+#
+# The N active cells of an (Nf+1, Nt) grid, listed in BAND order: DC with even
+# n, then bands 1..Nf-1 with every n, then Nyquist with (Nf+n) even -- i.e.
+# ``np.nonzero(active_mask(Nf, Nt))``.  This is the order of
+# ``matrix.active_W`` and of every WDM II covariance.  The Nyquist->DC fold of
+# lisa/wdm 0.2.0 (and the manuscript's L1373 interleave) is not offered.
+
+
+def packed_cells(Nf: int, Nt: int) -> tuple[IntArray, IntArray]:
+    """``(m, n)`` of every active cell in band order (length ``N`` each).
+
+    Examples
+    --------
+    >>> import numpy as np, wdm
+    >>> m, n = wdm.grid.packed_cells(4, 4)
+    >>> m.tolist()
+    [0, 0, 1, 1, 1, 1, 2, 2, 2, 2, 3, 3, 3, 3, 4, 4]
+    >>> n.tolist()
+    [0, 2, 0, 1, 2, 3, 0, 1, 2, 3, 0, 1, 2, 3, 0, 2]
+    """
+    validate_grid(Nf, Nt)
+    m, n = np.nonzero(active_mask(Nf, Nt))
+    return m, n
+
+
+def pack(w: Array, Nf: int, Nt: int, *, be: Backend | None = None) -> Array:
+    """``(..., Nf+1, Nt) -> (..., N)``: the active cells in band order."""
+    be = be or get_backend(w)
+    m, n = packed_cells(Nf, Nt)
+    w = be.asarray(w)
+    if w.shape[-2:] != (Nf + 1, Nt):
+        raise ValueError(f"w must end in ({Nf + 1}, {Nt}); got {w.shape}")
+    return w[..., m, n]
+
+
+def unpack(y: Array, Nf: int, Nt: int, *, be: Backend | None = None) -> Array:
+    """``(..., N) -> (..., Nf+1, Nt)``, inactive edge pixels exactly 0."""
+    be = be or get_backend(y)
+    m, n = packed_cells(Nf, Nt)
+    y = be.asarray(y)
+    if y.shape[-1] != m.size:
+        raise ValueError(f"y must end in N = {m.size}; got {y.shape}")
+    out = be.xp.zeros((*y.shape[:-1], Nf + 1, Nt), dtype=y.dtype)
+    return be.set(out, (..., m, n), y, copy=False)
+
+
+def edge_columns(Nt: int, lead: int, trail: int) -> tuple[int, ...]:
+    """The first ``lead`` and last ``trail`` time columns of an ``Nt``-column grid.
+
+    Examples
+    --------
+    >>> import wdm
+    >>> wdm.grid.edge_columns(256, 8, 7)
+    (0, 1, 2, 3, 4, 5, 6, 7, 249, 250, 251, 252, 253, 254, 255)
+    """
+    return tuple(range(lead)) + tuple(range(Nt - trail, Nt))
+
+
+def endpoint_weights(n_rfft: int) -> Array:
+    r"""Trapezoid weights :math:`\eta_k` of the one-sided sum: ``1/2`` at DC and
+    Nyquist, ``1`` between (WDM II Eq. 51, eq:freq_edge_weight).
+
+    Examples
+    --------
+    >>> import wdm
+    >>> wdm.grid.endpoint_weights(5)
+    array([0.5, 1. , 1. , 1. , 0.5])
+    """
+    c = np.ones(n_rfft)
+    c[0] = 0.5
+    c[-1] = 0.5
+    return c

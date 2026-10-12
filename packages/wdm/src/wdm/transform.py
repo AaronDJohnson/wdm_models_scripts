@@ -97,7 +97,14 @@ from numpy.typing import NDArray
 
 from .backend import NUMPY, Backend, get_backend, is_tracer
 from .filter import phi_centered
-from .grid import active_mask, n_samples, validate_dt, validate_finite, validate_grid
+from .grid import (
+    active_mask,
+    carrier_phase,
+    n_samples,
+    validate_dt,
+    validate_finite,
+    validate_grid,
+)
 
 _F64 = np.dtype(np.float64)
 _C128 = np.dtype(np.complex128)
@@ -107,11 +114,16 @@ type BoolArray = NDArray[np.bool_]
 type CArray = NDArray[np.complexfloating]
 
 __all__ = [
+    "atom_spectrum",
+    "band_atoms",
+    "base_atom_spectra",
     "forward",
+    "forward_bands",
     "forward_many",
     "forward_time",
     "forward_time_many",
     "inverse",
+    "inverse_bands",
     "inverse_many",
     "inverse_time",
     "inverse_time_many",
@@ -837,3 +849,153 @@ def inverse_time(
     be = be or get_backend(wmn)
     x_rfft = inverse(wmn, Nf, Nt, dt, be=be)
     return be.fft.irfft(x_rfft, n=N)
+
+
+# ---------------------------------------------------------------------------
+# Atoms and band-limited analysis -- wdm-paper 1.0
+# ---------------------------------------------------------------------------
+
+
+def base_atom_spectra(Nf: int, Nt: int, dt: float) -> dict[tuple[int, int], CArray]:
+    """rfft of the atoms of the cells ``(m, a)``, ``a in {0, 1}`` (active only).
+
+    Every other atom of band ``m`` is a circular shift of one of these by an
+    even number of columns (:func:`atom_spectrum`).  ``dt * inverse_many(e)``:
+    :func:`inverse` returns ``rfft(W_a^{-1} e) = rfft(atom) / dt``.  The same
+    arithmetic as ``wdm_toys.matrix.Grid._base_spectra`` and wdm_dev
+    ``PackedGrid._base_spectra``, so the Eq. 45 constants built from it are
+    bit-identical to the ones that produced the paper's references.
+    """
+    validate_grid(Nf, Nt)
+    validate_dt(dt)
+    mask = active_mask(Nf, Nt)
+    out: dict[tuple[int, int], CArray] = {}
+    for m in range(Nf + 1):
+        for a in (0, 1):
+            if not mask[m, a]:
+                continue
+            e = np.zeros((Nf + 1, Nt))
+            e[m, a] = 1.0
+            out[m, a] = dt * inverse_many(e[None], Nf, Nt, dt)[0]
+    return out
+
+
+def atom_spectrum(m: int, n: int, Nf: int, Nt: int, dt: float, *,
+                  base: dict[tuple[int, int], CArray] | None = None) -> CArray:
+    """rfft of the atom of the active cell ``(m, n)`` (length ``N//2+1``).
+
+    Pass ``base`` (:func:`base_atom_spectra`) to avoid recomputing it.
+    """
+    base = base_atom_spectra(Nf, Nt, dt) if base is None else base
+    a = n % 2
+    if (m, a) not in base:
+        raise ValueError(f"({m}, {n}) is not an active cell of the ({Nf}, {Nt}) grid")
+    k = np.arange(n_samples(Nf, Nt) // 2 + 1)
+    return base[m, a] * np.exp(-2j * np.pi * k * (n - a) / Nt)
+
+
+def _check_interior_bands(bands: NDArray[np.integer], Nf: int) -> NDArray[np.integer]:
+    bands = np.asarray(bands, dtype=int).ravel()
+    if bands.size == 0 or bands.min() < 1 or bands.max() > Nf - 1:
+        raise ValueError(f"bands must be interior bands 1..{Nf - 1}; got {bands.tolist()}")
+    return bands
+
+
+def band_atoms(bands: NDArray[np.integer], Nf: int, Nt: int, dt: float) -> CArray:
+    """``(nb, Nt, Nt)`` complex unit-norm atoms of ``bands`` on their ``Nt``-bin windows.
+
+    Atom ``[b, n, s]`` multiplies the rfft bin ``(m_b - 1) Nt/2 + s`` of a
+    record's spectrum; a cell is ``Re(atoms[b, n] . z[window])``.  Verbatim
+    ``toy_models/galactic_binary/geometry.py::band_atoms`` (L91-103) with the
+    window ``phi_centered(Nf, Nt, dt)`` (bit-identical to the GB copy
+    ``wdm_atoms.phi_centered(Nt, Nf, dt, T)``).
+    """
+    validate_grid(Nf, Nt)
+    validate_dt(dt)
+    bands = _check_interior_bands(bands, Nf)
+    phi = phi_centered(Nf, Nt, dt)
+    s = np.arange(Nt)
+    carrier = np.exp(2j * np.pi * np.outer(np.arange(Nt), s - Nt // 2) / Nt)  # (n, s)
+    atoms = np.empty((len(bands), Nt, Nt), complex)
+    for b, m in enumerate(bands):
+        ph = carrier_phase(int(m), Nt)
+        quad = (int(m) + np.arange(Nt)) % 2
+        u = ph[:, None] * phi[None, :] * carrier
+        u = np.where(quad[:, None] == 1, -1j * u, u)
+        atoms[b] = u / np.linalg.norm(phi)
+    return atoms
+
+
+def _band_phase(bands: NDArray[np.integer], Nt: int, phi: Array) -> CArray:
+    """``(nb, Nt)``: ``carrier_phase * quad * (-1)^n * Nt / |phi|`` (GB ``wdm_bands._phase``)."""
+    n = np.arange(Nt)
+    out = np.empty((bands.size, Nt), complex)
+    for b, m in enumerate(bands):
+        quad = np.where((int(m) + n) % 2 == 1, -1j, 1.0)
+        out[b] = carrier_phase(int(m), Nt) * quad * (-1.0) ** n * Nt / np.linalg.norm(phi)
+    return out
+
+
+def _band_windows(bands: NDArray[np.integer], k0: int, n_bins: int, Nt: int) -> NDArray[np.integer]:
+    """``(nb, Nt)`` positions, inside a bin array starting at absolute bin ``k0``,
+    of every band window bin ``(m - 1) Nt/2 + s``."""
+    ell = (bands[:, None] - 1) * (Nt // 2) + np.arange(Nt)[None, :] - int(k0)
+    if ell.min() < 0 or ell.max() >= n_bins:
+        raise ValueError(
+            f"the bins [{k0}, {k0 + n_bins}) do not cover the band windows "
+            f"[{ell.min() + k0}, {ell.max() + k0 + 1})"
+        )
+    return ell
+
+
+def forward_bands(z: CArray, k0: int, bands: NDArray[np.integer], Nf: int, Nt: int,
+                  dt: float, *, be: Backend | None = None) -> Array:
+    """WDM cells of ``bands`` from band-limited rfft bins: ``(..., n) -> (..., nb, Nt)``.
+
+    ``z[..., j]`` is the (unit-free) rfft bin ``k0 + j``.  Cell ``(b, n)`` is
+    ``Re(band_atoms[b, n] . z[window_b])`` -- the unit-norm-atom convention of
+    the GB toy -- computed with one length-``Nt`` IFFT per band (GB
+    ``wdm_full.analyse``): ``Re(phase * ifft(phi * z[window]))``.  It agrees
+    with the dense ``Re(band_atoms @ z)`` to ~1e-15 (not bitwise).  Interior
+    bands only.  Cost ``O(nb Nt log Nt)`` against ``O(nb Nt^2)`` dense.
+    """
+    validate_grid(Nf, Nt)
+    validate_dt(dt)
+    be = be or get_backend(z)
+    bands = _check_interior_bands(bands, Nf)
+    z = be.asarray(z)
+    ell = _band_windows(bands, k0, z.shape[-1], Nt)
+    phi = phi_centered(Nf, Nt, dt)
+    phase = _band_phase(bands, Nt, phi)
+    Y = be.fft.ifft(phi * z[..., ell], axis=-1)
+    return be.xp.real(phase * Y)
+
+
+def inverse_bands(w: Array, k0: int, n_bins: int, bands: NDArray[np.integer], Nf: int,
+                  Nt: int, dt: float, *, be: Backend | None = None) -> CArray:
+    """The adjoint of :func:`forward_bands`: ``(..., nb, Nt) -> (..., n_bins)`` complex.
+
+    For the real inner products ``<w, w'> = sum w w'`` and
+    ``<z, z'> = Re sum conj(z) z'``,
+    ``<forward_bands(z), w> == <z, inverse_bands(w)>`` exactly in exact
+    arithmetic: bin ``k0 + j`` receives
+    ``sum_n w[b, n] conj(atom[b, n, s])`` from every band window covering it
+    (``phi * fft(conj(phase) * w) / Nt``, scattered band by band).  It is the
+    map that pushes cell-space vectors back onto bins (GB congruences); it is
+    not a left inverse of :func:`forward_bands`.
+    """
+    validate_grid(Nf, Nt)
+    validate_dt(dt)
+    be = be or get_backend(w)
+    bands = _check_interior_bands(bands, Nf)
+    w = be.asarray(w)
+    if w.shape[-2:] != (bands.size, Nt):
+        raise ValueError(f"w must end in ({bands.size}, {Nt}); got {w.shape}")
+    ell = _band_windows(bands, k0, n_bins, Nt)
+    phi = phi_centered(Nf, Nt, dt)
+    phase = _band_phase(bands, Nt, phi)
+    V = phi * be.fft.fft(np.conj(phase) * w, axis=-1) / Nt
+    out = be.xp.zeros((*w.shape[:-2], n_bins), dtype=complex)
+    for b in range(bands.size):
+        out = be.add_at(out, (..., ell[b]), V[..., b, :], copy=False)
+    return out

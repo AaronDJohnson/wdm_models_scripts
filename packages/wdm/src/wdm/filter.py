@@ -11,8 +11,9 @@ critical density (the partition-of-unity property).
 Parameters
 ----------
 The shape parameter ``d`` (default ``4``) controls the smoothness of the
-rolloff: $C^{2d-1}$ smoothness corresponds to $|t|^{-2d}$ time-domain
-decay of the basis functions.
+rolloff.  The basis functions decay as $|t|^{-(d+1)}$ in time (measured
+slopes -3.00/-4.00/-4.99/-6.94/-9.01 at d = 2/3/4/6/8; lisa/wdm b5973b7
+corrected the earlier $|t|^{-2d}$ claim).
 """
 
 from __future__ import annotations
@@ -29,6 +30,7 @@ __all__ = [
     "nu_d",
     "phi_centered",
     "phi_fft_order",
+    "phi_hz",
     "phi_squared_normalization",
 ]
 
@@ -105,6 +107,44 @@ def phi_centered(Nf: int, Nt: int, dt: float, d: int = 4) -> Array:
     A = delta_F / 4.0
     B = delta_F / 2.0
     amp = 1.0 / np.sqrt(delta_Omega)
+
+    f_abs = np.abs(f)
+    out = np.where(f_abs < A, amp, 0.0)
+    rolloff = (f_abs >= A) & (f_abs < A + B)
+    out = np.where(
+        rolloff,
+        amp * np.cos(np.pi / 2.0 * nu_d((f_abs - A) / B, d)),
+        out,
+    )
+    return out
+
+
+def phi_hz(Nf: int, Nt: int, dt: float, d: int = 4) -> Array:
+    """The Paper I (eq:Meyer-def, Hz-normalised) window: flat value $1/\\sqrt{\\Delta F}$.
+
+    Equal to $\\sqrt{2\\pi}$ times :func:`phi_centered` (the package's canonical
+    $\\omega$-normalised window) to rounding; computed with the June
+    ``wdm/filter.py`` arithmetic, so it is bit-identical to the window the
+    Paper I literal algorithms (:mod:`wdm.paper`) were written against
+    (whose call ``phi_centered(Nt, Nf, dt)`` had the two integers swapped).
+    Paired with $\\kappa = \\sqrt2/N_f$ it gives the same coefficients as
+    :func:`phi_centered` with $\\kappa = 2\\sqrt\\pi/N_f$.
+
+    Examples
+    --------
+    >>> import numpy as np, wdm
+    >>> h, w = wdm.filter.phi_hz(8, 16, 1.0), wdm.phi_centered(8, 16, 1.0)
+    >>> bool(np.allclose(h, np.sqrt(2 * np.pi) * w, rtol=1e-15, atol=0))
+    True
+    """
+    validate_grid(Nf, Nt)
+    validate_dt(dt)
+    T = Nf * Nt * dt
+    f = (np.arange(Nt) - Nt // 2) / T
+    delta_F = 1.0 / (2.0 * dt * Nf)
+    A = delta_F / 4.0
+    B = delta_F / 2.0
+    amp = 1.0 / np.sqrt(delta_F)
 
     f_abs = np.abs(f)
     out = np.where(f_abs < A, amp, 0.0)
