@@ -1,0 +1,1077 @@
+{
+ "build": {
+  "gbonfly": "0.1.0",
+  "jax": "0.9.0.1",
+  "jaxlib": "0.9.0.1",
+  "machine": "arm64",
+  "numpy": "2.3.5",
+  "platform": "macOS-14.3.1-arm64-arm-64bit",
+  "python": "3.12.4",
+  "scipy": "1.16.3",
+  "threads": {
+   "JAX_ENABLE_X64": "true",
+   "JAX_PLATFORMS": "cpu",
+   "MKL_NUM_THREADS": null,
+   "OMP_NUM_THREADS": null,
+   "OPENBLAS_NUM_THREADS": null,
+   "VECLIB_MAXIMUM_THREADS": null,
+   "XLA_FLAGS": null
+  }
+ },
+ "cases": {
+  "gb_12mo": {
+   "DT": 5.0,
+   "N": 6307200,
+   "NT": 900,
+   "S_ref": [
+    4.732480835794622e-42,
+    4.732480835794622e-42
+   ],
+   "T": 31536000.0,
+   "bands": [
+    69,
+    71
+   ],
+   "bin_offset": 30713,
+   "counts": {
+    "cut": 2700,
+    "exact_edge_rows": 0,
+    "lambda_R": "11 bands (store) x 916 columns (padded grid)",
+    "pad_mask_rows": 99,
+    "wdm": 2700,
+    "whittle": 1350,
+    "whittle_cut": 1350
+   },
+   "cut_columns": [],
+   "describe": {
+    "band_cut": {
+     "NT": 900,
+     "P": 2700,
+     "grid": "3 bands x 900 columns"
+    },
+    "band_exact": {
+     "NT": 900,
+     "P": 2700,
+     "exact_columns": "all",
+     "exact_rows": 0,
+     "grid": "3 bands x 900 columns"
+    },
+    "band_pad": {
+     "NT": 916,
+     "P": 2700,
+     "covariance": "M Lambda M",
+     "grid": "3 bands x 916 columns",
+     "lambda_cells": "11 bands (store) x 916 columns (padded grid)",
+     "mask_rows": 99
+    },
+    "band_raw": {
+     "NT": 900,
+     "P": 2700,
+     "grid": "3 bands x 900 columns"
+    },
+    "exact": {
+     "NT": 900,
+     "P": 1350,
+     "grid": "Fourier bins"
+    },
+    "mid_cut": {
+     "NT": 900,
+     "P": 2700,
+     "grid": "3 bands x 900 columns"
+    },
+    "mid_exact": {
+     "NT": 900,
+     "P": 2700,
+     "exact_columns": "all",
+     "exact_rows": 0,
+     "grid": "3 bands x 900 columns"
+    },
+    "mid_pad": {
+     "NT": 916,
+     "P": 2700,
+     "covariance": "M Lambda M",
+     "grid": "3 bands x 916 columns",
+     "lambda_cells": "11 bands (store) x 916 columns (padded grid)",
+     "mask_rows": 99
+    },
+    "mid_raw": {
+     "NT": 900,
+     "P": 2700,
+     "grid": "3 bands x 900 columns"
+    },
+    "tri_cut": {
+     "NT": 900,
+     "P": 2700,
+     "grid": "3 bands x 900 columns",
+     "lags": "all"
+    },
+    "tri_exact": {
+     "NT": 900,
+     "P": 2700,
+     "exact_columns": "all",
+     "exact_rows": 0,
+     "grid": "3 bands x 900 columns",
+     "lags": "all"
+    },
+    "tri_pad": {
+     "NT": 916,
+     "P": 2700,
+     "covariance": "M Lambda M",
+     "grid": "3 bands x 916 columns",
+     "lags": "all",
+     "lambda_cells": "11 bands (store) x 916 columns (padded grid)",
+     "mask_rows": 99
+    },
+    "tri_raw": {
+     "NT": 900,
+     "P": 2700,
+     "grid": "3 bands x 900 columns",
+     "lags": "all"
+    },
+    "whittle_cut": {
+     "NT": 900,
+     "P": 1350,
+     "grid": "Fourier bins of the cropped record"
+    },
+    "whittle_raw": {
+     "NT": 900,
+     "P": 1350,
+     "grid": "Fourier bins"
+    }
+   },
+   "df": 3.1709791983764586e-08,
+   "envelope": {
+    "C": [
+     [
+      1.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0
+     ],
+     [
+      3.925231146709437e-17,
+      1.414213562373095,
+      0.0,
+      0.0,
+      0.0
+     ],
+     [
+      -7.850462293418875e-17,
+      -2.7755575615628914e-17,
+      1.414213562373095,
+      0.0,
+      0.0
+     ],
+     [
+      1.9626155733547193e-17,
+      1.6653345369377348e-16,
+      0.0,
+      1.414213562373095,
+      0.0
+     ],
+     [
+      -3.9252311467094367e-17,
+      1.1102230246251565e-16,
+      -5.551115123125783e-17,
+      2.7755575615628914e-17,
+      1.414213562373095
+     ]
+    ],
+    "basis_L_equals_ghat_grid": true,
+    "half_widths": [
+     8.0,
+     11.313708498984763,
+     11.31370849898476,
+     11.31370849898476,
+     11.31370849898476
+    ],
+    "period": 31536000.0,
+    "physical_A": [
+     -0.03894752254940755,
+     -0.29256932397172447,
+     -0.1359665296611415,
+     -0.5502479051265222,
+     -0.031479885844894605
+    ],
+    "physical_E": [
+     0.07174023468935563,
+     -0.36644270587882116,
+     -0.0241825277997097,
+     -0.4849548976464826,
+     -0.05487991753873019
+    ],
+    "prior_half_width": 8.0
+   },
+   "exact_block": 450,
+   "fg_params": [
+    -84.26490392331951,
+    -6.337733967470251,
+    0.9227082722322004,
+    -5.865318581036917,
+    -7.645427803406387
+   ],
+   "freq": [
+    112,
+    1462
+   ],
+   "inject": {
+    "equal": true,
+    "inject_glass": [
+     31536.0,
+     -0.20833333333333326,
+     0.0,
+     -48.68387547936903,
+     0.3,
+     0.7,
+     0.5,
+     0.000994519296
+    ],
+    "native": {
+     "amp": 7.192196123700149e-22,
+     "colat": 1.7806669190576343,
+     "cos_iota": 0.3,
+     "f0": 0.001,
+     "fdot": 1e-18,
+     "lon": 0.0,
+     "phi0": 0.5,
+     "psi": 0.7
+    },
+    "params_from_native": [
+     31536.0,
+     -0.20833333333333326,
+     0.0,
+     -48.68387547936903,
+     0.3,
+     0.7,
+     0.5,
+     0.000994519296
+    ]
+   },
+   "matrix_cut": [
+    0,
+    0
+   ],
+   "mu_fit": [
+    [
+     -0.038947522549407546,
+     -0.20687775294757027,
+     -0.09614285513779501,
+     -0.38908402504865597,
+     -0.022259640751903384
+    ],
+    [
+     0.07174023468935564,
+     -0.25911412224326197,
+     -0.017099629393406934,
+     -0.34291489669545594,
+     -0.03880596184259467
+    ]
+   ],
+   "mu_freq": [
+    0.05109736507805002,
+    0.15592502662666524
+   ],
+   "n_bins": 1575,
+   "periodic": true,
+   "prior": {
+    "equal_ucb_prior": true,
+    "hi": [
+     31723.999999999996,
+     1.0,
+     6.283185307179586,
+     -46.0,
+     1.0,
+     3.141592653589793,
+     6.283185307179586,
+     0.008131451821856284
+    ],
+    "lo": [
+     31274.999999999996,
+     -1.0,
+     0.0,
+     -54.0,
+     -1.0,
+     0.0,
+     0.0,
+     -0.0004796704533906899
+    ],
+    "source_band_bins": [
+     31275,
+     450
+    ]
+   },
+   "psd_check": {
+    "max_rel_sG": 0.0,
+    "max_rel_sI": 0.0
+   },
+   "sigma0": [
+    1.7276777224796249e-18,
+    1.7276777224796249e-18
+   ],
+   "snr_full": {
+    "equal": true,
+    "recomputed": 20.25921338411754,
+    "report": 20.25921338411754
+   },
+   "store": [
+    29363,
+    4275
+   ],
+   "template": {
+    "BW": 4096,
+    "backend": "gbonfly.compat.template_on_window (fourier)",
+    "orbit": "gbonfly.orbit_cache(T, 0.0, TEMPLATE_BW)",
+    "store": {
+     "bins": 4275,
+     "re_zh": 167.5474286859216,
+     "sum_h2": 160.9964198589998
+    },
+    "units": "template_on_window(...) / (DT * sigma0[:, None])",
+    "window": {
+     "bins": 1575,
+     "re_zh": 167.54739456293117,
+     "sum_h2": 160.99641963405873
+    }
+   }
+  },
+  "gb_3mo": {
+   "DT": 5.0,
+   "N": 1576800,
+   "NT": 240,
+   "S_ref": [
+    4.9304719497377006e-42,
+    4.9304719497377006e-42
+   ],
+   "T": 7884000.0,
+   "bands": [
+    65,
+    67
+   ],
+   "bin_offset": 7711,
+   "counts": {
+    "cut": 693,
+    "exact_edge_rows": 27,
+    "lambda_R": "11 bands (store) x 256 columns (padded grid)",
+    "pad_mask_rows": 99,
+    "wdm": 720,
+    "whittle": 360,
+    "whittle_cut": 347
+   },
+   "cut_columns": [
+    0,
+    1,
+    2,
+    3,
+    4,
+    236,
+    237,
+    238,
+    239
+   ],
+   "describe": {
+    "band_cut": {
+     "NT": 240,
+     "P": 693,
+     "grid": "3 bands x 240 columns"
+    },
+    "band_exact": {
+     "NT": 240,
+     "P": 720,
+     "exact_columns": "all",
+     "exact_rows": 27,
+     "grid": "3 bands x 240 columns"
+    },
+    "band_pad": {
+     "NT": 256,
+     "P": 720,
+     "covariance": "M Lambda M",
+     "grid": "3 bands x 256 columns",
+     "lambda_cells": "11 bands (store) x 256 columns (padded grid)",
+     "mask_rows": 99
+    },
+    "band_raw": {
+     "NT": 240,
+     "P": 720,
+     "grid": "3 bands x 240 columns"
+    },
+    "exact": {
+     "NT": 240,
+     "P": 360,
+     "grid": "Fourier bins"
+    },
+    "mid_cut": {
+     "NT": 240,
+     "P": 693,
+     "grid": "3 bands x 240 columns"
+    },
+    "mid_exact": {
+     "NT": 240,
+     "P": 720,
+     "exact_columns": "all",
+     "exact_rows": 27,
+     "grid": "3 bands x 240 columns"
+    },
+    "mid_pad": {
+     "NT": 256,
+     "P": 720,
+     "covariance": "M Lambda M",
+     "grid": "3 bands x 256 columns",
+     "lambda_cells": "11 bands (store) x 256 columns (padded grid)",
+     "mask_rows": 99
+    },
+    "mid_raw": {
+     "NT": 240,
+     "P": 720,
+     "grid": "3 bands x 240 columns"
+    },
+    "tri_cut": {
+     "NT": 240,
+     "P": 693,
+     "grid": "3 bands x 240 columns",
+     "lags": "all"
+    },
+    "tri_exact": {
+     "NT": 240,
+     "P": 720,
+     "exact_columns": "all",
+     "exact_rows": 27,
+     "grid": "3 bands x 240 columns",
+     "lags": "all"
+    },
+    "tri_pad": {
+     "NT": 256,
+     "P": 720,
+     "covariance": "M Lambda M",
+     "grid": "3 bands x 256 columns",
+     "lags": "all",
+     "lambda_cells": "11 bands (store) x 256 columns (padded grid)",
+     "mask_rows": 99
+    },
+    "tri_raw": {
+     "NT": 240,
+     "P": 720,
+     "grid": "3 bands x 240 columns",
+     "lags": "all"
+    },
+    "whittle_cut": {
+     "NT": 240,
+     "P": 347,
+     "grid": "Fourier bins of the cropped record"
+    },
+    "whittle_raw": {
+     "NT": 240,
+     "P": 360,
+     "grid": "Fourier bins"
+    }
+   },
+   "df": 1.2683916793505834e-07,
+   "envelope": {
+    "C": [
+     [
+      1.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0
+     ],
+     [
+      -2.0685725468848735,
+      3.2493037245819676,
+      0.0,
+      0.0,
+      0.0
+     ],
+     [
+      -10.02198098086402,
+      7.535917926790576,
+      8.20657348749233,
+      0.0,
+      0.0
+     ],
+     [
+      5.731823122049092e-05,
+      -17.80538145360501,
+      17.80529525404756,
+      15.244832594535978,
+      0.0
+     ],
+     [
+      190.7080209965088,
+      -187.7735717206179,
+      -187.77330113369476,
+      0.00010924338106730945,
+      75.98341398269814
+     ]
+    ],
+    "basis_L_equals_ghat_grid": true,
+    "half_widths": [
+     1630.3890547399112,
+     1730.9133986047636,
+     1710.2813590018773,
+     121.95953470333636,
+     607.8673118615851
+    ],
+    "period": 31536000.0,
+    "physical_A": [
+     -7.380171968031867,
+     5.177290889612991,
+     8.29799753858736,
+     0.5517658313822494,
+     -2.2818616787463504
+    ],
+    "physical_E": [
+     -2.641435078792027,
+     2.655569792982023,
+     2.363070897991303,
+     -0.6905297135363975,
+     -1.1155139431844603
+    ],
+    "prior_half_width": 121.95953470333636
+   },
+   "exact_block": null,
+   "fg_params": [
+    -84.66474739026393,
+    -5.814244748161286,
+    1.71580595333524,
+    -5.522557541691449,
+    -11.512925462027555
+   ],
+   "freq": [
+    29,
+    389
+   ],
+   "inject": {
+    "equal": true,
+    "inject_glass": [
+     7884.0,
+     -0.20833333333333326,
+     0.0,
+     -48.68387547936903,
+     0.3,
+     0.7,
+     0.5,
+     6.2157456e-05
+    ],
+    "native": {
+     "amp": 7.192196123700149e-22,
+     "colat": 1.7806669190576343,
+     "cos_iota": 0.3,
+     "f0": 0.001,
+     "fdot": 1e-18,
+     "lon": 0.0,
+     "phi0": 0.5,
+     "psi": 0.7
+    },
+    "params_from_native": [
+     7884.0,
+     -0.20833333333333326,
+     0.0,
+     -48.68387547936903,
+     0.3,
+     0.7,
+     0.5,
+     6.2157456e-05
+    ]
+   },
+   "matrix_cut": [
+    5,
+    4
+   ],
+   "mu_fit": [
+    [
+     -0.2542161406457709,
+     -0.5130935706386932,
+     0.2454771298718922,
+     0.03619384526881688,
+     -0.030031049661258222
+    ],
+    [
+     -0.1566279361590393,
+     -0.3960175292524838,
+     0.050310159206383195,
+     -0.045295880125292017,
+     -0.014681018984465074
+    ]
+   ],
+   "mu_freq": [
+    -0.1128309114763464,
+    -0.07693028691214934
+   ],
+   "n_bins": 419,
+   "periodic": false,
+   "prior": {
+    "equal_ucb_prior": true,
+    "hi": [
+     7979.0,
+     1.0,
+     6.283185307179586,
+     -46.0,
+     1.0,
+     3.141592653589793,
+     6.283185307179586,
+     0.0005195850734548314
+    ],
+    "lo": [
+     7860.0,
+     -1.0,
+     0.0,
+     -54.0,
+     -1.0,
+     0.0,
+     0.0,
+     -3.0670835080254156e-05
+    ],
+    "source_band_bins": [
+     7860,
+     120
+    ]
+   },
+   "psd_check": {
+    "max_rel_sG": 1.2903368847697302e-16,
+    "max_rel_sI": 2.6197061867197774e-16
+   },
+   "sigma0": [
+    8.817237759268152e-19,
+    8.817237759268152e-19
+   ],
+   "snr_full": {
+    "equal": true,
+    "recomputed": 12.24709552247082,
+    "report": 12.24709552247082
+   },
+   "store": [
+    7351,
+    1139
+   ],
+   "template": {
+    "BW": 4096,
+    "backend": "gbonfly.compat.template_on_window (fourier)",
+    "orbit": "gbonfly.orbit_cache(T, 0.0, TEMPLATE_BW)",
+    "store": {
+     "bins": 1139,
+     "re_zh": 44.62069863968393,
+     "sum_h2": 47.09924630666821
+    },
+    "units": "template_on_window(...) / (DT * sigma0[:, None])",
+    "window": {
+     "bins": 419,
+     "re_zh": 44.62133557291355,
+     "sum_h2": 47.08445103094067
+    }
+   }
+  },
+  "gb_6mo": {
+   "DT": 5.0,
+   "N": 3153600,
+   "NT": 438,
+   "S_ref": [
+    5.1070988439605074e-42,
+    5.1070988439605074e-42
+   ],
+   "T": 15768000.0,
+   "bands": [
+    71,
+    73
+   ],
+   "bin_offset": 15385,
+   "counts": {
+    "cut": 1287,
+    "exact_edge_rows": 27,
+    "lambda_R": "11 bands (store) x 454 columns (padded grid)",
+    "pad_mask_rows": 99,
+    "wdm": 1314,
+    "whittle": 657,
+    "whittle_cut": 644
+   },
+   "cut_columns": [
+    0,
+    1,
+    2,
+    3,
+    4,
+    434,
+    435,
+    436,
+    437
+   ],
+   "describe": {
+    "band_cut": {
+     "NT": 438,
+     "P": 1287,
+     "grid": "3 bands x 438 columns"
+    },
+    "band_exact": {
+     "NT": 438,
+     "P": 1314,
+     "exact_columns": "all",
+     "exact_rows": 27,
+     "grid": "3 bands x 438 columns"
+    },
+    "band_pad": {
+     "NT": 454,
+     "P": 1314,
+     "covariance": "M Lambda M",
+     "grid": "3 bands x 454 columns",
+     "lambda_cells": "11 bands (store) x 454 columns (padded grid)",
+     "mask_rows": 99
+    },
+    "band_raw": {
+     "NT": 438,
+     "P": 1314,
+     "grid": "3 bands x 438 columns"
+    },
+    "exact": {
+     "NT": 438,
+     "P": 657,
+     "grid": "Fourier bins"
+    },
+    "mid_cut": {
+     "NT": 438,
+     "P": 1287,
+     "grid": "3 bands x 438 columns"
+    },
+    "mid_exact": {
+     "NT": 438,
+     "P": 1314,
+     "exact_columns": "all",
+     "exact_rows": 27,
+     "grid": "3 bands x 438 columns"
+    },
+    "mid_pad": {
+     "NT": 454,
+     "P": 1314,
+     "covariance": "M Lambda M",
+     "grid": "3 bands x 454 columns",
+     "lambda_cells": "11 bands (store) x 454 columns (padded grid)",
+     "mask_rows": 99
+    },
+    "mid_raw": {
+     "NT": 438,
+     "P": 1314,
+     "grid": "3 bands x 438 columns"
+    },
+    "tri_cut": {
+     "NT": 438,
+     "P": 1287,
+     "grid": "3 bands x 438 columns",
+     "lags": "all"
+    },
+    "tri_exact": {
+     "NT": 438,
+     "P": 1314,
+     "exact_columns": "all",
+     "exact_rows": 27,
+     "grid": "3 bands x 438 columns",
+     "lags": "all"
+    },
+    "tri_pad": {
+     "NT": 454,
+     "P": 1314,
+     "covariance": "M Lambda M",
+     "grid": "3 bands x 454 columns",
+     "lags": "all",
+     "lambda_cells": "11 bands (store) x 454 columns (padded grid)",
+     "mask_rows": 99
+    },
+    "tri_raw": {
+     "NT": 438,
+     "P": 1314,
+     "grid": "3 bands x 438 columns",
+     "lags": "all"
+    },
+    "whittle_cut": {
+     "NT": 438,
+     "P": 644,
+     "grid": "Fourier bins of the cropped record"
+    },
+    "whittle_raw": {
+     "NT": 438,
+     "P": 657,
+     "grid": "Fourier bins"
+    }
+   },
+   "df": 6.341958396752917e-08,
+   "envelope": {
+    "C": [
+     [
+      1.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0
+     ],
+     [
+      -1.3486991523498356e-06,
+      1.4142135623743812,
+      0.0,
+      0.0,
+      0.0
+     ],
+     [
+      -2.0685695747308,
+      3.945483350386397e-06,
+      3.2493014897033423,
+      0.0,
+      0.0
+     ],
+     [
+      -9.101742864004919,
+      5.188934174738565e-06,
+      14.29698425821351,
+      6.38124694356071,
+      0.0
+     ],
+     [
+      6.505057926305886e-05,
+      -2.2706372812173568,
+      -9.877973248052573e-05,
+      -3.759252362346894e-05,
+      2.675031525559135
+     ]
+    ],
+    "basis_L_equals_ghat_grid": true,
+    "half_widths": [
+     97.36303070411307,
+     29.478879824074106,
+     140.37107622119464,
+     51.050276288674674,
+     21.40025220447308
+    ],
+    "period": 31536000.0,
+    "physical_A": [
+     -0.9475256484670382,
+     -0.4799303208338057,
+     1.2317524599374134,
+     0.04746467007469897,
+     0.1462019636800908
+    ],
+    "physical_E": [
+     0.6359339932559424,
+     -0.39654066783652453,
+     -0.9509686837511448,
+     -0.8864518017629908,
+     -0.04700091579794035
+    ],
+    "prior_half_width": 21.40025220447308
+   },
+   "exact_block": null,
+   "fg_params": [
+    -84.5474847228991,
+    -6.0365441173548176,
+    1.7131549511879651,
+    -5.5545527377075565,
+    -7.737562792598559
+   ],
+   "freq": [
+    55,
+    712
+   ],
+   "inject": {
+    "equal": true,
+    "inject_glass": [
+     15768.0,
+     -0.20833333333333326,
+     0.0,
+     -48.68387547936903,
+     0.3,
+     0.7,
+     0.5,
+     0.000248629824
+    ],
+    "native": {
+     "amp": 7.192196123700149e-22,
+     "colat": 1.7806669190576343,
+     "cos_iota": 0.3,
+     "f0": 0.001,
+     "fdot": 1e-18,
+     "lon": 0.0,
+     "phi0": 0.5,
+     "psi": 0.7
+    },
+    "params_from_native": [
+     15768.0,
+     -0.20833333333333326,
+     0.0,
+     -48.68387547936903,
+     0.3,
+     0.7,
+     0.5,
+     0.000248629824
+    ]
+   },
+   "matrix_cut": [
+    5,
+    4
+   ],
+   "mu_fit": [
+    [
+     -0.1633681355062811,
+     -0.2516109690324617,
+     0.34635448564494586,
+     0.007438471679190398,
+     0.05465429557864058
+    ],
+    [
+     0.030528148107392617,
+     -0.30860743520158423,
+     0.31856034580364095,
+     -0.13891524181911583,
+     -0.017570228742674807
+    ]
+   ],
+   "mu_freq": [
+    -0.0852065039299861,
+    0.12719824180753522
+   ],
+   "n_bins": 767,
+   "periodic": false,
+   "prior": {
+    "equal_ucb_prior": true,
+    "hi": [
+     15876.999999999998,
+     1.0,
+     6.283185307179586,
+     -46.0,
+     1.0,
+     3.141592653589793,
+     6.283185307179586,
+     0.002039920609723636
+    ],
+    "lo": [
+     15658.999999999998,
+     -1.0,
+     0.0,
+     -54.0,
+     -1.0,
+     0.0,
+     0.0,
+     -0.00012063370946806802
+    ],
+    "source_band_bins": [
+     15659,
+     219
+    ]
+   },
+   "psd_check": {
+    "max_rel_sG": 0.0,
+    "max_rel_sI": 0.0
+   },
+   "sigma0": [
+    1.2690841939884784e-18,
+    1.2690841939884784e-18
+   ],
+   "snr_full": {
+    "equal": true,
+    "recomputed": 14.522176865090799,
+    "report": 14.522176865090799
+   },
+   "store": [
+    14728,
+    2081
+   ],
+   "template": {
+    "BW": 4096,
+    "backend": "gbonfly.compat.template_on_window (fourier)",
+    "orbit": "gbonfly.orbit_cache(T, 0.0, TEMPLATE_BW)",
+    "store": {
+     "bins": 2081,
+     "re_zh": 78.68605446918765,
+     "sum_h2": 75.4114941003397
+    },
+    "units": "template_on_window(...) / (DT * sigma0[:, None])",
+    "window": {
+     "bins": 767,
+     "re_zh": 78.71899530214023,
+     "sum_h2": 75.37849502508735
+    }
+   }
+  }
+ },
+ "constants": {
+  "ANALYSIS_NT": {
+   "gb_12mo": 900,
+   "gb_3mo": 240,
+   "gb_6mo": 438
+  },
+  "CUT": {
+   "gb_12mo": [
+    0,
+    0
+   ],
+   "gb_3mo": [
+    5,
+    4
+   ],
+   "gb_6mo": [
+    5,
+    4
+   ]
+  },
+  "C_F": 0.208,
+  "C_T": 0.639,
+  "DT": 5.0,
+  "ENVELOPE_PERIOD": 31536000.0,
+  "ENV_NAMES": [
+   "logg_mean",
+   "ann_c",
+   "ann_s",
+   "semi_c",
+   "semi_s"
+  ],
+  "GHAT_L": 65536,
+  "GLASS_PARAMS": [
+   "f0T",
+   "cos_colat",
+   "lon",
+   "lnA",
+   "cos_iota",
+   "psi",
+   "phi0",
+   "fdotT2"
+  ],
+  "MU_BOX": [
+   -8.0,
+   8.0
+  ],
+  "NOISE_MOVE_FRACTION": 0.1,
+  "N_BANDS": 3,
+  "N_HARM": 2,
+  "PAD_COLUMNS": 16,
+  "PAD_EDGE_TOL": 1e-08,
+  "PERIODIC": {
+   "2": [
+    0.0,
+    6.283185307179586
+   ],
+   "5": [
+    0.0,
+    3.141592653589793
+   ],
+   "6": [
+    0.0,
+    6.283185307179586
+   ]
+  },
+  "TEMPLATE_BW": 4096,
+  "gbonfly_version": "0.1.0"
+ },
+ "models": [
+  "whittle_raw",
+  "whittle_cut",
+  "band_raw",
+  "band_pad",
+  "band_exact",
+  "band_cut",
+  "mid_raw",
+  "mid_pad",
+  "mid_exact",
+  "mid_cut",
+  "tri_raw",
+  "tri_pad",
+  "tri_exact",
+  "tri_cut",
+  "exact"
+ ],
+ "schema": 1
+}
