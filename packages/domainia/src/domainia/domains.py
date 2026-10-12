@@ -121,6 +121,23 @@ class FourierDomain:
         return self.bins() / (self.N * self.dt)
 
 
+def _cell_index(name: str, value: object) -> IntArray:
+    """``value`` as a fresh flat int64 array (a copy: the caller's array is never touched).
+
+    Integer dtypes pass; finite integral floats (``3.0``) are accepted; anything else
+    (``2.9999999``, NaN, booleans) raises instead of being truncated by the int64 cast.
+    """
+    raw = np.asarray(value)
+    if raw.size and raw.dtype.kind not in "iu":
+        if raw.dtype.kind != "f":
+            raise ValueError(f"{name} must hold integer cell indices; got dtype {raw.dtype}")
+        bad = ~np.isfinite(raw) | (raw != np.trunc(raw))
+        if np.any(bad):
+            first = raw.reshape(-1)[np.flatnonzero(bad.reshape(-1))[0]]
+            raise ValueError(f"{name} must hold integer cell indices; got {first!r}")
+    return np.array(raw, dtype=np.int64).reshape(-1)
+
+
 def _active(m: IntArray, n: IntArray, Nf: int) -> BoolArray:
     """``wdm.active_mask`` evaluated at the cells ``(m, n)``: interior bands every ``n``,
     DC even ``n``, Nyquist ``(Nf + n)`` even."""
@@ -155,8 +172,8 @@ class CellSet:
     def __post_init__(self) -> None:
         if not isinstance(self.grid, wdm.Grid):
             raise TypeError(f"grid must be a wdm.Grid; got {type(self.grid).__name__}")
-        m = np.array(self.m, dtype=np.int64).reshape(-1)        # copies: the flags below
-        n = np.array(self.n, dtype=np.int64).reshape(-1)        # must not touch the caller's
+        m = _cell_index("m", self.m)                            # copies: the flags below
+        n = _cell_index("n", self.n)                            # must not touch the caller's
         if m.shape != n.shape:
             raise ValueError(f"m and n differ in length: {m.size} != {n.size}")
         Nf, Nt = self.grid.Nf, self.grid.Nt
