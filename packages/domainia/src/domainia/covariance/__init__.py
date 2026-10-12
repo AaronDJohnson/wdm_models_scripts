@@ -11,6 +11,7 @@ from .base import CholFactor, Covariance, DiagFactor, Evaluator, Factor, QuadFor
 from .blocktri import BlockTriCovFactor, BlockTridiagonalCovariance
 from .dense import DenseCovariance, dense_factor
 from .diagonal import DiagonalCovariance
+from .eq45 import Eq45Covariance, keep_mask, window_bins
 
 __all__ = [
     "BlockTriCovFactor",
@@ -20,10 +21,13 @@ __all__ = [
     "DenseCovariance",
     "DiagFactor",
     "DiagonalCovariance",
+    "Eq45Covariance",
     "Evaluator",
     "Factor",
     "QuadForm",
     "as_evaluator",
     "dense_factor",
+    "keep_mask",
     "quad_form",
+    "window_bins",
 ]
