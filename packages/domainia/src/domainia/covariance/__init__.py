@@ -13,12 +13,14 @@ from .dense import DenseCovariance, dense_factor
 from .diagonal import DiagonalCovariance
 from .eq45 import Eq45Covariance, keep_mask, window_bins
 from .exact_fourier import ExactFourierCovariance, ghat
+from .exact_time import CovOperator, ExactTimeCovariance, OperatorFactor, bessel_coefficients
 from .hermitian import HermitianCovariance, HermitianFactor
 
 __all__ = [
     "BlockTriCovFactor",
     "BlockTridiagonalCovariance",
     "CholFactor",
+    "CovOperator",
     "Covariance",
     "DenseCovariance",
     "DiagFactor",
@@ -26,11 +28,14 @@ __all__ = [
     "Eq45Covariance",
     "Evaluator",
     "ExactFourierCovariance",
+    "ExactTimeCovariance",
     "Factor",
     "HermitianCovariance",
     "HermitianFactor",
+    "OperatorFactor",
     "QuadForm",
     "as_evaluator",
+    "bessel_coefficients",
     "dense_factor",
     "ghat",
     "keep_mask",
