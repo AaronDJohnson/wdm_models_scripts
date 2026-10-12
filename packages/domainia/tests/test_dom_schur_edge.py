@@ -96,6 +96,8 @@ def test_arguments_are_checked():
         SchurEdge(_interior("diag"), _rows(), CELLS.columns(2, 1))
     with pytest.raises(ValueError, match="assembly"):
         SchurEdge(_interior("diag"), _rows(), EDGE, assembly="blocktri")
+    with pytest.raises(ValueError, match="chol_impl"):
+        SchurEdge(_interior("diag"), _rows(), EDGE, chol_impl="lapack")
 
 
 def test_cut_rebuilds_on_the_kept_cells():

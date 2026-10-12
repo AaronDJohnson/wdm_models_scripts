@@ -137,6 +137,8 @@ class SchurEdge(Covariance):
                  chol_impl: Literal["numpy", "scipy"] = "scipy") -> None:
         if assembly not in ("schur", "dense"):
             raise ValueError(f"assembly must be 'schur' or 'dense'; got {assembly!r}")
+        if chol_impl not in ("numpy", "scipy"):     # else NumPy raises only after the rows (~3 s)
+            raise ValueError(f"chol_impl must be 'numpy' or 'scipy'; got {chol_impl!r}")
         self.interior, self.rows, self.assembly, self.chol_impl = interior, rows, assembly, chol_impl
         self.cells = rows.cells
         self.n = rows.n
