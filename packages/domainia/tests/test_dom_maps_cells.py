@@ -154,6 +154,10 @@ def test_restrict_truncates_the_atoms_to_a_sub_window():
     assert np.array_equal(Mr.C, full.C[:, off:off + 419])
     with pytest.raises(ValueError, match="impl='dense' only"):
         FourierToWDM(window, cells, impl="fft", restrict=True)
+    # after() rebuilds the atoms on the band window: truncated atoms are refused
+    short = FourierDomain(c["N"] // 2, c["DT"], int(p["bin_offset"]) // 2, 8, "sigma0")
+    with pytest.raises(ValueError, match="the band window"):
+        Mr.after(FourierZeroPad(short, window))
 
 
 def test_adjoint_and_the_record_scale():
@@ -182,6 +186,10 @@ def test_adjoint_and_the_record_scale():
     assert np.max(np.abs(got - Compose(W, crop).apply(Z))) <= 1e-12 * np.max(np.abs(got))
     ref = np.sqrt(g.N / (2 * g.dt)) * TimeToWDM(TimeDomain(g.N, g.dt), cells).apply(xr[16:144])
     assert np.max(np.abs(got - ref)) <= 1e-12 * np.max(np.abs(ref))
+    # a composite's src is the outer record, not the band window: it cannot be chained
+    crop2 = FourierCrop(FourierDomain(192, g.dt, 0, 97, "rfft"), crop.src, 8)
+    with pytest.raises(ValueError, match="the band window"):
+        W.after(crop).after(crop2)
 
 
 def test_edge_bands_are_refused():

@@ -314,9 +314,14 @@ class FourierToWDM(LinearMap):
     def after(self, inner: Any) -> "FourierToWDM":
         """The dense cell matrix of ``self . inner`` for a widely linear ``inner``
         (:class:`FourierZeroPad`, :class:`FourierCrop`) -- GB ``_cells`` (matrix.py:320-332):
-        ``C = (analyse(A[idx]) + conj(analyse(B[idx]))) * inner.scale``, rows of ``dst``."""
-        if self.impl != "dense" or inner.dst != self.src or self.lo != 0 or self.width != self.src.n:
-            raise ValueError("after() needs a dense map whose src is exactly inner.dst = the window")
+        ``C = (analyse(A[idx]) + conj(analyse(B[idx]))) * inner.scale``, rows of ``dst``.
+
+        The atoms are rebuilt from ``dst``'s geometry, so ``self.src`` must be exactly the
+        band window: a ``restrict=True`` map (truncated atoms) or a composite returned by
+        ``after`` (whose ``src`` is the outer record) is refused rather than misread."""
+        if self.impl != "dense" or inner.dst != self.src or self.src != self.window:
+            raise ValueError("after() needs a dense map whose src is exactly inner.dst = "
+                             "the band window")
         g = self.dst.cells.grid
         geo = _geometry(self.dst)
         phi = phi_centered(g.Nf, g.Nt, g.dt)
