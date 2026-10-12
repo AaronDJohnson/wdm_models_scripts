@@ -16,6 +16,22 @@ from domainia.maps import (BinSelect, Compose, Identity, LinearMap, PushedCovari
 GRID = wdm.Grid(8, 16, 0.5)
 
 
+@dataclasses.dataclass(frozen=True, eq=False)
+class _DenseComplex(LinearMap):
+    """A test-local complex-linear map ``z -> A z`` between Fourier windows."""
+
+    src: FourierDomain
+    dst: FourierDomain
+    A: np.ndarray
+    kind = "complex"
+
+    def apply(self, z, be=None):
+        return z @ self.A.T
+
+    def adjoint(self, y, be=None):
+        return y @ np.conj(self.A)
+
+
 def _cells():
     full = CellSet.all_active(GRID)
     return WDMDomain(full), WDMDomain(full.drop_columns(2, 1))
@@ -93,6 +109,16 @@ def test_binselect_windows_and_complex_push():
         BinSelect(store, (150, 30))
     nominal = BinSelect(S.dst, (115, 10))           # store -> window -> nominal
     assert nominal.dst.k0 == 115 and np.array_equal(nominal.apply(S.apply(z)), z[:, 15:25])
+    # Compose.rows of complex-linear maps is (outer inner)[idx], never outer conj(inner)
+    A = rng.standard_normal((60, 30)) + 1j * rng.standard_normal((60, 30))
+    lift = _DenseComplex(S.dst, store, A)           # window (30 bins) -> store (60 bins)
+    sel_lift = Compose(S, lift)                     # real 0/1 outer rows, complex inner
+    gap = np.max(np.abs(sel_lift.rows([0, 7]) - A[[10, 17]]))
+    assert gap <= 1e-14 * np.max(np.abs(A))
+    both = Compose(lift, sel_lift)                  # complex outer rows, complex inner
+    ref = (A @ A[10:40])[[0, 7, 59]]
+    for got in (both.rows([0, 7, 59]), LinearMap.rows(both, [0, 7, 59])):
+        assert np.max(np.abs(got - ref)) <= 1e-13 * np.max(np.abs(ref))
 
 
 @pytest.mark.parametrize("case", GB_CASES)

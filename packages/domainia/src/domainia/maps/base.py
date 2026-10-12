@@ -266,7 +266,11 @@ class Compose(LinearMap):
         return self.inner.adjoint(self.outer.adjoint(y, be), be)
 
     def rows(self, idx):
-        return np.asarray(self.inner.adjoint(self.outer.rows(idx), NUMPY))
+        # Row r of outer.inner is outer[r] inner = conj(inner^H conj(outer[r])): the same
+        # conj convention as LinearMap.rows.  An all-real composite is untouched.
+        R = self.outer.rows(idx)
+        out = np.asarray(self.inner.adjoint(np.conj(R) if np.iscomplexobj(R) else R, NUMPY))
+        return np.conj(out) if np.iscomplexobj(out) else out
 
     def push(self, cov):
         if self.kind != "real":
