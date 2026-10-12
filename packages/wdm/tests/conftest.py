@@ -6,8 +6,24 @@ top-level package ``vendored_2f7136c`` (never as ``wdm``).
 
 from __future__ import annotations
 
+import importlib.abc
+import os
 import sys
 from pathlib import Path
+
+
+class _HideJax(importlib.abc.MetaPathFinder):
+    """CI lane 1 (NumPy only): with WDM_TESTS_HIDE_JAX=1, jax cannot be imported,
+    so every JAX test skips and every NumPy test must still pass."""
+
+    def find_spec(self, name, path=None, target=None):  # noqa: ARG002
+        if name.split(".")[0] in ("jax", "jaxlib"):
+            raise ModuleNotFoundError(f"{name} hidden by WDM_TESTS_HIDE_JAX=1 (NumPy-only lane)", name=name)
+        return None
+
+
+if os.environ.get("WDM_TESTS_HIDE_JAX") == "1":
+    sys.meta_path.insert(0, _HideJax())
 
 ORACLE_DIR = Path(__file__).resolve().parent / "oracle"
 if str(ORACLE_DIR) not in sys.path:
