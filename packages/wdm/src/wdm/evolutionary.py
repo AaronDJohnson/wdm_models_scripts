@@ -288,7 +288,10 @@ class Eq45Plan:
     line for line.
 
     A JAX pytree: the grid scalars (``Nf, Nt, dt, N, T, K, P, t_max``) and
-    ``fold_has_duplicates`` are static; every array is a leaf.
+    ``fold_has_duplicates`` are static; every array is a leaf.  (Registered
+    with JAX lazily, see :func:`wdm.backend.pytree_dataclass`: at import if JAX
+    was imported first, else by the first :func:`wdm.backend.enable_x64` /
+    :func:`wdm.backend.jax_backend` call.)
 
     .. warning::
        Under ``jax.jit`` pass the plan as an **argument**
@@ -507,8 +510,8 @@ class Eq45GramPlan:
     ``sup[m]``; ``gW = eta/T``; ``gT`` the cell times; ``uI1``/``uI2``/``uW`` the
     overlap bins of adjacent bands.  WG ``MatrixGPU._gram_setup`` line for line.
 
-    A JAX pytree: the layout sizes ``nb``, ``B``, ``Kb`` are static; every array
-    is a leaf.
+    A JAX pytree (registered lazily, as :class:`Eq45Plan`): the layout sizes
+    ``nb``, ``B``, ``Kb`` are static; every array is a leaf.
 
     .. warning::
        Under ``jax.jit`` pass the plan as an **argument**

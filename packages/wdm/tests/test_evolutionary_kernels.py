@@ -292,9 +292,11 @@ def test_gram_matches_bessel_on_the_sinusoid_grid(sin_plans, tag, ac, ad):
 
     Per entry the gap is much larger and must not be gated at 1e-12: the worst
     diagonal entry differs by 1.5e-9 relative at |alpha_d| = 2 on the raw grid
-    (band 64) and by 1.0e-8 on the padded grid.  Gram is exact (2.2e-16 against
-    the direct sum); the gap is the P = 24 Chebyshev truncation of the bessel
-    builder (P = 40 gives 1.7e-11).
+    (band 64) and by 1.0e-8 on the padded grid (measured).  That is the P = 24
+    Chebyshev truncation of the bessel builder: P = 40 brings it to 1.7e-11
+    (measured; gram is exact, 2.2e-16 against the direct sum, per the final
+    review), while the max-normalised gap above is rounding and does not shrink
+    with P (6.98e-13 at both P = 24 and 40, raw, (0, 2)).
     """
     plan, gp, r = sin_plans[tag]
     L = _L_sin(plan.f)
