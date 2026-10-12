@@ -87,8 +87,9 @@ def test_separable_arguments_are_checked():
     with pytest.raises(ValueError, match="every column"):
         _tri(c, c.cells.drop_columns(5, 4), 0, assembly="blocktri").constants()
     gap = CellSet(c.grid, tuple(m for m in c.cells.m if m != 66), tuple(n for m, n in zip(c.cells.m, c.cells.n) if m != 66))
-    with pytest.raises(ValueError, match="contiguous"):
-        _tri(c, gap, 0).constants()
+    for assembly in ("dense", "blocktri"):          # blocktri would pair bands 65 and 67
+        with pytest.raises(ValueError, match="contiguous"):
+            _tri(c, gap, 0, assembly=assembly).constants()
 
 
 @pytest.mark.jax

@@ -151,6 +151,15 @@ class _DirectMatrix:
         return be.asarray(eq45_direct(C["plan"], lambda f, t: self.psd(f, t, nu_h)))
 
 
+def _separable_bands(m: np.ndarray) -> np.ndarray:
+    """The cells' bands, ascending; raises unless they are contiguous (one grid window,
+    GB ``make_grid``; adjacent list entries are adjacent bands in both assemblies)."""
+    bands = np.unique(m)
+    if np.any(np.diff(bands) != 1):
+        raise ValueError("separable Eq. (45) needs contiguous bands")
+    return bands
+
+
 def _separable_spectra(psd: Any, grid: Any, bands: np.ndarray, channel: int) -> tuple[np.ndarray, np.ndarray, Any]:
     """``(s_I, s_G, envelope)`` of ``channel`` on the cells' grid window bins."""
     from ..domains import FourierDomain
@@ -180,9 +189,7 @@ class _SeparableDense:
         g = self.cells.grid
         m = np.asarray(self.cells.m, int)
         n = np.asarray(self.cells.n, int)
-        bands = np.unique(m)
-        if np.any(np.diff(bands) != 1):
-            raise ValueError("separable Eq. (45) needs contiguous bands")
+        bands = _separable_bands(m)
         sI, sG, env = _separable_spectra(self.psd, g, bands, self.channel)
         g0, G = window_bins(g.Nt, bands)
         atoms = band_atoms(bands, g.Nf, g.Nt, g.dt)
@@ -213,7 +220,7 @@ class _SeparableBlocks:
         g = self.cells.grid
         m = np.asarray(self.cells.m, int)
         n = np.asarray(self.cells.n, int)
-        bands = np.unique(m)
+        bands = _separable_bands(m)
         Nt, h = g.Nt, g.Nt // 2
         if m.size != bands.size * Nt or not np.array_equal(n, np.tile(np.arange(Nt), bands.size)):
             raise ValueError("block-tridiagonal separable Eq. (45) needs every column of each band")
