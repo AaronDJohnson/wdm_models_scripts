@@ -1,0 +1,16 @@
+# The numerical wheels are exactly those of the `few` env (numpy/scipy: cp312-cp312-macosx_14_0_arm64,
+# Accelerate BLAS). pytest is pinned to 8.4.2 because the spec requires pytest<9 (`few` has 9.0.2);
+# pluggy, iniconfig, packaging and Pygments are `few`'s versions.
+--only-binary :all:
+numpy==2.3.5
+scipy==1.16.3
+jax==0.9.0.1
+jaxlib==0.9.0.1
+ml_dtypes==0.5.4
+opt_einsum==3.4.0
+h5py==3.14.0
+pytest==8.4.2
+pluggy==1.6.0
+iniconfig==2.3.0
+packaging==25.0
+Pygments==2.19.2

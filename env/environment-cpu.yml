@@ -1,0 +1,15 @@
+# Release CPU environment (spec §1). Create from the wdm_models_scripts root with
+#     conda env create -f env/environment-cpu.yml -n wdmrel
+# python is the exact conda-forge build of the `few` env (3.12.4 h30c5eda_0_cpython);
+# requirements-pip.txt pins the exact numerical pip wheels `few` used, so float64 results are
+# build-identical to the GB chains (pytest is 8.4.2, not few's 9.0.2: the spec needs pytest<9).
+# Never install anything into emri313 or few.
+name: wdmrel
+channels:
+  - conda-forge
+  - nodefaults
+dependencies:
+  - python=3.12.4=h30c5eda_0_cpython
+  - pip=24.0
+  - pip:
+      - -r requirements-pip.txt
