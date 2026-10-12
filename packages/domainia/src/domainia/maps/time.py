@@ -1,0 +1,139 @@
+"""Maps out of the time domain: WDM cells, retained Fourier bins, crops and zero padding.
+
+Every evaluator here is the WT oracle's library call (``wdm_paper_2/toy_models/src/
+wdm_toys/matrix.py``: ``Grid.forward``/``forward_many``/``inverse_many``/``atom``,
+``Variant.extend``, ``MatrixWhittle``; ``band.py``: ``FourierBand``), so the NumPy path is
+bitwise: ``TimeToWDM.apply(d) == forward_time(d)[mask][keep]``.
+"""
+
+from __future__ import annotations
+
+from dataclasses import dataclass, field
+from typing import Any
+
+import numpy as np
+import wdm
+from wdm.backend import pytree_dataclass
+from wdm.transform import atom_spectrum, base_atom_spectra
+
+from ..domains import TimeDomain, WDMDomain
+from .base import _BUILD, LinearMap
+
+__all__ = ["TimeToWDM", "WDMToTime"]
+
+
+def _check_grid(time: TimeDomain, dom: WDMDomain) -> wdm.Grid:
+    g = dom.cells.grid
+    if time.N != g.N or time.dt != g.dt:
+        raise ValueError(f"time domain (N={time.N}, dt={time.dt}) does not match the cells' grid "
+                         f"(N={g.N}, dt={g.dt})")
+    return g
+
+
+def _flat(x: Any, N: int) -> tuple[Any, tuple[int, ...]]:
+    if x.shape[-1] != N:
+        raise ValueError(f"last axis must have length {N}; got {x.shape}")
+    return x.reshape(-1, N), x.shape[:-1]
+
+
+@pytree_dataclass(data=("m_idx", "n_idx"), meta=("src", "dst"))
+@dataclass(frozen=True, eq=False)
+class TimeToWDM(LinearMap):
+    """``x -> (W x)[cells]``: the WDM transform of a record, cells in ``dst``'s order.
+
+    ``apply`` is ``wdm.forward_time`` (1-D) or ``wdm.forward_time_many`` (batched; bitwise
+    the same per row), then a gather -- WT ``Grid.forward``/``forward_many`` followed by
+    ``Variant.map``'s ``[keep]`` (matrix.py:191-197, 711-716).  ``adjoint`` is
+    ``W^T`` restricted to the cells, ``dt * W^{-1}`` of the zero-filled grid
+    (``W W^T = dt I``), valid on any cell subset.  ``rows`` are the time-domain atoms
+    ``irfft(atom_spectrum)`` (WT ``Grid.atom``, matrix.py:225-232).
+    """
+
+    src: TimeDomain
+    dst: WDMDomain
+    m_idx: Any = field(default=_BUILD, kw_only=True)
+    n_idx: Any = field(default=_BUILD, kw_only=True)
+
+    def __post_init__(self) -> None:
+        if self.m_idx is _BUILD:
+            _check_grid(self.src, self.dst)
+            object.__setattr__(self, "m_idx", np.asarray(self.dst.cells.m, dtype=np.int64))
+            object.__setattr__(self, "n_idx", np.asarray(self.dst.cells.n, dtype=np.int64))
+
+    @property
+    def grid(self) -> wdm.Grid:
+        return self.dst.cells.grid
+
+    def apply(self, x, be=None):
+        be = self._be(x, be)
+        x = be.asarray(x)
+        g = self.grid
+        if x.ndim == 1:
+            w = wdm.forward_time(x, g.Nf, g.Nt, g.dt, be=be)
+            return w[self.m_idx, self.n_idx]
+        X, lead = _flat(x, g.N)
+        w = wdm.forward_time_many(X, g.Nf, g.Nt, g.dt, be=be)
+        return w[:, self.m_idx, self.n_idx].reshape(*lead, self.m_idx.size)
+
+    def _scatter(self, y, be):
+        g = self.grid
+        Y = y.reshape(-1, y.shape[-1])
+        full = be.xp.zeros((Y.shape[0], g.Nf + 1, g.Nt), dtype=Y.dtype)
+        return be.set(full, (slice(None), self.m_idx, self.n_idx), Y, copy=False)
+
+    def adjoint(self, y, be=None):
+        be = self._be(y, be)
+        y = be.asarray(y)
+        g = self.grid
+        x = g.dt * wdm.inverse_time_many(self._scatter(y, be), g.Nf, g.Nt, g.dt, be=be)
+        return x.reshape(*y.shape[:-1], g.N)
+
+    def rows(self, idx):
+        g = self.grid
+        idx = np.atleast_1d(np.asarray(idx, dtype=np.int64))
+        base = base_atom_spectra(g.Nf, g.Nt, g.dt)
+        m, n = np.asarray(self.m_idx), np.asarray(self.n_idx)
+        return np.stack([np.fft.irfft(atom_spectrum(int(m[p]), int(n[p]), g.Nf, g.Nt, g.dt,
+                                                    base=base), n=g.N) for p in idx])
+
+
+@pytree_dataclass(data=("m_idx", "n_idx"), meta=("src", "dst"))
+@dataclass(frozen=True, eq=False)
+class WDMToTime(LinearMap):
+    """``W^{-1} = W^T / dt`` on a complete cell set: ``wdm.inverse_time_many`` of the
+    unpacked grid (WT ``Grid.inverse_many``, matrix.py:199-204).  ``adjoint`` is
+    ``W^{-T} = W / dt``."""
+
+    src: WDMDomain
+    dst: TimeDomain
+    m_idx: Any = field(default=_BUILD, kw_only=True)
+    n_idx: Any = field(default=_BUILD, kw_only=True)
+
+    def __post_init__(self) -> None:
+        if self.m_idx is _BUILD:
+            g = _check_grid(self.dst, self.src)
+            m, n = wdm.grid.packed_cells(g.Nf, g.Nt)
+            got = np.asarray(self.src.cells.m), np.asarray(self.src.cells.n)
+            if len(got[0]) != m.size or set(zip(*got)) != set(zip(m.tolist(), n.tolist())):
+                raise ValueError("WDMToTime needs every active cell of the grid (W^-1 = W^T/dt "
+                                 "holds on complete cell sets only); use TimeToWDM.adjoint")
+            object.__setattr__(self, "m_idx", got[0].astype(np.int64))
+            object.__setattr__(self, "n_idx", got[1].astype(np.int64))
+
+    @property
+    def grid(self) -> wdm.Grid:
+        return self.src.cells.grid
+
+    def apply(self, y, be=None):
+        be = self._be(y, be)
+        y = be.asarray(y)
+        g = self.grid
+        Y = y.reshape(-1, y.shape[-1])
+        full = be.xp.zeros((Y.shape[0], g.Nf + 1, g.Nt), dtype=Y.dtype)
+        full = be.set(full, (slice(None), self.m_idx, self.n_idx), Y, copy=False)
+        return wdm.inverse_time_many(full, g.Nf, g.Nt, g.dt, be=be).reshape(*y.shape[:-1], g.N)
+
+    def adjoint(self, x, be=None):
+        be = self._be(x, be)
+        fwd = TimeToWDM(self.dst, self.src, m_idx=self.m_idx, n_idx=self.n_idx)
+        return fwd.apply(x, be) / self.grid.dt
