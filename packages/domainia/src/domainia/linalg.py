@@ -41,7 +41,7 @@ them, and move them with :func:`device_constants` (which checks ``jax_enable_x64
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from typing import Any, Literal
 
@@ -57,6 +57,7 @@ __all__ = [
     "CBlockFactor",
     "CholFactor",
     "DiagFactor",
+    "PCGResult",
     "PaddedFactor",
     "SchurFactor",
     "blocktri_factor",
@@ -77,6 +78,7 @@ __all__ = [
     "padded_factor",
     "padded_reduce",
     "padded_solve",
+    "pcg",
     "schur_edge_whiten",
     "schur_factor",
     "schur_solve",
@@ -770,3 +772,96 @@ def factor_solve(f: Any, b: Any, *, be: Backend | None = None) -> Any:
     if isinstance(f, PaddedFactor):
         return padded_solve(f, b, be=be)
     raise TypeError(f"not a domainia.linalg factor: {type(f).__name__}")
+
+
+# ---------------------------------------------------------------------------
+# Preconditioned conjugate gradients
+# ---------------------------------------------------------------------------
+
+
+@pytree_dataclass(data=("x", "iterations", "converged"))
+@dataclass(frozen=True, eq=False)
+class PCGResult:
+    """``x (R, N)``; ``iterations`` (the loop count, the WT ``it`` at ``R = 1``);
+    ``converged (R,)`` (recurrence and true-residual check both passed)."""
+
+    x: Any
+    iterations: Any
+    converged: Any
+
+
+def pcg(apply_A: Callable[[Any], Any], apply_M: Callable[[Any], Any], B: Any, *, tol: float,
+        maxit: int, on_fail: Literal["raise", "nan"] = "raise", true_rtol: float | None = None,
+        be: Backend | None = None) -> PCGResult:
+    """Solve ``A x_r = b_r`` for every row of ``B (R, N)`` by preconditioned CG.
+
+    One body for both oracles: the WG ``BandFullCovarianceGPU._solve`` frozen-row
+    ``while_loop`` (gpu_sinusoid/wdmtoysgpu/bandcov.py:51-85: rows that converge or fail
+    are frozen, ``p = 0``), whose ``R = 1`` run is the WT early-exit loop
+    (``fastcov.pcg``, fastcov.py:121-143: same alpha/beta order, row dots by
+    ``vecdot`` = ``numpy.dot``, norms ``sqrt(vecdot)`` = ``numpy.linalg.norm``).  After the
+    loop the true residual is checked as WT ``BandCovariance.quad`` (bandcov.py:198-201):
+    ``|b - A x| <= true_rtol |b|``, ``true_rtol = max(5 tol, 1e-12)`` by default.
+
+    ``apply_A``/``apply_M`` map ``(R, N) -> (R, N)``.  ``on_fail="raise"`` (eager only)
+    raises ``RuntimeError`` as WT does; ``on_fail="nan"`` (jit-able) returns NaN rows
+    where ``converged`` is False, which the likelihood maps to ``-inf``.  A row with a
+    non-positive or non-finite curvature ``p.Ap`` fails (WG); WT had no such check.
+    """
+    if on_fail not in ("raise", "nan"):
+        raise ValueError(f"on_fail must be 'raise' or 'nan'; got {on_fail!r}")
+    be = _be(be, B)
+    xp = be.xp
+    B = be.asarray(B)
+    if B.ndim != 2:
+        raise ValueError(f"B must be (R, N); got shape {B.shape}")
+    rtol = max(5.0 * tol, 1e-12) if true_rtol is None else float(true_rtol)
+
+    def dot(a: Any, c: Any) -> Any:
+        return xp.vecdot(a, c)
+
+    bn = xp.sqrt(dot(B, B))
+    z = apply_M(B)
+    state = (xp.zeros_like(B), B, z, dot(B, z), bn == 0.0, xp.zeros(bn.shape, dtype=bool),
+             xp.asarray(0, dtype=xp.int32))
+
+    def cond(s: Any) -> Any:
+        return xp.any(~(s[4] | s[5])) & (s[6] < maxit)
+
+    def body(s: Any) -> Any:
+        x, r, p, rz, done, failed, it = s
+        Ap = apply_A(p)
+        denom = dot(p, Ap)
+        active = ~(done | failed)
+        failed = failed | (active & ((denom <= 0) | ~xp.isfinite(denom)))
+        active = ~(done | failed)
+        alpha = xp.where(active, rz / xp.where(active, denom, 1.0), 0.0)
+        x = x + alpha[:, None] * p
+        r = r - alpha[:, None] * Ap
+        rn = xp.sqrt(dot(r, r))
+        failed = failed | ~xp.isfinite(rn)
+        done = done | (rn <= tol * bn)
+        z = apply_M(r)
+        new = dot(r, z)
+        active = ~(done | failed)
+        beta = xp.where(active, new / xp.where(active, rz, 1.0), 0.0)
+        p = xp.where(active[:, None], z + beta[:, None] * p, 0.0)
+        return x, r, p, new, done, failed, it + 1
+
+    x, _, _, _, done, failed, it = be.while_loop(cond, body, state)
+    resid = B - apply_A(x)
+    actual = xp.sqrt(dot(resid, resid))
+    converged = done & ~failed & xp.isfinite(actual) & (actual <= rtol * bn)
+    if on_fail == "raise":
+        if is_tracer(converged):
+            raise ValueError("pcg(on_fail='raise') runs eagerly only; use on_fail='nan' under jit")
+        if not bool(xp.all(converged)):
+            failed_h, done_h = be.to_host(failed), be.to_host(done)
+            if failed_h.any():
+                raise RuntimeError("PCG lost positive definiteness or produced a nonfinite residual")
+            if not done_h.all():
+                raise RuntimeError(f"PCG did not converge in {maxit} iterations")
+            raise RuntimeError("PCG failed its true residual convergence check")
+    else:
+        x = xp.where(converged[:, None], x, xp.nan)
+    return PCGResult(x, it, converged)
