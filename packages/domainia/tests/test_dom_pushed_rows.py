@@ -73,6 +73,24 @@ def test_rows_must_be_destination_cells():
         PushedRows(ExactTimeCovariance(PSD, 2 * N, DT), None, EDGE, cells=CELLS)
     with pytest.raises(TypeError):
         PushedRows(object(), None, EDGE, cells=CELLS)
+    # the time-only guards fail at construction / call, not inside the transforms
+    ex = ExactTimeCovariance(PSD, N, DT)
+    with pytest.raises(ValueError, match="map"):
+        PushedRows(ex, None, EDGE)
+    with pytest.raises(ValueError, match="form='operator'"):
+        PushedRows(ExactTimeCovariance(PSD, N, DT, form="dense"), None, EDGE, cells=CELLS)
+    with pytest.raises(ValueError, match="phi_cache=True"):
+        PushedRows(ex, None, EDGE, cells=CELLS, staged=True)
+    with pytest.raises(ValueError, match="chunk"):
+        PushedRows(ex, None, EDGE, cells=CELLS, phi_cache=True, chunk=0)
+    with pytest.raises(ValueError, match="at least one"):
+        PushedRows(ex, None, CELLS.columns(0, 0), cells=CELLS)
+    pr = PushedRows(ex, None, EDGE, cells=CELLS)
+    for P in (0, ex.P + 1):
+        with pytest.raises(ValueError, match=r"P must be in \[1, 24\]"):
+            pr.evaluate(pr.host_constants(), NU, NUMPY, P=P)
+    with pytest.raises(ValueError, match="staged=True"):
+        pr.evaluate_staged(pr.host_constants(), NU, NUMPY, 8)
 
 
 def _sin_rows() -> tuple[PushedRows, dict]:
@@ -117,6 +135,18 @@ def test_g6_gb_exact_rows(case):
         assert np.max(np.abs(R[sel] - c.A[f"exact_rows_c{ch}_sel"])) <= 1e-12 * np.max(np.abs(R))
     with pytest.raises(ValueError, match="atoms"):
         PushedRows(ExactFourierCovariance(c.psd, c.window), None, edge, cells=c.cells, atoms=U[:, :-1])
+    # the map's atoms must sit on the exact covariance's bins; the time options do not apply
+    from domainia.domains import FourierDomain, WDMDomain
+    from domainia.maps import FourierToWDM
+
+    w = c.window
+    shifted = FourierToWDM(FourierDomain(w.N, w.dt, w.k0 + 1, w.n, w.units), WDMDomain(c.cells), restrict=True)
+    with pytest.raises(ValueError, match="src"):
+        PushedRows(ExactFourierCovariance(c.psd, w), shifted, edge)
+    with pytest.raises(ValueError, match="FourierToWDM map or atoms"):
+        PushedRows(ExactFourierCovariance(c.psd, w), None, edge, cells=c.cells)
+    with pytest.raises(ValueError, match="time rows only"):
+        PushedRows(ExactFourierCovariance(c.psd, w), None, edge, cells=c.cells, atoms=U, order="adaptive")
 
 
 @pytest.mark.jax

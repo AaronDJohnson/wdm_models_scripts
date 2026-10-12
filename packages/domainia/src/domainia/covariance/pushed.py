@@ -96,6 +96,8 @@ class PushedRows:
                  order: Literal["fixed", "adaptive"] = "fixed", phi_cache: bool = False,
                  staged: bool = False, chunk: int | None = None) -> None:
         self.exact, self.rows_cells = exact, rows
+        if cells is None and map is None:
+            raise ValueError("pass a map (its dst.cells are the destination cells) or cells=")
         self.cells = cells if cells is not None else map.dst.cells
         self.e = positions(rows, self.cells)
         self.n = len(self.cells.m)
@@ -106,6 +108,15 @@ class PushedRows:
             g = self.cells.grid
             if g.N != exact.N or g.dt != exact.dt:
                 raise ValueError("the destination grid and the exact covariance differ")
+            if exact.form != "operator":
+                raise ValueError("time rows need ExactTimeCovariance(form='operator') "
+                                 "(its constants carry the Chebyshev basis)")
+            if staged and not phi_cache:
+                raise ValueError("staged=True runs the phi_cache stages: pass phi_cache=True")
+            if chunk is not None and int(chunk) < 1:
+                raise ValueError(f"chunk must be a positive number of atoms; got {chunk}")
+            if self.e.size == 0:
+                raise ValueError("time rows need at least one edge cell")
             self.order, self.phi_cache, self.staged = order, bool(phi_cache), bool(staged)
             self.chunk = int(chunk or 64)
             self.P_max = exact.P
@@ -113,9 +124,17 @@ class PushedRows:
             self.atoms = None
         elif isinstance(exact, ExactFourierCovariance):
             self.kind = "fourier"
+            if order != "fixed" or phi_cache or staged or chunk is not None:
+                raise ValueError("order, phi_cache, staged and chunk apply to time rows only")
             if atoms is None:
+                if map is None:
+                    raise ValueError("Fourier rows need a FourierToWDM map or atoms=")
                 # D-B's FourierToWDM: C (P, width) unit-norm atoms on the src bins [lo, lo + width);
                 # FourierToWDM(exact.bins, dst, restrict=True) gives lo = 0, width = exact.n.
+                src, bins = map.src, exact.bins
+                if (src.N, src.dt, src.k0, src.n) != (bins.N, bins.dt, bins.k0, bins.n):
+                    raise ValueError("the map's src must be the exact covariance's bins: "
+                                     "use FourierToWDM(bins, dst, restrict=True)")
                 if (map.lo, map.width) != (0, exact.n):
                     raise ValueError("the map's atoms must cover exactly the exact covariance's bins: "
                                      "use FourierToWDM(bins, dst, restrict=True)")
@@ -156,6 +175,12 @@ class PushedRows:
             return getattr(self, "P_max", 0)
         return cheb_order(float(np.asarray(nu)[1]), self.L_max, self.P_max)
 
+    def _check_P(self, P: int) -> int:
+        P = int(P)
+        if not 1 <= P <= self.P_max:
+            raise ValueError(f"P must be in [1, {self.P_max}]; got {P}")
+        return P
+
     # -- evaluation -------------------------------------------------------------------------
     def evaluate(self, C: Any, nu: Any, be: Backend, P: int | None = None) -> Any:
         """``R`` at ``nu`` (pure in ``(C, nu)``; ``P`` static)."""
@@ -163,7 +188,7 @@ class PushedRows:
         if self.kind == "fourier":
             M = self.exact.evaluate(C["exact"], nu, be)
             return 0.5 * xp.real((C["UE"] @ M) @ xp.conj(C["U"]).T)
-        P = self.order_for(nu) if P is None else int(P)
+        P = self._check_P(self.order_for(nu) if P is None else P)
         g = self.cells.grid
         n_e = self.e.size
         L = C["L"]
@@ -197,6 +222,9 @@ class PushedRows:
         """:meth:`evaluate` (``phi_cache``) as separately compiled stages per chunk: the same
         numbers; XLA's CPU inverse FFT is ~6x slower on an input computed inside the
         same program (WG ``_exact_rows_staged``)."""
+        if not self.staged:
+            raise ValueError("evaluate_staged needs PushedRows(..., phi_cache=True, staged=True)")
+        P = self._check_P(P)
         xp = be.xp
         stages = self.__dict__.setdefault("_stages", {})
         if be.name not in stages:
