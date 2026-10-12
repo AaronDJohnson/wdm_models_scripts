@@ -20,6 +20,7 @@ import io
 import sys
 import zipfile
 from collections.abc import Callable
+from pathlib import Path
 
 import numpy as np
 
@@ -184,6 +185,16 @@ def _print_models(title: str, models: dict) -> None:
             f"{k}={v:.3e}" if isinstance(v, float) else f"{k}={v}" for k, v in m.items()))
 
 
+def _portable_worker(meta: dict) -> dict:
+    """Worker meta for a committed report: ``wdm_file`` relative to ROOT (WDM_LEGACY_ROOT), so the
+    golden does not depend on where this machine keeps the frozen trees. ``None`` (a lineage
+    that must not import wdm) passes through; a file outside ROOT raises ValueError."""
+    worker = dict(meta)
+    if worker.get("wdm_file") is not None:
+        worker["wdm_file"] = Path(worker["wdm_file"]).relative_to(ROOT).as_posix()
+    return worker
+
+
 def run_reference_eval(lineage: str, tier: str = "fast") -> dict:
     from scripts.golden.legacy_eval import Job, evaluate_jobs
     files = read_json(REFS / "INDEX.json")["files"]
@@ -199,7 +210,7 @@ def run_reference_eval(lineage: str, tier: str = "fast") -> dict:
             expected[tag] = (case, model, idx, ref["loglike"][idx], ref["near"][idx])
     results, meta = evaluate_jobs(lineage, "sinusoid", jobs, timeout=7200.0)
     report = {"schema": 1, "family": "sinusoid", "kind": "references", "lineage": lineage, "tier": tier,
-              "worker": meta, "models": {}, "points": {}}
+              "worker": _portable_worker(meta), "models": {}, "points": {}}
     for tag, (case, model, idx, ref_ll, near) in expected.items():
         r = results[tag]
         cmp = compare(r["lnlike"], ref_ll, near)

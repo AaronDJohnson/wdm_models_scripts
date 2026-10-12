@@ -12,7 +12,9 @@ from scripts.golden.paths import ROOT, legacy_available
 
 pytestmark = pytest.mark.golden
 requires_legacy = pytest.mark.skipif(not legacy_available(), reason="frozen legacy trees not present (CI/Colab)")
-VENDORED_WDM = str(ROOT / "toy_models/vendor/wdm/src/wdm/__init__.py")
+#: committed reports record wdm_file relative to ROOT (portable); live worker meta is absolute.
+VENDORED_WDM_REL = "toy_models/vendor/wdm/src/wdm/__init__.py"
+VENDORED_WDM = str(ROOT / VENDORED_WDM_REL)
 #: spec §3.6: bitwise reproduction verified (max|delta| = 0.0) for these models.
 VERIFIED_BITWISE = ("whittle_raw", "whittle_cut", "band_raw", "mid_raw", "band_cut", "tri_raw")
 CACHE_SHA = {
@@ -63,7 +65,7 @@ def test_A_fast_report_covers_every_target():
     assert set(rep["models"]) == set(SG.MODELS)
     for m in rep["models"].values():
         assert (m["n_points"], m["inf_mismatch"]) == (12, 0)
-    assert rep["worker"]["wdm_file"] == VENDORED_WDM
+    assert rep["worker"]["wdm_file"] == VENDORED_WDM_REL
     assert rep["worker"]["cache_sha256"] == CACHE_SHA
 
 
