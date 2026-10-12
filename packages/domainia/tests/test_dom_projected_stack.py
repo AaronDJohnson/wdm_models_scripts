@@ -64,6 +64,9 @@ def test_pcg_failure_raises_or_is_nan():
         raising.factor(np.array([-1.7, 1.2])).quad(r)
     with pytest.raises(ValueError, match="operator"):
         ProjectedOperatorMarginal(ExactTimeCovariance(PSD, N, DT, form="dense"), nb, lambda nu, be: 0.0)
+    ok = ProjectedOperatorMarginal(ExactTimeCovariance(PSD, N, DT, c_N=0.0), nb, lambda nu, be: 0.0)
+    with pytest.raises(ValueError, match="length 128"):     # WT band.project: never resized by irfft(n=N)
+        ok.factor(np.array([-1.7, 1.2])).quad(np.append(r, 0.3))
 
 
 def _bandcov_correction(nu, be):
@@ -111,6 +114,8 @@ def test_channel_stack_splits_and_sums(backend):
     assert float(F.quad(backend.asarray(b))) == pytest.approx(3 / np.exp(0.1) + 3 / (2 * np.exp(0.2)), rel=1e-14)
     with pytest.raises(ValueError, match="entries"):
         st.factor(np.zeros(3))
+    with pytest.raises(ValueError, match="non-negative"):
+        ChannelStack(covs, -1)
 
 
 def test_g6_gb_tri_raw_through_the_stack():

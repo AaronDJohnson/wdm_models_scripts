@@ -227,6 +227,9 @@ class ProjectedFactor:
         xp = be.xp
         if form not in (None, "solve"):
             raise ValueError("the projected operator marginal has only form='solve'")
+        r = be.asarray(r, dtype=float)      # WT: band.project(np.asarray(r, dtype=float))
+        if r.shape[-1:] != (self.N,):       # WT band.project; irfft(n=N) would resize silently
+            raise ValueError(f"last axis must have length {self.N}")
         r = self.project(r, be)
         if r.shape != (self.N,) or (not is_tracer(r) and not np.all(np.isfinite(be.to_host(r)))):
             raise ValueError("residual must be a finite length-N vector")

@@ -54,6 +54,8 @@ class ChannelStack(Covariance):
         if not self.covs:
             raise ValueError("ChannelStack needs at least one channel")
         self.k = int(params_per_channel)
+        if self.k < 0:
+            raise ValueError(f"params_per_channel must be non-negative; got {params_per_channel}")
         self.n = sum(c.n for c in self.covs)
         self.n_u = sum(c.n_u for c in self.covs)
         self.jittable = all(c.jittable for c in self.covs)
