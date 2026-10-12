@@ -220,9 +220,9 @@ def test_eq45_kernels_on_jax(jax_be):
     ac, ad = -2.0, 1.2
     plan = E.eq45_plan(NF, NT, DT)
     L = _L(plan.f)
-    diag, up = E.eq45_blocks_cheb(plan, lambda k: E.eq45_coeffs_bessel(L[k], ac, ad, 24))
+    diag, up = E.eq45_blocks_cheb(plan, lambda k: E.eq45_coeffs_bessel(L[k], ac, ad, 24, r=1.0))
     jd, ju = E.eq45_blocks_cheb(
-        plan, lambda k: E.eq45_coeffs_bessel(jax_be.asarray(L[k]), ac, ad, 24), be=jax_be)
+        plan, lambda k: E.eq45_coeffs_bessel(jax_be.asarray(L[k]), ac, ad, 24, r=1.0), be=jax_be)
     scale = max(np.abs(b).max() for b in diag)
     for a, b in zip(diag + up, jd + ju, strict=True):
         assert isinstance(b, jax.Array), type(b)      # no eager NumPy fallback
@@ -261,6 +261,55 @@ def sin_plans():
     return out
 
 
+def _rel_gap(got, ref):
+    """max |got - ref| over every block, over max |ref| over every block."""
+    return (max(np.max(np.abs(np.asarray(g) - r)) for g, r in zip(got, ref, strict=True))
+            / max(np.max(np.abs(r)) for r in ref))
+
+
+def test_eq45_coeffs_bessel_requires_r():
+    """r = t_max / T_obs has no default: r = 1 is silently wrong on a padded plan."""
+    L = _L(np.fft.rfftfreq(N, d=DT))
+    with pytest.raises(TypeError, match="'r'"):
+        E.eq45_coeffs_bessel(L, -2.0, 1.2, 24)  # type: ignore[call-arg]
+    assert E.eq45_coeffs_bessel(L, -2.0, 1.2, 24, r=1.0).shape == (24, L.size)
+
+
+GRAM_VS_BESSEL_TOL = 1e-11        # measured max 1.10e-12 (padded, alpha = (0, 1.2))
+
+
+@pytest.mark.parametrize("tag", ["raw", "pad"])
+@pytest.mark.parametrize("ac, ad", [(-4.0, -2.0), (-4.0, 2.0), (0.0, -2.0), (0.0, 2.0), (0.0, 1.2)])
+def test_gram_matches_bessel_on_the_sinusoid_grid(sin_plans, tag, ac, ad):
+    """gram vs bessel (P = 24) Eq. 45 blocks on the sinusoid grid (64 x 256, dt = 2**-10,
+    L = log(max(f, 4)/1)) at the corners of the release prior (alpha_c in [-4, 0],
+    alpha_d in [-2, 2]) and at (0, 1.2); raw (Nt = 256, r = 1) and padded (Nt = 272,
+    t_max = 272/256 T_obs, r = 272/256).
+
+    The gate is max|gram - bessel| over every block over max|block| over every block
+    (all bands), <= 1e-11.  Measured: <= 7.0e-13 raw and <= 9.6e-13 padded at the
+    corners, 9.22e-13 raw and 1.10e-12 padded at (0, 1.2).
+
+    Per entry the gap is much larger and must not be gated at 1e-12: the worst
+    diagonal entry differs by 1.5e-9 relative at |alpha_d| = 2 on the raw grid
+    (band 64) and by 1.0e-8 on the padded grid.  Gram is exact (2.2e-16 against
+    the direct sum); the gap is the P = 24 Chebyshev truncation of the bessel
+    builder (P = 40 gives 1.7e-11).
+    """
+    plan, gp, r = sin_plans[tag]
+    L = _L_sin(plan.f)
+    diag, up = E.eq45_blocks_cheb(plan, lambda k: E.eq45_coeffs_bessel(L[k], ac, ad, plan.P, r=r))
+    alpha = ac + ad * (gp.gT / SIN_T_OBS - 0.5)
+    gd, gu = E.eq45_blocks_gram(gp, alpha, E.eq45_gram_gather(gp, L))
+    gram = []
+    for m, c in enumerate(plan.band_cells):
+        n = len(c)
+        gram.append(gd[m][:n, :n])
+    for m in range(plan.Nf):
+        gram.append(gu[m][:len(plan.band_cells[m]), :len(plan.band_cells[m + 1])])
+    assert _rel_gap(gram, diag + up) <= GRAM_VS_BESSEL_TOL
+
+
 def test_eq45_plans_are_pytrees(jax_be):
     """Array fields are leaves; ints, floats and the per-block band indices (m, m2) are
     static -- in the treedef, so part of the jit cache key and never traced."""
@@ -294,12 +343,6 @@ def test_eq45_plans_are_pytrees(jax_be):
     assert seen["blocks"] == [(s.m, s.m2) for s in plan.specs]
     assert all(type(m) is int and type(m2) is int for m, m2 in seen["blocks"])
     assert seen["gram"] == (gp.nb, gp.B, gp.Kb) and seen["traced"]
-
-
-def _rel_gap(got, ref):
-    """max |got - ref| over every block, over max |ref| over every block."""
-    return (max(np.max(np.abs(np.asarray(g) - r)) for g, r in zip(got, ref, strict=True))
-            / max(np.max(np.abs(r)) for r in ref))
 
 
 def test_eq45_gram_jits_with_the_plan_as_an_argument(jax_be, sin_plans):

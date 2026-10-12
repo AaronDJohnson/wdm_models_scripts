@@ -405,7 +405,7 @@ def eq45_plan(Nf: int, Nt: int, dt: float, keep: BoolArray | None = None, *,
 # ---------------------------------------------------------------------------
 
 
-def eq45_coeffs_bessel(L: Array, alpha_c: Any, alpha_d: Any, P: int, *, r: float = 1.0,
+def eq45_coeffs_bessel(L: Array, alpha_c: Any, alpha_d: Any, P: int, *, r: float,
                        be: Backend | None = None) -> Array:
     r"""``(P, len(L))``: Chebyshev coefficients of :math:`e^{\alpha(\bar t) L}` in
     :math:`u = 2\bar t/t_{\max} - 1` for the log-linear family
@@ -413,10 +413,12 @@ def eq45_coeffs_bessel(L: Array, alpha_c: Any, alpha_d: Any, P: int, *, r: float
     with :math:`r = t_{\max}/T_{\rm obs}`,
     :math:`\alpha = \alpha_c + \alpha_d (r/2 - 1/2) + (\alpha_d r/2)\,u`.
 
-    WT ``TriCovariance._cheb_weights`` verbatim (``r`` is needed by the padded
-    models, whose ``t_max`` is the extended record; the spec's 4-argument
-    signature omitted it).  On JAX the Bessel functions are the 40-term series
-    of :meth:`wdm.backend.Backend.bessel_i`.
+    ``r`` is a required keyword: ``plan.t_max / T_obs``, i.e. ``1.0`` on the
+    data grid and ``Nt' / Nt`` on a padded grid (``272/256`` for the sinusoid
+    pad).  It used to default to ``1.0``, which is silently wrong on a padded
+    plan.  WT ``TriCovariance._cheb_weights`` verbatim (the spec's 4-argument
+    signature omitted ``r``).  On JAX the Bessel functions are the 40-term
+    series of :meth:`wdm.backend.Backend.bessel_i`.
     """
     be = be or get_backend(L, alpha_c, alpha_d)
     xp = be.xp
