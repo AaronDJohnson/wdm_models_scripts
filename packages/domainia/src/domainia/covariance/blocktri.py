@@ -37,9 +37,11 @@ def to_layout(diag: Any, up: Any, sizes: tuple[int, ...], layout: Layout, be: Ba
 
     Ragged input: lists (``diag[m]`` ``(s_m, s_m)``, ``up[m]`` ``(s_m, s_{m+1})``); padded
     input: ``(nb, B, B)`` / ``(nb - 1, B, B)`` arrays whose slot ``i < s_m`` of band ``m``
-    is the band's ``i``-th cell.  Padded output symmetrises the diagonal blocks and puts
-    the identity on dummy slots (WG ``MatrixGPU._tri_factor``); ``dummy`` is
-    :func:`dummy_slots` (from the constants under ``jit``).
+    is the band's ``i``-th cell and whose dummy slots are zero (the identity is ADDED
+    there: a padded input already carrying it would get 2.0).  Padded output symmetrises
+    the diagonal blocks and puts the identity on dummy slots (WG
+    ``MatrixGPU._tri_factor``); ``dummy`` is :func:`dummy_slots` (from the constants under
+    ``jit``).  A single band (``nb = 1``) has no upper blocks: ``up`` is ``(0, B, B)``.
     """
     xp = be.xp
     ragged_in = isinstance(diag, (list, tuple))
@@ -51,8 +53,8 @@ def to_layout(diag: Any, up: Any, sizes: tuple[int, ...], layout: Layout, be: Ba
     B = max(sizes)
     if ragged_in:
         diag = xp.stack([xp.pad(d, ((0, B - s), (0, B - s))) for d, s in zip(diag, sizes, strict=True)])
-        up = xp.stack([xp.pad(u, ((0, B - sizes[m]), (0, B - sizes[m + 1])))
-                       for m, u in enumerate(up)])
+        up = (xp.stack([xp.pad(u, ((0, B - sizes[m]), (0, B - sizes[m + 1])))
+                        for m, u in enumerate(up)]) if len(up) else xp.zeros((0, B, B)))
     dummy = be.asarray(dummy_slots(sizes)) if dummy is None else dummy
     diag = 0.5 * (diag + xp.swapaxes(diag, 1, 2))
     diag = diag + dummy[:, :, None] * xp.eye(B)[None]
@@ -95,14 +97,20 @@ class BlockTriCovFactor:
         # layout packs, runs WG's _btri_* and unpacks inside (the dummy entries are exactly 0).
         return fn(self.bt, b, be=be)
 
+    def _be(self, b: Any, be: Backend | None) -> Backend:
+        # The factor's arrays count too (as CholFactor): a host b against a device factor
+        # runs on the device, not silently on the host.
+        Ls = self.bt.Ls
+        return be or get_backend(b, *(Ls if isinstance(Ls, (list, tuple)) else (Ls,)))
+
     def solve(self, b: Any, *, be: Backend | None = None) -> Any:
-        return self._apply(blocktri_solve, b, be or get_backend(b))
+        return self._apply(blocktri_solve, b, self._be(b, be))
 
     def whiten(self, b: Any, *, be: Backend | None = None) -> Any:
-        return self._apply(blocktri_whiten, b, be or get_backend(b))
+        return self._apply(blocktri_whiten, b, self._be(b, be))
 
     def quad(self, b: Any, *, form: QuadForm = "solve", be: Backend | None = None) -> Any:
-        return quad_form(self, b, form, be or get_backend(b))
+        return quad_form(self, b, form, self._be(b, be))
 
 
 def blocktri_cov_factor(diag: Any, up: Any, sizes: tuple[int, ...], layout: Layout, lay: Any,

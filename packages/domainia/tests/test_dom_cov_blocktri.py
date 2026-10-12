@@ -52,16 +52,17 @@ def test_block_tridiagonal_is_the_dense_gaussian(backend, rng, layout):
 
 
 def test_padded_matches_ragged(rng):
-    """Strategy cross-check (spec §3.2): <= 1e-12."""
-    diag, up = _blocks(rng)
-    b = rng.standard_normal(sum(SIZES))
-    out = {}
-    for layout in ("ragged", "padded"):
-        F = BlockTridiagonalCovariance(lambda nu, be: (diag, up), SIZES, layout=layout).factor(NU0)
-        out[layout] = (float(F.logdet), float(F.quad(b)), np.asarray(F.solve(b)))
-    assert abs(out["padded"][0] - out["ragged"][0]) <= 1e-12 * abs(out["ragged"][0])
-    assert abs(out["padded"][1] - out["ragged"][1]) <= 1e-12 * abs(out["ragged"][1])
-    assert np.max(np.abs(out["padded"][2] - out["ragged"][2])) <= 1e-12 * np.max(np.abs(out["ragged"][2]))
+    """Strategy cross-check (spec §3.2): <= 1e-12; one band (no upper blocks) included."""
+    for sizes in (SIZES, (4,)):
+        diag, up = _blocks(rng, sizes)
+        b = rng.standard_normal(sum(sizes))
+        out = {}
+        for layout in ("ragged", "padded"):
+            F = BlockTridiagonalCovariance(lambda nu, be: (diag, up), sizes, layout=layout).factor(NU0)
+            out[layout] = (float(F.logdet), float(F.quad(b)), np.asarray(F.solve(b)))
+        assert abs(out["padded"][0] - out["ragged"][0]) <= 1e-12 * abs(out["ragged"][0])
+        assert abs(out["padded"][1] - out["ragged"][1]) <= 1e-12 * abs(out["ragged"][1])
+        assert np.max(np.abs(out["padded"][2] - out["ragged"][2])) <= 1e-12 * np.max(np.abs(out["ragged"][2]))
 
 
 def test_to_layout_round_trip_and_dummies(rng):
