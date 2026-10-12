@@ -134,37 +134,37 @@
   "galactic_binary/intermediates_gb_6mo.npz": "bf81e61696583599a1c1a20b405ffdf14124dda6776ec08222b6439759311efb",
   "galactic_binary/products.json": "c4f48de4a7db4fc73766cb8ba6e7c2164fa82210b49b3b3881de00943e8a007a",
   "galactic_binary/psd_window.npz": "ae36d217608e2dd06e5fbc0ffb6624f8b4b4514ac8b2c80e51dc48c352ee36ea",
-  "galactic_binary/stress/gb_3mo/band_cut.fast.json": "8a12573f4360f2ea5158e2c0ded61df143133839c3e61e7e067a155100bc436f",
+  "galactic_binary/stress/gb_3mo/band_cut.fast.json": "4f8ed377fdc32600496a98346255265171f733c23e917df5a945d887ca7dc6fd",
   "galactic_binary/stress/gb_3mo/band_exact.fast.json": "366a25459ccada5dd79bffc9afc22d8098c7625789cbe88fcf2628790fca8120",
   "galactic_binary/stress/gb_3mo/band_pad.fast.json": "767160ad63c21c1b1f3ea869a56901b17672e71cb78f0b4ab7e4b34cedab741e",
-  "galactic_binary/stress/gb_3mo/band_raw.fast.json": "2d051550d14502685fe2dcd2a4d9dcec7a815479d36488ac264ce02c03387658",
+  "galactic_binary/stress/gb_3mo/band_raw.fast.json": "0096b623235ccdb8ec98e812793a9bf00a89316da96e6ca13ec276088253c4c8",
   "galactic_binary/stress/gb_3mo/exact.fast.json": "ea291e1cc5d6764b8752fa9a2bc2dfb26cda1eaa5310aa029faae68a0905ccab",
-  "galactic_binary/stress/gb_3mo/mid_cut.fast.json": "a40683aabfd9a50eb41e3c869b35150677db18ce5e33c51648d1b7b87e49877a",
+  "galactic_binary/stress/gb_3mo/mid_cut.fast.json": "dfc1dd6cc166b00ec5181a6a2ed6376aa2aea920762a334f83dde74f87c43bc9",
   "galactic_binary/stress/gb_3mo/mid_exact.fast.json": "f19fa0ec9c4d2728c265fe4d3674c5af4781ff11481c3b8fd963ca7e5edd23f4",
   "galactic_binary/stress/gb_3mo/mid_pad.fast.json": "bf39dcfd3e56591199b6e202bb731042999026ae4cb914c9f5703a3cec39244d",
-  "galactic_binary/stress/gb_3mo/mid_raw.fast.json": "457d77ccfce4253614043f77e9b9d6d43720a49c678d26a89a006d033ef0e7fe",
+  "galactic_binary/stress/gb_3mo/mid_raw.fast.json": "ed9dda57301e6f1ff2b4f2c7fbf63482352b3ec7043e01ce4704d170441883e9",
   "galactic_binary/stress/gb_3mo/tri_cut.fast.json": "3ff61e23c8b4c24e6ccb2696212a81ea717f1756961d8435bc1f58d7871e4797",
   "galactic_binary/stress/gb_3mo/tri_exact.fast.json": "ab7771542bc13004bf6f8391a057f724ed6ed74b4c9a1c83c2c7916dc827b379",
   "galactic_binary/stress/gb_3mo/tri_pad.fast.json": "d4ca5837738a49f1670b7a23fca3a4e012a7186384fed045f86926670ebdd39e",
   "galactic_binary/stress/gb_3mo/tri_raw.fast.json": "0af98c2e123b1a68d649e38a03fe61dd85a17c4f81561691172d657a30288f43",
   "galactic_binary/stress/gb_3mo/whittle_cut.fast.json": "db25c24ed3c23d8f0a0e720bf6d684b63bb8e867f8311ad42689703789398cd7",
   "galactic_binary/stress/gb_3mo/whittle_raw.fast.json": "9ae8017f8a028ed0f980f542d52c5d510fddb448763f0b6b4d597eb5ec0f1d07",
-  "galactic_binary/stress/gb_6mo/band_cut.fast.json": "306392e35cb3a87f47c5c1cebb199628ea9f53b7879c9d1169b6ecbe24810dad",
+  "galactic_binary/stress/gb_6mo/band_cut.fast.json": "6cae7d170f55cab7a98bd9a1c53636d4219c0447d279f7507781953cf0031985",
   "galactic_binary/stress/gb_6mo/band_exact.fast.json": "57077747b7f2f82732f8da5863c2355f195cd2b6a974ed96ca76817f2a09018b",
   "galactic_binary/stress/gb_6mo/band_pad.fast.json": "6ed7d0192120b8f04ebc134f224be31f1c513811ba127ad9b343c64948c1eaa6",
-  "galactic_binary/stress/gb_6mo/band_raw.fast.json": "2ff38ec352b47537b1086cf0cd0844547081d700f0739f21d8a0606135d6ef98",
+  "galactic_binary/stress/gb_6mo/band_raw.fast.json": "708a97ee0c3ffac3ebb545ecef5fd6ce394d2b0bf93eed9b62fcb1d48de0d63d",
   "galactic_binary/stress/gb_6mo/exact.fast.json": "d4b1ffde0586420e16ea229e6e853fc2933c2dccb152a352e62361a76d65c298",
-  "galactic_binary/stress/gb_6mo/mid_cut.fast.json": "7290e683b52f86aa0c9017cebfd5c4f652feeba5878c9baf82e268ae3201e3c4",
+  "galactic_binary/stress/gb_6mo/mid_cut.fast.json": "30f3d0386e968e3634d6c9ce092eccd7493197020d0e4e77c03e4bd33b099d0e",
   "galactic_binary/stress/gb_6mo/mid_exact.fast.json": "2a57fff4ebe0f09a62aaca8785fdfe5b855d8a3d86887e25d4f74a77a1526a73",
   "galactic_binary/stress/gb_6mo/mid_pad.fast.json": "b2067baed5025992a5c9d8966667a959dd1098a966e2d42a4a9af4586956f434",
-  "galactic_binary/stress/gb_6mo/mid_raw.fast.json": "7f4b54a81707a5378ba0dba05e5a41eececd62f005ecf7b717c0fb15bc7d7e56",
+  "galactic_binary/stress/gb_6mo/mid_raw.fast.json": "220ef31d3a0b8ccbcb748349bb8b943f5b7eb592a719b80a7d101b3f43e15d64",
   "galactic_binary/stress/gb_6mo/tri_cut.fast.json": "d0f7ebab0ccfad95fbaad54f3764c27795190310f043a5351331ff12c00b7c18",
   "galactic_binary/stress/gb_6mo/tri_exact.fast.json": "815637dcd467d260657d4cdea0f1c7ed72823018f3c482d156fd5aacaf3472e8",
   "galactic_binary/stress/gb_6mo/tri_pad.fast.json": "dc39d215dd66e98d3cf374c1687ead8132bd5bd82531ae2b0def29201fb3f040",
   "galactic_binary/stress/gb_6mo/tri_raw.fast.json": "50111cde2c5a70cfb995f9866f16ccbd61fa52678048821eb32f7af9fddd30ab",
   "galactic_binary/stress/gb_6mo/whittle_cut.fast.json": "ce00b312cdbdf1761b523a2edbc79b119305903adf4aba39bde39ac3dbdb59cb",
   "galactic_binary/stress/gb_6mo/whittle_raw.fast.json": "1b95653218eb36811440e6b9adf2af1e451bbc0f2844675453a0c5dd571d570d",
-  "galactic_binary/tolerances_measured.json": "2c257eafd180274e78d77598fb40f0e84cf4bb1728bb5151538baa3ad2aa0617",
+  "galactic_binary/tolerances_measured.json": "981bfd8d2f3ac8a9ba2f4c6e6d9bfa4b968e39f05a9a5fe5ff791f7f015c4fee",
   "sinusoid/chain_rows/INDEX.json": "8216fd4aeb0a229340da0e51f9255179c5b6ad36f4a71a5eebf68e45a2ef881a",
   "sinusoid/chain_rows/manuscript_high_band_cut.npz": "67d42255e92ceecb9a0713aeef2255e9a1a7f78c06a05c1e13cc8d5837b618b3",
   "sinusoid/chain_rows/manuscript_high_band_exact.npz": "65def8c8fa510c6ae00e0a6a63c94c976ee2e0bc423e32c3eacb4683a760752d",
@@ -3074,7 +3074,9 @@
     "--case",
     "gb_3mo",
     "--tier",
-    "fast"
+    "fast",
+    "--models",
+    "band_raw,band_cut,mid_raw,mid_cut"
    ],
    "build": {
     "gbonfly": "0.1.0",
@@ -3188,7 +3190,9 @@
     "--case",
     "gb_3mo",
     "--tier",
-    "fast"
+    "fast",
+    "--models",
+    "band_raw,band_cut,mid_raw,mid_cut"
    ],
    "build": {
     "gbonfly": "0.1.0",
@@ -3264,7 +3268,9 @@
     "--case",
     "gb_3mo",
     "--tier",
-    "fast"
+    "fast",
+    "--models",
+    "band_raw,band_cut,mid_raw,mid_cut"
    ],
    "build": {
     "gbonfly": "0.1.0",
@@ -3378,7 +3384,9 @@
     "--case",
     "gb_3mo",
     "--tier",
-    "fast"
+    "fast",
+    "--models",
+    "band_raw,band_cut,mid_raw,mid_cut"
    ],
    "build": {
     "gbonfly": "0.1.0",
@@ -3644,7 +3652,9 @@
     "--case",
     "gb_6mo",
     "--tier",
-    "fast"
+    "fast",
+    "--models",
+    "band_raw,band_cut,mid_raw,mid_cut"
    ],
    "build": {
     "gbonfly": "0.1.0",
@@ -3758,7 +3768,9 @@
     "--case",
     "gb_6mo",
     "--tier",
-    "fast"
+    "fast",
+    "--models",
+    "band_raw,band_cut,mid_raw,mid_cut"
    ],
    "build": {
     "gbonfly": "0.1.0",
@@ -3834,7 +3846,9 @@
     "--case",
     "gb_6mo",
     "--tier",
-    "fast"
+    "fast",
+    "--models",
+    "band_raw,band_cut,mid_raw,mid_cut"
    ],
    "build": {
     "gbonfly": "0.1.0",
@@ -3948,7 +3962,9 @@
     "--case",
     "gb_6mo",
     "--tier",
-    "fast"
+    "fast",
+    "--models",
+    "band_raw,band_cut,mid_raw,mid_cut"
    ],
    "build": {
     "gbonfly": "0.1.0",

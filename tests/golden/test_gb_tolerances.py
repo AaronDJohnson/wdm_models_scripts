@@ -56,6 +56,23 @@ def test_g4_masks_and_gates(measured):
     assert len(g4["per_target"]) >= 30
 
 
+def test_g4_per_target_jax_gates(measured):
+    """Per-target G4 JAX gates max(10 x observed, 1e-10) next to the pooled one (review harness F9);
+    the pooled gate is the largest of them."""
+    g4 = measured["G4"]
+    per = g4["gate_jax_well_conditioned_per_target"]
+    assert sorted(per) == sorted(g4["per_target"])
+    for target, gate in per.items():
+        assert gate == max(10 * g4["per_target"][target]["jax_well"], 1e-10), target
+    assert max(per.values()) == g4["gate_jax_well_conditioned"] <= 1e-6
+
+
+def test_g4_marginal_threshold_from_each_file(measured):
+    for target, t in measured["G4"]["per_target"].items():
+        stress = GOLDEN / "galactic_binary" / "stress" / "{}/{}.{}.json".format(*target.split("/"))
+        assert t["marginal_threshold"] == json.loads(stress.read_text())["marginal_threshold"] == 1e-10
+
+
 # --- the measurement script itself (B8 quality review) -------------------------------------------
 
 OUT = "galactic_binary/tolerances_measured.json"
@@ -110,16 +127,25 @@ def _row_file(golden, *, backends=("numpy", "jax"), **row):
                                 "backends": list(backends), "rows": [rec]}))
 
 
-def _stress_file(golden, *, backends=("numpy", "jax"), cache_class="FullCache", **point):
+def _stress_file(golden, *, backends=("numpy", "jax"), cache_class="FullCache", threshold=1e-10,
+                 **point):
+    """One stress file with one point. ``expected_neg_inf`` defaults to the worker's rule
+    (``source_out or pd_margin < 0``); ``None`` drops a key (``threshold=None``: no
+    ``marginal_threshold``)."""
     p = {"name": "anchor", "marginal": False, "pd_margin": 1e-3, "source_out": False, "lnl_ref": -100.0,
          "lnl_cache": -100.0, "lnl_jax": -100.0}
     p.update(point)
+    if "expected_neg_inf" not in point:
+        p["expected_neg_inf"] = bool(p["source_out"] or p["pd_margin"] < 0)
     p = {k: v for k, v in p.items() if v is not None}
     path = golden / "galactic_binary" / "stress" / "gb_3mo" / "exact.fast.json"
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps({"case": "gb_3mo", "model": "exact", "tier": "fast", "n_points": 1,
-                                "points": [p], "backends": list(backends), "cache_class": cache_class,
-                                "counters_cache": None, "counters_jax": None}))
+    r = {"case": "gb_3mo", "model": "exact", "tier": "fast", "n_points": 1, "points": [p],
+         "backends": list(backends), "cache_class": cache_class, "counters_cache": None,
+         "counters_jax": None}
+    if threshold is not None:
+        r["marginal_threshold"] = threshold
+    path.write_text(json.dumps(r))
 
 
 def test_synthetic_clean_inputs_measure(tmp_path):
@@ -266,3 +292,69 @@ def test_synthetic_stress_missing_cache_value_raises(tmp_path):
         mt.measure(tmp_path)
     _stress_file(tmp_path, cache_class=None, lnl_cache=None)   # Whittle: no cache class, fine
     assert mt.measure(tmp_path)["G4"]["mask_mismatches"] == []
+
+
+# --- marginal points (review I2): validated, never just skipped ----------------------------------
+
+@pytest.mark.parametrize("value", [math.nan, math.inf])
+@pytest.mark.parametrize("name", ["lnl_ref", "lnl_cache", "lnl_jax"])
+def test_synthetic_marginal_point_nan_or_pos_inf_raises(tmp_path, name, value):
+    """Exempt from the mask/delta checks, but still finite or exactly -inf (spec G4)."""
+    _row_file(tmp_path)
+    _stress_file(tmp_path, marginal=True, pd_margin=1e-12, **{name: value})
+    with pytest.raises(ValueError, match=f"point anchor is marginal but {name} = {value} "):
+        mt.measure(tmp_path)
+
+
+@pytest.mark.parametrize("value", [-math.inf, -1e3])
+def test_synthetic_marginal_point_finite_or_neg_inf_is_counted(tmp_path, value):
+    _row_file(tmp_path)
+    _stress_file(tmp_path, marginal=True, pd_margin=-1e-12, lnl_ref=value, lnl_cache=-math.inf,
+                 lnl_jax=-5.0)
+    g4 = mt.measure(tmp_path)["G4"]
+    assert g4["per_target"]["gb_3mo/exact/fast"]["marginal"] == 1 and g4["mask_mismatches"] == []
+
+
+def test_synthetic_marginal_threshold_is_read_from_the_file(tmp_path):
+    """The file's own ``marginal_threshold`` classifies its points, not a constant."""
+    _row_file(tmp_path)
+    _stress_file(tmp_path, threshold=1e-12, pd_margin=1e-11, lnl_jax=-100.0 + 1e-12)
+    t = mt.measure(tmp_path)["G4"]["per_target"]["gb_3mo/exact/fast"]
+    assert t["marginal"] == 0 and t["jax_cond"] > 0.0 and t["marginal_threshold"] == 1e-12
+    _stress_file(tmp_path, threshold=1e-8, pd_margin=1e-9)        # marginal under 1e-8, not flagged
+    with pytest.raises(ValueError, match=r"marginal=False but \|pd_margin\| = 1.000e-09 < 1e-08"):
+        mt.measure(tmp_path)
+
+
+@pytest.mark.parametrize("threshold", [None, 0.0, -1e-10, math.nan, "1e-10"])
+def test_synthetic_marginal_threshold_missing_or_invalid_raises(tmp_path, threshold):
+    _row_file(tmp_path)
+    _stress_file(tmp_path)
+    path = tmp_path / "galactic_binary" / "stress" / "gb_3mo" / "exact.fast.json"
+    r = json.loads(path.read_text())
+    if threshold is None:
+        del r["marginal_threshold"]
+    else:
+        r["marginal_threshold"] = threshold
+    path.write_text(json.dumps(r))
+    with pytest.raises(ValueError, match="marginal_threshold"):
+        mt.measure(tmp_path)
+
+
+@pytest.mark.parametrize("point,match", [
+    ({"marginal": True, "pd_margin": 1e-3}, r"marginal=True but \|pd_margin\| = 1.000e-03 >= 1e-10"),
+    ({"marginal": True, "pd_margin": 1e-10}, r"marginal=True but \|pd_margin\| = 1.000e-10 >= 1e-10"),
+    ({"marginal": True, "pd_margin": math.nan}, r"pd_margin = nan"),
+    ({"expected_neg_inf": True}, r"expected_neg_inf=True but source_out False, pd_margin 1.000e-03"),
+    ({"expected_neg_inf": False, "pd_margin": -1e-3, "lnl_ref": -math.inf, "lnl_cache": -math.inf,
+      "lnl_jax": -math.inf}, r"expected_neg_inf=False but source_out False, pd_margin -1.000e-03"),
+    ({"expected_neg_inf": False, "marginal": True, "pd_margin": -1e-12},
+     r"expected_neg_inf=False but source_out False, pd_margin -1.000e-12"),
+    ({"expected_neg_inf": None}, r"has no \['expected_neg_inf'\]")])
+def test_synthetic_stored_flags_disagree_with_their_rule_raises(tmp_path, point, match):
+    """``marginal`` == |pd_margin| < marginal_threshold and ``expected_neg_inf`` == source_out or
+    pd_margin < 0 at every point, marginal ones included; a disagreement is never trusted."""
+    _row_file(tmp_path)
+    _stress_file(tmp_path, **point)
+    with pytest.raises(ValueError, match=match):
+        mt.measure(tmp_path)

@@ -19,8 +19,14 @@ Points (fixed order; the counters depend on it):
 Per point: ``lnl_ref`` (``make_lnlike``, NumPy; LinAlgError -> -inf, flagged), ``lnl_cache`` (the
 NumPy noise-state cache class the sampler uses: FullCache / EdgeSchurCache / MatrixCache,
 the whole point set in ONE call, so its counters are pinned), ``lnl_jax`` (``jax_models.build``),
-the PD margin ``lambda_min / max|lambda|`` of each channel's covariance (dense assembled matrix;
-for band/mid_exact also the Schur complement), tagged ``marginal`` when ``|margin| < 1e-10``.
+the PD margin of each channel's covariance, tagged ``marginal`` when ``|margin| < 1e-10``:
+
+* dense (assembled matrix; for band/mid_exact also the Schur complement): ``lambda_min / max|lambda|``,
+  how close rounding is to losing positive definiteness;
+* diagonal (Whittle, band/mid raw/cut): 1.0 when every entry is > 0 (PD however ill-conditioned:
+  the entries are the eigenvalues and no factorisation is involved), else ``min / max|.|`` (<= 0,
+  sign kept: negative = not PD, 0 = singular). ``min / max|.|`` of a positive diagonal is a
+  conditioning ratio, not a PD margin (final review I2).
 """
 
 from __future__ import annotations
@@ -129,7 +135,7 @@ class Covariances:
 
 def _margin(kind, M) -> float:
     if kind == "diag":
-        return float(np.min(M) / np.max(np.abs(M)))
+        return 1.0 if bool(np.all(M > 0)) else float(np.min(M) / np.max(np.abs(M)))
     ev = np.linalg.eigvalsh(M)
     return float(ev[0] / np.max(np.abs(ev)))
 

@@ -2,10 +2,13 @@
 
 from __future__ import annotations
 
+import importlib.util
 import json
 import math
+import sys
 from pathlib import Path
 
+import numpy as np
 import pytest
 
 pytestmark = pytest.mark.golden
@@ -13,6 +16,7 @@ pytestmark = pytest.mark.golden
 REL = Path(__file__).resolve().parents[2]
 GOLDEN = REL / "golden"
 STRESS = GOLDEN / "galactic_binary" / "stress"
+WORKERS = REL / "scripts" / "golden" / "workers"
 MODELS = ("whittle_raw", "whittle_cut", "band_raw", "band_cut", "band_pad", "band_exact", "mid_raw",
           "mid_cut", "mid_pad", "mid_exact", "tri_raw", "tri_cut", "tri_pad", "tri_exact", "exact")
 ENVELOPE_NAMES = ["anchor", "noise_hi", "noise_lo", "noise_mixed", "edge_h0", "edge_h1", "edge_h2",
@@ -46,6 +50,12 @@ def test_stress_fast_tier(case, model):
     pts = r["points"]
     assert math.isfinite(pts[0]["lnl_ref"]) and not pts[0]["marginal"]
     for p in pts:
+        # Spec G4: every lnL is finite or exactly -inf, marginal points included (``marginal``
+        # lifts only the mask and delta comparisons below, never this check).
+        for name in ("lnl_ref", "lnl_cache", "lnl_jax"):
+            if name in p:
+                v = p[name]
+                assert math.isfinite(v) or v == -math.inf, f"{p['name']}: {name} = {v}"
         assert p["mask_consistent"], p["name"]
         if p["source_out"]:
             assert p["lnl_ref"] == -math.inf and p["lnl_jax"] == -math.inf
@@ -70,7 +80,63 @@ def test_stress_fast_tier(case, model):
             assert r["counters_jax"] == c
 
 
+@pytest.mark.parametrize("case", ["gb_3mo", "gb_6mo"])
+@pytest.mark.parametrize("model", ["band_raw", "band_cut", "mid_raw", "mid_cut"])
+def test_diagonal_targets_carry_the_pd_margin(case, model):
+    """Re-captured with the diagonal PD margin (review I2): every entry is > 0 at all 11 points, so
+    nothing is exempted as marginal (the +-8 corners were, under min/max|.|, at 8e-18..1e-11)."""
+    pts = _load(case, model)["points"]
+    assert all(p["pd_margin_channels"] == [1.0, 1.0] and p["pd_margin"] == 1.0 for p in pts)
+    assert not any(p["marginal"] for p in pts)
+
+
 def test_fast_tier_pins_some_non_pd_states():
     failed = sum(_load(c, m)["counters_cache"]["pd_failed_states"]
                  for c in ("gb_3mo", "gb_6mo") for m in CACHED)
     assert failed >= 20          # tri / edge-exact / pad corners are not positive definite
+
+
+@pytest.mark.parametrize("name,value", [("lnl_ref", math.inf), ("lnl_cache", math.nan),
+                                        ("lnl_jax", math.nan), ("lnl_jax", math.inf)])
+def test_marginal_point_must_be_finite_or_neg_inf(monkeypatch, name, value):
+    """A NaN or +inf lnL at a marginal point fails the fast-tier check (final review I2)."""
+    r = _load("gb_3mo", "exact")
+    marginal = [p for p in r["points"] if p["marginal"] and not p["source_out"]]
+    assert marginal and name in marginal[0]
+    marginal[0][name] = value
+    monkeypatch.setitem(globals(), "_load", lambda case, model: r)
+    with pytest.raises(AssertionError, match=f"{marginal[0]['name']}: {name} = {value}"):
+        test_stress_fast_tier("gb_3mo", "exact")
+
+
+# --- the worker's PD margin (gbw_stress._margin), loaded in-process ---------------------------------
+
+@pytest.fixture
+def gbw_stress(monkeypatch):
+    """``workers/gbw_stress.py`` and its two sibling imports, by file path. Neither imports frozen
+    code at module level (``gbw_lineage_c.load`` does that lazily, in the lineage-C worker only);
+    the ``sys.modules`` entries are removed again after the test."""
+    for name in ("gbw_common", "gbw_lineage_c", "gbw_stress"):
+        spec = importlib.util.spec_from_file_location(name, WORKERS / f"{name}.py")
+        module = importlib.util.module_from_spec(spec)
+        monkeypatch.setitem(sys.modules, name, module)
+        spec.loader.exec_module(module)
+    return sys.modules["gbw_stress"]
+
+
+def test_diag_margin_measures_loss_of_pd_not_conditioning(gbw_stress):
+    """A diagonal covariance is PD iff every entry is > 0, however ill-conditioned (review I2):
+    margin 1.0 then; otherwise a sign-preserving value <= 0 (min / max|.|)."""
+    m = gbw_stress._margin
+    assert m("diag", np.array([1e-18, 1.0, 3.0])) == 1.0         # was 3.3e-19: falsely "marginal"
+    assert m("diag", np.array([2.0, 5.0])) == 1.0
+    assert m("diag", np.array([-1.0, 4.0])) == -0.25             # not PD: negative
+    assert m("diag", np.array([-1e-14, 4.0])) == -2.5e-15        # not PD, and inside the marginal band
+    assert m("diag", np.array([0.0, 4.0])) == 0.0                # singular: marginal, not "not PD"
+
+
+def test_dense_margin_unchanged(gbw_stress):
+    m = gbw_stress._margin
+    assert m("dense", np.array([[2.0, 1.0], [1.0, 2.0]])) == pytest.approx(1.0 / 3.0, rel=1e-15)
+    assert m("dense", np.array([[1.0, 2.0], [2.0, 1.0]])) == pytest.approx(-1.0 / 3.0, rel=1e-15)
+    assert m("dense", np.diag([1e-18, 1.0])) == 1e-18

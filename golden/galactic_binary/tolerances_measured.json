@@ -500,6 +500,38 @@
   "condition_scaled_cache_max": 6.890986078788315e-07,
   "condition_scaled_jax_max": 0.003501546589350664,
   "gate_jax_well_conditioned": 8.321876521222293e-08,
+  "gate_jax_well_conditioned_per_target": {
+   "gb_3mo/band_cut/fast": 1e-10,
+   "gb_3mo/band_exact/fast": 5.4569682106375694e-09,
+   "gb_3mo/band_pad/fast": 1e-10,
+   "gb_3mo/band_raw/fast": 1e-10,
+   "gb_3mo/exact/fast": 2.6575435185804963e-08,
+   "gb_3mo/mid_cut/fast": 1e-10,
+   "gb_3mo/mid_exact/fast": 5.4569682106375694e-09,
+   "gb_3mo/mid_pad/fast": 1e-10,
+   "gb_3mo/mid_raw/fast": 1e-10,
+   "gb_3mo/tri_cut/fast": 1e-10,
+   "gb_3mo/tri_exact/fast": 1e-10,
+   "gb_3mo/tri_pad/fast": 1e-10,
+   "gb_3mo/tri_raw/fast": 1e-10,
+   "gb_3mo/whittle_cut/fast": 1e-10,
+   "gb_3mo/whittle_raw/fast": 1e-10,
+   "gb_6mo/band_cut/fast": 1e-10,
+   "gb_6mo/band_exact/fast": 1.7644197214394808e-09,
+   "gb_6mo/band_pad/fast": 1e-10,
+   "gb_6mo/band_raw/fast": 1e-10,
+   "gb_6mo/exact/fast": 8.321876521222293e-08,
+   "gb_6mo/mid_cut/fast": 1e-10,
+   "gb_6mo/mid_exact/fast": 1.7826096154749393e-09,
+   "gb_6mo/mid_pad/fast": 1e-10,
+   "gb_6mo/mid_raw/fast": 1e-10,
+   "gb_6mo/tri_cut/fast": 1e-10,
+   "gb_6mo/tri_exact/fast": 1e-10,
+   "gb_6mo/tri_pad/fast": 1e-10,
+   "gb_6mo/tri_raw/fast": 1e-10,
+   "gb_6mo/whittle_cut/fast": 1e-10,
+   "gb_6mo/whittle_raw/fast": 1e-10
+  },
   "mask_mismatches": [],
   "observed_cache_well_conditioned": 1.8189894035458565e-12,
   "observed_jax_well_conditioned": 8.321876521222293e-09,
@@ -512,7 +544,8 @@
     "counters_equal": null,
     "jax_cond": 0.0,
     "jax_well": 2.2737367544323206e-13,
-    "marginal": 2,
+    "marginal": 0,
+    "marginal_threshold": 1e-10,
     "points": 11
    },
    "gb_3mo/band_exact/fast": {
@@ -524,6 +557,7 @@
     "jax_cond": 0.002067431487671252,
     "jax_well": 5.456968210637569e-10,
     "marginal": 0,
+    "marginal_threshold": 1e-10,
     "points": 11
    },
    "gb_3mo/band_pad/fast": {
@@ -535,6 +569,7 @@
     "jax_cond": 4.8821706112321775e-06,
     "jax_well": 2.2737367544323206e-13,
     "marginal": 3,
+    "marginal_threshold": 1e-10,
     "points": 11
    },
    "gb_3mo/band_raw/fast": {
@@ -544,8 +579,9 @@
     "cache_within_numpy_gate": true,
     "counters_equal": null,
     "jax_cond": 0.0,
-    "jax_well": 9.094947017729282e-13,
-    "marginal": 3,
+    "jax_well": 3.637978807091713e-12,
+    "marginal": 0,
+    "marginal_threshold": 1e-10,
     "points": 11
    },
    "gb_3mo/exact/fast": {
@@ -557,6 +593,7 @@
     "jax_cond": 0.003501546589350664,
     "jax_well": 2.6575435185804963e-09,
     "marginal": 3,
+    "marginal_threshold": 1e-10,
     "points": 11
    },
    "gb_3mo/mid_cut/fast": {
@@ -565,9 +602,10 @@
     "cache_well_rel": 0.0,
     "cache_within_numpy_gate": true,
     "counters_equal": null,
-    "jax_cond": 2.4754866065443753e-08,
-    "jax_well": 0.0,
-    "marginal": 2,
+    "jax_cond": 0.0,
+    "jax_well": 9.094947017729282e-13,
+    "marginal": 0,
+    "marginal_threshold": 1e-10,
     "points": 11
    },
    "gb_3mo/mid_exact/fast": {
@@ -579,6 +617,7 @@
     "jax_cond": 0.0020674269140314254,
     "jax_well": 5.456968210637569e-10,
     "marginal": 0,
+    "marginal_threshold": 1e-10,
     "points": 11
    },
    "gb_3mo/mid_pad/fast": {
@@ -590,6 +629,7 @@
     "jax_cond": 5.658258809702615e-06,
     "jax_well": 0.0,
     "marginal": 3,
+    "marginal_threshold": 1e-10,
     "points": 11
    },
    "gb_3mo/mid_raw/fast": {
@@ -598,9 +638,10 @@
     "cache_well_rel": 0.0,
     "cache_within_numpy_gate": true,
     "counters_equal": null,
-    "jax_cond": 5.322258403824764e-10,
-    "jax_well": 9.094947017729282e-13,
-    "marginal": 3,
+    "jax_cond": 0.0,
+    "jax_well": 1.8189894035458565e-12,
+    "marginal": 0,
+    "marginal_threshold": 1e-10,
     "points": 11
    },
    "gb_3mo/tri_cut/fast": {
@@ -612,6 +653,7 @@
     "jax_cond": 4.974628926638796e-08,
     "jax_well": 9.094947017729282e-13,
     "marginal": 0,
+    "marginal_threshold": 1e-10,
     "points": 11
    },
    "gb_3mo/tri_exact/fast": {
@@ -623,6 +665,7 @@
     "jax_cond": 0.001798579460271486,
     "jax_well": 0.0,
     "marginal": 0,
+    "marginal_threshold": 1e-10,
     "points": 11
    },
    "gb_3mo/tri_pad/fast": {
@@ -634,6 +677,7 @@
     "jax_cond": 4.387066180027733e-06,
     "jax_well": 1.8189894035458565e-12,
     "marginal": 3,
+    "marginal_threshold": 1e-10,
     "points": 11
    },
    "gb_3mo/tri_raw/fast": {
@@ -645,6 +689,7 @@
     "jax_cond": 6.825679755455645e-10,
     "jax_well": 1.8189894035458565e-12,
     "marginal": 1,
+    "marginal_threshold": 1e-10,
     "points": 11
    },
    "gb_3mo/whittle_cut/fast": {
@@ -656,6 +701,7 @@
     "jax_cond": 0.0,
     "jax_well": 1.8189894035458565e-12,
     "marginal": 0,
+    "marginal_threshold": 1e-10,
     "points": 11
    },
    "gb_3mo/whittle_raw/fast": {
@@ -667,6 +713,7 @@
     "jax_cond": 0.0,
     "jax_well": 9.094947017729282e-13,
     "marginal": 0,
+    "marginal_threshold": 1e-10,
     "points": 11
    },
    "gb_6mo/band_cut/fast": {
@@ -675,9 +722,10 @@
     "cache_well_rel": 0.0,
     "cache_within_numpy_gate": true,
     "counters_equal": null,
-    "jax_cond": 4.664784164321174e-09,
-    "jax_well": 1.8189894035458565e-12,
-    "marginal": 3,
+    "jax_cond": 0.0,
+    "jax_well": 3.637978807091713e-12,
+    "marginal": 0,
+    "marginal_threshold": 1e-10,
     "points": 11
    },
    "gb_6mo/band_exact/fast": {
@@ -689,6 +737,7 @@
     "jax_cond": 0.0,
     "jax_well": 1.7644197214394808e-10,
     "marginal": 1,
+    "marginal_threshold": 1e-10,
     "points": 11
    },
    "gb_6mo/band_pad/fast": {
@@ -700,6 +749,7 @@
     "jax_cond": 1.7979834731260062e-06,
     "jax_well": 9.094947017729282e-13,
     "marginal": 4,
+    "marginal_threshold": 1e-10,
     "points": 11
    },
    "gb_6mo/band_raw/fast": {
@@ -708,9 +758,10 @@
     "cache_well_rel": 0.0,
     "cache_within_numpy_gate": true,
     "counters_equal": null,
-    "jax_cond": 1.2833732976121855e-09,
+    "jax_cond": 0.0,
     "jax_well": 1.8189894035458565e-12,
-    "marginal": 3,
+    "marginal": 0,
+    "marginal_threshold": 1e-10,
     "points": 11
    },
    "gb_6mo/exact/fast": {
@@ -722,6 +773,7 @@
     "jax_cond": 0.0028725083554679374,
     "jax_well": 8.321876521222293e-09,
     "marginal": 4,
+    "marginal_threshold": 1e-10,
     "points": 11
    },
    "gb_6mo/mid_cut/fast": {
@@ -732,7 +784,8 @@
     "counters_equal": null,
     "jax_cond": 0.0,
     "jax_well": 1.8189894035458565e-12,
-    "marginal": 3,
+    "marginal": 0,
+    "marginal_threshold": 1e-10,
     "points": 11
    },
    "gb_6mo/mid_exact/fast": {
@@ -744,6 +797,7 @@
     "jax_cond": 0.0,
     "jax_well": 1.7826096154749393e-10,
     "marginal": 1,
+    "marginal_threshold": 1e-10,
     "points": 11
    },
    "gb_6mo/mid_pad/fast": {
@@ -755,6 +809,7 @@
     "jax_cond": 1.2562164564742289e-06,
     "jax_well": 1.8189894035458565e-12,
     "marginal": 4,
+    "marginal_threshold": 1e-10,
     "points": 11
    },
    "gb_6mo/mid_raw/fast": {
@@ -764,8 +819,9 @@
     "cache_within_numpy_gate": true,
     "counters_equal": null,
     "jax_cond": 0.0,
-    "jax_well": 1.8189894035458565e-12,
-    "marginal": 3,
+    "jax_well": 3.637978807091713e-12,
+    "marginal": 0,
+    "marginal_threshold": 1e-10,
     "points": 11
    },
    "gb_6mo/tri_cut/fast": {
@@ -777,6 +833,7 @@
     "jax_cond": 4.657435423426865e-09,
     "jax_well": 1.8189894035458565e-12,
     "marginal": 3,
+    "marginal_threshold": 1e-10,
     "points": 11
    },
    "gb_6mo/tri_exact/fast": {
@@ -788,6 +845,7 @@
     "jax_cond": 0.0,
     "jax_well": 0.0,
     "marginal": 1,
+    "marginal_threshold": 1e-10,
     "points": 11
    },
    "gb_6mo/tri_pad/fast": {
@@ -799,6 +857,7 @@
     "jax_cond": 2.787268185757678e-07,
     "jax_well": 1.8189894035458565e-12,
     "marginal": 4,
+    "marginal_threshold": 1e-10,
     "points": 11
    },
    "gb_6mo/tri_raw/fast": {
@@ -810,6 +869,7 @@
     "jax_cond": 1.2813214684935877e-09,
     "jax_well": 1.8189894035458565e-12,
     "marginal": 3,
+    "marginal_threshold": 1e-10,
     "points": 11
    },
    "gb_6mo/whittle_cut/fast": {
@@ -821,6 +881,7 @@
     "jax_cond": 0.0,
     "jax_well": 1.8189894035458565e-12,
     "marginal": 0,
+    "marginal_threshold": 1e-10,
     "points": 11
    },
    "gb_6mo/whittle_raw/fast": {
@@ -832,6 +893,7 @@
     "jax_cond": 0.0,
     "jax_well": 1.8189894035458565e-12,
     "marginal": 0,
+    "marginal_threshold": 1e-10,
     "points": 11
    }
   }
