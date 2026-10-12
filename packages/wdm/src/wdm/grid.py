@@ -99,6 +99,25 @@ class Grid:
         return delta_T(self.Nf, self.dt)
 
 
+def _require_int(name: str, value: object) -> int:
+    """Return ``value`` as an ``int``, raising ``ValueError`` if it is not one
+    (``bool`` is rejected too).  Verbatim from lisa/wdm b5973b7."""
+    if isinstance(value, bool) or not isinstance(value, (int, np.integer)):
+        raise ValueError(f"{name} must be an integer, got {type(value).__name__}")
+    return int(value)
+
+
+def _require_even_positive_int(name: str, value: object) -> int:
+    """Return ``value`` as an ``int``, requiring it to be positive and even.
+    Verbatim from lisa/wdm b5973b7 (same messages as :func:`validate_grid`)."""
+    val = _require_int(name, value)
+    if val <= 0:
+        raise ValueError(f"{name} must be positive, got {val}")
+    if val % 2 != 0:
+        raise ValueError(f"{name} must be even, got {val}")
+    return val
+
+
 def validate_grid(Nf: int, Nt: int) -> None:
     """Raise ``ValueError`` if ``Nf`` or ``Nt`` are not positive even integers.
 
@@ -337,14 +356,37 @@ def delta_F(Nf: int, dt: float) -> float:
     float
         Pixel width in Hz.
 
+    Raises
+    ------
+    ValueError
+        If ``Nf`` is not a positive even integer, if ``dt`` is not positive
+        and finite, or if $2\\,\\delta t N_f$ is so small or so large that the
+        width is not a positive finite double (lisa/wdm b5973b7: an ``inf`` or
+        ``0.0`` width made :func:`wdm.forward_time` return exact zeros).
+
     Examples
     --------
     >>> import numpy as np, wdm
     >>> wdm.delta_F(8, 1.0)
     0.0625
+    >>> wdm.delta_F(0, 1.0)
+    Traceback (most recent call last):
+    ValueError: Nf must be positive, got 0
+    >>> wdm.delta_F(8, 5e-324)          # doctest: +ELLIPSIS
+    Traceback (most recent call last):
+    ValueError: delta_F is not representable for Nf=8, dt=5e-324...
     """
+    _require_even_positive_int("Nf", Nf)
     validate_dt(dt)
-    return 1.0 / (2.0 * dt * Nf)
+    width = 1.0 / (2.0 * dt * Nf)
+    if not np.isfinite(width) or width <= 0.0:
+        raise ValueError(
+            f"delta_F is not representable for Nf={Nf}, dt={dt!r}: "
+            f"1/(2*dt*Nf) is {width!r}. Both arguments are individually legal, "
+            "but their product has left the normal double range, and the "
+            "transform would return a grid of exact zeros without raising."
+        )
+    return width
 
 
 def delta_T(Nf: int, dt: float) -> float:

@@ -25,6 +25,14 @@ Exact flavor (cost $O(N \\log N_t)$):
   and apply the per-bin PSD weighting.  Equals the standard
   frequency-domain inner product to machine precision.
 
+Which cells the diagonal forms sum
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+``cells="active"`` (default since wdm-paper 1.0) sums every active cell, DC
+and Nyquist included, as the manuscripts do; inactive edge pixels are never
+cells and never enter a sum or a positivity check.  ``cells="interior"`` sums
+the interior bands $m = 1 \\ldots N_f-1$ only -- the vendored behaviour,
+kept for reproduction.
+
 Log-likelihoods
 ~~~~~~~~~~~~~~~
 Each inner product has a matching log-likelihood that includes the
@@ -40,16 +48,33 @@ the PSD is fixed during parameter estimation):
 from __future__ import annotations
 
 from collections.abc import Callable
+from typing import Literal
 
 import numpy as np
 from numpy.typing import NDArray
 
-from .grid import n_samples, sanitize_psd, validate_finite
+from .grid import active_mask, n_samples, sanitize_psd, validate_finite
 from .transform import inverse, inverse_many
 
 type Array = NDArray[np.floating]
 type CArray = NDArray[np.complexfloating]
 type PsdFunc = Callable[[Array], Array]
+type Cells = Literal["active", "interior"]
+
+
+def _cell_mask(cells: Cells, Nf: int, Nt: int) -> NDArray[np.bool_]:
+    """``(Nf+1, Nt)`` mask of the summed cells.
+
+    ``"interior"``: bands ``m = 1..Nf-1`` (vendored behaviour).  ``"active"``:
+    :func:`wdm.grid.active_mask` -- every active cell, DC and Nyquist included.
+    """
+    if cells == "interior":
+        mask = np.zeros((Nf + 1, Nt), dtype=bool)
+        mask[1:Nf] = True
+        return mask
+    if cells == "active":
+        return active_mask(Nf, Nt)
+    raise ValueError(f"cells must be 'active' or 'interior'; got {cells!r}")
 
 __all__ = [
     "band_averaged",
@@ -112,7 +137,9 @@ def _check_psd_grid(Sn_array: Array, N: int, context: str) -> Array:
     return arr
 
 
-def _check_grids(w_a: Array, w_b: Array, var: Array, Nf: int, *, batched: bool) -> None:
+def _check_grids(
+    w_a: Array, w_b: Array, var: Array, Nf: int, *, batched: bool, cells: Cells = "active"
+) -> None:
     """Validate that the three grids agree and match ``Nf``.
 
     Without this, a mismatched ``Nf`` silently sums the wrong number of bands
@@ -142,13 +169,16 @@ def _check_grids(w_a: Array, w_b: Array, var: Array, Nf: int, *, batched: bool) 
         )
     # var is divided by, so a non-positive or non-finite entry turns a
     # likelihood into a silent negative number or a NaN rather than an error.
-    interior = var[..., 1:Nf, :]
-    if not np.all(np.isfinite(interior)) or np.any(interior <= 0.0):
+    # Only the summed cells are checked: inactive edge pixels are not cells.
+    summed = var[..., _cell_mask(cells, Nf, var.shape[-1])]
+    if not np.all(np.isfinite(summed)) or np.any(summed <= 0.0):
+        where = ("the interior bands m = 1..Nf-1" if cells == "interior"
+                 else "every active cell (DC and Nyquist included; pass "
+                      "cells='interior' for a PSD that vanishes there)")
         raise ValueError(
-            "var must be finite and strictly positive on the interior bands "
-            "m = 1..Nf-1; got "
-            f"min={float(np.min(interior))!r}, "
-            f"{int(np.count_nonzero(~np.isfinite(interior)))} non-finite"
+            f"var must be finite and strictly positive on {where}; got "
+            f"min={float(np.min(summed))!r}, "
+            f"{int(np.count_nonzero(~np.isfinite(summed)))} non-finite"
         )
     # The coefficient grids get the same treatment as var. A NaN pixel in
     # either one makes the whole sum NaN, and a NaN log-likelihood read by a
@@ -172,7 +202,7 @@ def _residual(w_d: Array, w_h: Array) -> Array:
     return w_d - w_h
 
 
-def _diagonal_inner(w_a: Array, w_b: Array, var: Array, Nf: int) -> float:
+def _diagonal_inner(w_a: Array, w_b: Array, var: Array, Nf: int, cells: Cells = "active") -> float:
     """Common implementation of the diagonal inner products.
 
     Sums $w_a w_b / \\sigma^2$ over the active interior pixels.
@@ -180,33 +210,49 @@ def _diagonal_inner(w_a: Array, w_b: Array, var: Array, Nf: int) -> float:
     included should sum manually with the appropriate variance.
     """
     w_a, w_b, var = _as_grids(w_a, w_b, var)
-    _check_grids(w_a, w_b, var, Nf, batched=False)
-    return float(_reduce_diagonal(w_a, w_b, var, Nf))
+    _check_grids(w_a, w_b, var, Nf, batched=False, cells=cells)
+    return float(_reduce_diagonal(w_a, w_b, var, Nf, cells))
 
 
-def _reduce_diagonal(w_a: Array, w_b: Array, var: Array, Nf: int) -> Array:
+def _reduce_diagonal(w_a: Array, w_b: Array, var: Array, Nf: int, cells: Cells = "active") -> Array:
     """$\\sum w_a w_b/\\sigma^2$ over the interior pixels of the last two axes.
 
     Leading axes are preserved, so this serves both the scalar and the batched
     inner products from one expression.  Interior bands $m = 1 \\ldots N_f-1$
     only; the active mask there is all-True, so no masking is needed.
     """
-    slab = (..., slice(1, Nf), slice(None))
-    # Accumulate in double whatever the inputs are. A float32 stack is worth
-    # having for its memory, but summing N terms in single precision is not:
-    # the products are formed in the input dtype (no copy) and the reduction
-    # promotes.
-    return np.sum(w_a[slab] * w_b[slab] / var[slab], axis=(-2, -1), dtype=np.float64)
+    # Divide before multiplying (lisa/wdm b5973b7). ``w_a * w_b`` forms the
+    # *square* of a coefficient grid in the input dtype, and at strain
+    # amplitudes that square is below float32's smallest subnormal while the
+    # quotient is O(1); numpy ignores underflow by default, so nothing warns.
+    # Dividing first keeps the intermediate at the magnitude of the result and
+    # promotes to the variance grid's dtype.  Accumulate in double whatever the
+    # inputs are.
+    if cells == "interior":
+        slab = (..., slice(1, Nf), slice(None))
+        return np.sum(w_a[slab] / var[slab] * w_b[slab], axis=(-2, -1), dtype=np.float64)
+    # Active cells: the quotient is formed only on the mask (inactive pixels
+    # stay exactly 0 and never touch ``var``), and the reduction runs over the
+    # same contiguous (-2, -1) axes for a grid and for a stack, so the batched
+    # form equals the per-entry loop bit for bit.  (Boolean-flattening to the N
+    # cells first does not: numpy then reduces a (B, N) stack row-sequentially
+    # but one (N,) grid pairwise, ~4e-14 apart.)
+    mask = _cell_mask(cells, Nf, w_a.shape[-1])
+    shape = np.broadcast_shapes(w_a.shape, var.shape)
+    ratio = np.divide(w_a, var, out=np.zeros(shape, np.result_type(w_a, var)), where=mask)
+    return np.sum(ratio * w_b, axis=(-2, -1), dtype=np.float64)
 
 
-def _diagonal_inner_many(w_a: Array, w_b: Array, var: Array, Nf: int) -> Array:
+def _diagonal_inner_many(
+    w_a: Array, w_b: Array, var: Array, Nf: int, cells: Cells = "active"
+) -> Array:
     """Batched :func:`_diagonal_inner`: one value per leading-axis entry."""
     w_a, w_b, var = _as_grids(w_a, w_b, var)
-    _check_grids(w_a, w_b, var, Nf, batched=True)
-    return _reduce_diagonal(w_a, w_b, var, Nf)
+    _check_grids(w_a, w_b, var, Nf, batched=True, cells=cells)
+    return _reduce_diagonal(w_a, w_b, var, Nf, cells)
 
 
-def whittle(w_a: Array, w_b: Array, var: Array, Nf: int) -> float:
+def whittle(w_a: Array, w_b: Array, var: Array, Nf: int, *, cells: Cells = "active") -> float:
     """Whittle inner product: $\\sum_{m,n} w_a w_b / \\sigma_{mn}^2$.
 
     With ``var`` produced by :func:`wdm.whittle_variance`, this equals
@@ -238,10 +284,12 @@ def whittle(w_a: Array, w_b: Array, var: Array, Nf: int) -> float:
     >>> bool(wdm.inner_product.whittle(w, w, var, Nf) > 0)
     True
     """
-    return _diagonal_inner(w_a, w_b, var, Nf)
+    return _diagonal_inner(w_a, w_b, var, Nf, cells)
 
 
-def band_averaged(w_a: Array, w_b: Array, var: Array, Nf: int) -> float:
+def band_averaged(
+    w_a: Array, w_b: Array, var: Array, Nf: int, *, cells: Cells = "active"
+) -> float:
     """Same as :func:`whittle` but expects band-averaged variance.
 
     Use ``var = wdm.band_averaged_variance(...)`` to get the exact
@@ -268,7 +316,7 @@ def band_averaged(w_a: Array, w_b: Array, var: Array, Nf: int) -> float:
     >>> bool(wdm.inner_product.band_averaged(w, w, var, Nf) > 0)
     True
     """
-    return _diagonal_inner(w_a, w_b, var, Nf)
+    return _diagonal_inner(w_a, w_b, var, Nf, cells)
 
 
 def evolutionary_whittle(
@@ -276,6 +324,8 @@ def evolutionary_whittle(
     w_b: Array,
     var_tf: Array,
     Nf: int,
+    *,
+    cells: Cells = "active",
 ) -> float:
     """Diagonal inner product with pixel-dependent variance (non-stationary).
 
@@ -304,7 +354,7 @@ def evolutionary_whittle(
     >>> bool(wdm.inner_product.evolutionary_whittle(w, w, var, Nf) > 0)
     True
     """
-    return _diagonal_inner(w_a, w_b, var_tf, Nf)
+    return _diagonal_inner(w_a, w_b, var_tf, Nf, cells)
 
 
 def _frequency_inner(
@@ -501,16 +551,27 @@ def gaussian_from_func(
     return gaussian(w_a, w_b, Nf, Nt, dt, Sn_array)
 
 
-def _diagonal_logdet(var: Array, Nf: int) -> float:
-    """Sum of $\\ln(2\\pi\\sigma_{mn}^2)$ over the active interior pixels.
+def _diagonal_logdet(var: Array, Nf: int, cells: Cells = "active") -> Array:
+    """$\\sum \\ln(2\\pi\\sigma_{mn}^2)$ over the summed cells of the last two axes.
 
-    Matches the summation convention of :func:`_diagonal_inner` (only
-    interior bands $m = 1, \\ldots, N_f - 1$).
+    Leading axes are preserved (one value per template of a ``(B, Nf+1, Nt)``
+    stack; 0-d for one grid).  The vendored ``var[1:Nf]`` sliced the **batch**
+    axis of a per-template stack (lisa/wdm b5973b7): wrong by a per-template
+    offset, and an empty slice -- a silently dropped term -- at ``B = 1``.
     """
-    return float(np.sum(np.log(2.0 * np.pi * var[1:Nf])))
+    var = np.asarray(var)
+    if cells == "interior":
+        slab = (..., slice(1, Nf), slice(None))
+        return np.sum(np.log(2.0 * np.pi * var[slab]), axis=(-2, -1), dtype=np.float64)
+    mask = _cell_mask(cells, Nf, var.shape[-1])
+    scaled = 2.0 * np.pi * var
+    logs = np.log(scaled, out=np.zeros_like(scaled), where=mask)
+    return np.sum(logs, axis=(-2, -1), dtype=np.float64)
 
 
-def whittle_many(w_a: Array, w_b: Array, var: Array, Nf: int) -> Array:
+def whittle_many(
+    w_a: Array, w_b: Array, var: Array, Nf: int, *, cells: Cells = "active"
+) -> Array:
     """Batched :func:`whittle`: $(B, N_f+1, N_t) \\to (B,)$.
 
     One vectorised reduction over the whole stack instead of $B$ Python-level
@@ -552,7 +613,7 @@ def whittle_many(w_a: Array, w_b: Array, var: Array, Nf: int) -> Array:
     >>> bool(np.isclose(vals[2], wdm.inner_product.whittle(W[2], W[2], var, Nf)))
     True
     """
-    return _diagonal_inner_many(w_a, w_b, var, Nf)
+    return _diagonal_inner_many(w_a, w_b, var, Nf, cells)
 
 
 def loglike_whittle_many(
@@ -562,6 +623,7 @@ def loglike_whittle_many(
     Nf: int,
     *,
     include_logdet: bool = True,
+    cells: Cells = "active",
 ) -> Array:
     """Batched :func:`loglike_whittle`: $(B, N_f+1, N_t) \\to (B,)$.
 
@@ -614,9 +676,9 @@ def loglike_whittle_many(
             "one of them none at all (a single grid against a stack)."
         ) from None
     residual = np.broadcast_to(_residual(w_d, w_h), out_shape)
-    quad = _diagonal_inner_many(residual, residual, np.asarray(var), Nf)
+    quad = _diagonal_inner_many(residual, residual, np.asarray(var), Nf, cells)
     if include_logdet:
-        return -0.5 * quad - 0.5 * _diagonal_logdet(np.asarray(var), Nf)
+        return -0.5 * quad - 0.5 * _diagonal_logdet(np.asarray(var), Nf, cells)
     return -0.5 * quad
 
 
@@ -627,6 +689,7 @@ def loglike_whittle(
     Nf: int,
     *,
     include_logdet: bool = True,
+    cells: Cells = "active",
 ) -> float:
     """Whittle Gaussian log-likelihood.
 
@@ -667,9 +730,9 @@ def loglike_whittle(
     True
     """
     residual = _residual(w_d, w_h)
-    quad = whittle(residual, residual, var, Nf)
+    quad = whittle(residual, residual, var, Nf, cells=cells)
     if include_logdet:
-        return -0.5 * quad - 0.5 * _diagonal_logdet(var, Nf)
+        return -0.5 * quad - 0.5 * float(_diagonal_logdet(var, Nf, cells))
     return -0.5 * quad
 
 
@@ -680,6 +743,7 @@ def loglike_band_averaged(
     Nf: int,
     *,
     include_logdet: bool = True,
+    cells: Cells = "active",
 ) -> float:
     """Same as :func:`loglike_whittle` but for the band-averaged variance.
 
@@ -710,7 +774,7 @@ def loglike_band_averaged(
     >>> bool(ll < 0)
     True
     """
-    return loglike_whittle(w_d, w_h, var, Nf, include_logdet=include_logdet)
+    return loglike_whittle(w_d, w_h, var, Nf, include_logdet=include_logdet, cells=cells)
 
 
 def loglike_evolutionary_whittle(
@@ -720,6 +784,7 @@ def loglike_evolutionary_whittle(
     Nf: int,
     *,
     include_logdet: bool = True,
+    cells: Cells = "active",
 ) -> float:
     """Diagonal log-likelihood with pixel-dependent variance (non-stationary).
 
@@ -751,7 +816,7 @@ def loglike_evolutionary_whittle(
     >>> bool(ll < 0)
     True
     """
-    return loglike_whittle(w_d, w_h, var_tf, Nf, include_logdet=include_logdet)
+    return loglike_whittle(w_d, w_h, var_tf, Nf, include_logdet=include_logdet, cells=cells)
 
 
 def loglike_gaussian_many(

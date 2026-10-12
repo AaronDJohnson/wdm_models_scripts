@@ -40,7 +40,14 @@ from collections.abc import Callable
 import numpy as np
 from numpy.typing import NDArray
 
-from .grid import active_mask, n_samples, sanitize_psd, validate_dt, validate_grid
+from .grid import (
+    _require_even_positive_int,
+    active_mask,
+    n_samples,
+    sanitize_psd,
+    validate_dt,
+    validate_grid,
+)
 from .transform import inverse_time
 
 type Array = NDArray[np.floating]
@@ -329,9 +336,15 @@ def rfft_to_real(x_rfft: CArray, N: int) -> Array:
     >>> packed = wdm.matrix.rfft_to_real(np.fft.rfft(x), 32)
     >>> packed.shape
     (32,)
+    >>> wdm.matrix.rfft_to_real(np.fft.rfft(x[:5]), 5)
+    Traceback (most recent call last):
+    ValueError: N must be even, got 5
     """
     # Interleave Re/Im of bins j = 1..N/2-1 into slots (2j-1, 2j), i.e. the
-    # strided ranges 1:N-2:2 and 2:N-1:2.
+    # strided ranges 1:N-2:2 and 2:N-1:2.  Even N only (lisa/wdm b5973b7): for
+    # odd N the last stored bin is not Nyquist and its imaginary part would be
+    # silently dropped, yet N//2+1 is still the right bin count.
+    N = _require_even_positive_int("N", N)
     x_rfft = np.asarray(x_rfft)
     if x_rfft.shape != (N // 2 + 1,):
         raise ValueError(
@@ -366,7 +379,11 @@ def real_to_rfft(x_real: Array, N: int) -> CArray:
     >>> back = wdm.matrix.real_to_rfft(packed, 32)
     >>> bool(np.allclose(back, np.fft.rfft(x)))
     True
+    >>> wdm.matrix.real_to_rfft(np.zeros(5), 5)
+    Traceback (most recent call last):
+    ValueError: N must be even, got 5
     """
+    N = _require_even_positive_int("N", N)
     x_real = np.asarray(x_real)
     if x_real.shape != (N,):
         raise ValueError(f"x_real must have shape ({N},); got {x_real.shape}")

@@ -4,17 +4,20 @@ from __future__ import annotations
 
 import numpy as np
 
-from wdm.inner_product import (
-    band_averaged,
-    evolutionary_whittle,
-    gaussian,
-    gaussian_from_func,
-    loglike_band_averaged,
-    loglike_evolutionary_whittle,
-    loglike_gaussian,
-    loglike_whittle,
-    whittle,
-)
+from functools import partial
+
+from wdm import inner_product as _ip
+from wdm.inner_product import gaussian, gaussian_from_func, loglike_gaussian
+
+# wdm-paper 1.0 made cells="active" the default of the diagonal forms; these
+# vendored tests keep testing the vendored convention, interior bands only
+# (spec section 2.4).  test_loglike_whittle_includes_logdet hard-codes it.
+band_averaged = partial(_ip.band_averaged, cells="interior")
+evolutionary_whittle = partial(_ip.evolutionary_whittle, cells="interior")
+loglike_band_averaged = partial(_ip.loglike_band_averaged, cells="interior")
+loglike_evolutionary_whittle = partial(_ip.loglike_evolutionary_whittle, cells="interior")
+loglike_whittle = partial(_ip.loglike_whittle, cells="interior")
+whittle = partial(_ip.whittle, cells="interior")
 from wdm.noise import (
     band_averaged_variance,
     evolutionary_variance,
