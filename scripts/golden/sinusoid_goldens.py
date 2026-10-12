@@ -364,6 +364,35 @@ def g6(argv: list[str]) -> dict:
     return report
 
 
+# --- the whole sinusoid capture (Task A10) ----------------------------------------------------
+
+def capture_all(tier: str = "fast") -> dict:
+    """Every sinusoid golden for one tier; returns the MANIFEST 'sources' block."""
+    for rel, (_, _, sha) in DATA_FILES.items():
+        if sha256_file(DATA / rel) != sha:
+            raise ValueError(f"shipped data/{rel} changed; rerun ship-data")
+    g1([])
+    for lineage in ("A", "B"):
+        run_reference_eval(lineage, tier)
+    g2([])
+    for lineage in ("A", "B"):
+        run_chain_eval(lineage, tier)
+    g6([])
+    return sources()
+
+
+def sources() -> dict:
+    from scripts.golden.lineage import LINEAGES
+    runs = read_json(CHAIN_ROWS / "INDEX.json")["runs"]
+    return {"bundle": {"path": BUNDLE_REL, "sha256": sha256_file(BUNDLE)},
+            "sinusoid_final_manifest": {"path": "wdm_paper_2/sinusoid_final/manifest.json",
+                                        "sha256": sha256_file(SINUSOID_FINAL / "manifest.json")},
+            "data": {rel: sha for rel, (_, _, sha) in DATA_FILES.items()},
+            "chains": {key: {k: v[k] for k in ("run", "nrows", "chain_0_sha256", "run_meta_sha256")}
+                       for key, v in runs.items()},
+            "lineages": {k: LINEAGES[k] for k in ("A", "B")}}
+
+
 def main(argv: list[str] | None = None) -> int:
     if not sys.flags.safe_path:          # spec §1 guard 5: no cwd injection
         raise SystemExit("run with python -P or PYTHONSAFEPATH=1 (source env/activate.sh)")
