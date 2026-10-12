@@ -117,8 +117,14 @@ class ExactTimeCovariance(Covariance):
             raise ValueError(f"ExactTimeCovariance needs a log-linear PSD; got {type(psd).__name__}")
         if form not in ("operator", "dense"):
             raise ValueError(f"form must be 'operator' or 'dense'; got {form!r}")
-        if int(N) % 2:
-            raise ValueError("N must be even")
+        if on_fail not in ("raise", "nan"):
+            raise ValueError(f"on_fail must be 'raise' or 'nan'; got {on_fail!r}")
+        if int(N) < 2 or int(N) % 2:
+            raise ValueError(f"N must be even and positive; got {N}")
+        if not float(dt) > 0.0:
+            raise ValueError(f"dt must be positive; got {dt}")
+        if int(P) < 1 or not float(tol) > 0.0 or int(maxit) < 1:
+            raise ValueError(f"need P >= 1, tol > 0 and maxit >= 1; got P={P}, tol={tol}, maxit={maxit}")
         self.psd, self.N, self.dt, self.form, self.P = psd, int(N), float(dt), form, int(P)
         self.n = self.N
         self.c_N = None if c_N is None else float(c_N)
@@ -139,8 +145,13 @@ class ExactTimeCovariance(Covariance):
     # -- the operator ---------------------------------------------------------------
     def operator(self, C: Any, alpha_c: Any, alpha_d: Any, be: Backend, *, scale: float = 1.0,
                  P: int | None = None) -> CovOperator:
-        """WT ``CovOperator(cfg, alpha_c, alpha_d, P, T, scale)``."""
+        """WT ``CovOperator(cfg, alpha_c, alpha_d, P, T, scale)``; ``P`` (static) at most the
+        constructor's ``P`` (the rows of the Chebyshev basis in ``C``)."""
+        if self.form != "operator":
+            raise ValueError("operator() needs form='operator' (its constants carry the Chebyshev basis)")
         P = self.P if P is None else int(P)
+        if not 1 <= P <= self.P:
+            raise ValueError(f"P must be in [1, {self.P}]; got {P}")
         L = C["L"]
         E = bessel_coefficients(0.25 * alpha_d * L, P, be)
         g = scale / self.T_obs * be.xp.exp(alpha_c * L)
@@ -161,7 +172,7 @@ class ExactTimeCovariance(Covariance):
     def sigma_tilde(self, nu: Any) -> np.ndarray:
         """Exact ``Sigma~ = Sigma / A_n`` ``(N, N)``: WT ``noise.sigma_tilde`` verbatim."""
         N = self.N
-        L = self.host_constants()["L"]
+        L = np.asarray(self.psd.L(np.fft.rfftfreq(N, d=self.dt)), float)   # = host_constants()["L"]
         w = endpoint_weights(L.size) * (1.0 / self.T_obs)
         w[1:-1] *= 0.5
         s_over_2N = np.arange(2 * N - 1) / (2.0 * N) - 0.5

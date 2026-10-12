@@ -118,6 +118,19 @@ def test_requires_a_log_linear_psd():
 
     with pytest.raises(ValueError, match="log-linear"):
         ExactTimeCovariance(Other(), N, DT)
+    # the other constructor and operator guards fail at construction / call, not inside PCG
+    with pytest.raises(ValueError, match="on_fail"):
+        _cov(on_fail="ignore")
+    with pytest.raises(ValueError, match="even"):
+        ExactTimeCovariance(PSD, N + 1, DT)
+    with pytest.raises(ValueError, match="P >= 1"):
+        _cov(P=0)
+    cov = _cov(P=8)
+    with pytest.raises(ValueError, match=r"P must be in \[1, 8\]"):
+        cov.operator(cov.constants(), -2.0, 1.2, NUMPY, P=9)
+    dense = _cov(form="dense")
+    with pytest.raises(ValueError, match="form='operator'"):
+        dense.operator(dense.constants(), -2.0, 1.2, NUMPY)
 
 
 @pytest.mark.jax
