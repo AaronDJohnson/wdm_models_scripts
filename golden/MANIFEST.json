@@ -18,6 +18,51 @@
   }
  },
  "files": {
+  "chain_summaries/sinusoid/manuscript_high_band_cut.json": "385152c56e2faf6fd351fd817c570100fa3265c1b8f51277db85c714bfaed46e",
+  "chain_summaries/sinusoid/manuscript_high_band_exact.json": "8dfddae4e4df30a1b042dbd3dfdd339c9e9b8d470dd27d5afc1b0a6edaf522f8",
+  "chain_summaries/sinusoid/manuscript_high_band_pad.json": "11f37ea7b38bef593255f66daada7a70e4b2dc042f216c4b00d3a08f1b6fd4d2",
+  "chain_summaries/sinusoid/manuscript_high_band_raw.json": "81e6187dd2a6d1117b955fe6790869a403bd03b9d5606b42132fd3bb694d28f8",
+  "chain_summaries/sinusoid/manuscript_high_exact.json": "1e4f8371d798f34bd779bee2cbf37378bf88bf1ee5fcfbb3324048eec7b3add9",
+  "chain_summaries/sinusoid/manuscript_high_mid_cut.json": "aa6e06ffd455be7ae66d372e37b3ca5c75ad7e6fb619e6821a3198829f87a19c",
+  "chain_summaries/sinusoid/manuscript_high_mid_exact.json": "fb6305911937c7154678c5de1ecf5539337276b30cbae5ab44af5adc160e72ca",
+  "chain_summaries/sinusoid/manuscript_high_mid_pad.json": "6c47484405398d5f30dcd60ec848b49f4f4c55731f9b1ca197547de5fe55ab65",
+  "chain_summaries/sinusoid/manuscript_high_mid_raw.json": "c2fe6d444c8173407515214866d86ca8df5de66910d7e66ddaf0872ca490117f",
+  "chain_summaries/sinusoid/manuscript_high_tri_cut.json": "cac7e778f40197c9d9bd34bec05ca5c49dcef1fe8cd2d67100d9e3aee7d74ee2",
+  "chain_summaries/sinusoid/manuscript_high_tri_exact.json": "e6f0e287def807c3df08644de09aa64157f0ba2804cb30c113b37dfb0ca1ca6c",
+  "chain_summaries/sinusoid/manuscript_high_tri_pad.json": "2621e7d9244271e9cdeeb9a2a2b2e503a86913aebfffd5581d040d8b5dc83611",
+  "chain_summaries/sinusoid/manuscript_high_tri_raw.json": "55d145d35f4b834f91d6f3c7b8f87ca5a6b59b42968d384211a43f42b3cd0722",
+  "chain_summaries/sinusoid/manuscript_high_whittle_cut.json": "0dc7f9e97940ae8d883bb892a598abf2b62c030dcc72c328200db816dfaab20e",
+  "chain_summaries/sinusoid/manuscript_high_whittle_raw.json": "41db10849be303a17a7550d4ccfd29d9c59e91054eba6de896c71b4d372b341e",
+  "chain_summaries/sinusoid/manuscript_low_band_cut.json": "8b7d7e60738b97e86336920a2171f4121f0b3e96a978ea6116d772131acf0ea8",
+  "chain_summaries/sinusoid/manuscript_low_band_exact.json": "e3b30b8632019eec59c0ef69822c8a089063a102e939ba8aad2da83c48420850",
+  "chain_summaries/sinusoid/manuscript_low_band_pad.json": "0b024ecd4ca85d82e228ad888d0ace3fda29da02469f257d4d4c5cb988a23d88",
+  "chain_summaries/sinusoid/manuscript_low_band_raw.json": "43aa7eed35c9001a3eb6d2e3fdfea747bbcc43bcbd45457f0450aae3754c5fc5",
+  "chain_summaries/sinusoid/manuscript_low_exact.json": "ffdbc2d0668bd1e547dcc8862bc7d2abbddbaed1407b3c8e5dec45cc6af9e004",
+  "chain_summaries/sinusoid/manuscript_low_mid_cut.json": "dcb17dfb19a1ef2998eb997c80dd0d7bc0279a6f492e1b2846afcacd0a892f38",
+  "chain_summaries/sinusoid/manuscript_low_mid_exact.json": "eb33200b61a61ddb32b8b191ee3ad53f6dadf4f88d0a3ff2e6de7efdafd8aa33",
+  "chain_summaries/sinusoid/manuscript_low_mid_pad.json": "b2d0b85a85e3420e9eeb47736ba686d38c15512e57203503f7f3f3947daa3e5f",
+  "chain_summaries/sinusoid/manuscript_low_mid_raw.json": "8ef2e2f2820bbb90cdd94d46d2208c52b86621d77670a6f1d0986ce8622536ff",
+  "chain_summaries/sinusoid/manuscript_low_tri_cut.json": "13e13e06261549babbf4332d0c73ac77dc0ea441334b631bbcd8b69bda3920dc",
+  "chain_summaries/sinusoid/manuscript_low_tri_exact.json": "ec8063e71ae9f10059ec28cb64e8a4858a585ecf26b714e7a16b8c62edc9469d",
+  "chain_summaries/sinusoid/manuscript_low_tri_pad.json": "70d9dad564d90c08bf121a5aeda726f181bd68a2cdbe9cfdd82e7d2e5b872833",
+  "chain_summaries/sinusoid/manuscript_low_tri_raw.json": "d3b5810ba3bc745c3e4549ba2798aa6b6624037b7b655d6ea23ab5d49dfa7e07",
+  "chain_summaries/sinusoid/manuscript_low_whittle_cut.json": "c281640406cfb42ab79a7edaef2df963a8a9687abf6ee123ca1afaac28fe1564",
+  "chain_summaries/sinusoid/manuscript_low_whittle_raw.json": "8b54b9a349039d3cfbc9e2ccc372a855c5302d1acb746f8bf1a630b0988c03bc",
+  "chain_summaries/sinusoid/manuscript_mid_band_cut.json": "89e9d3c837d63e07a8f9490df81f77f393ab3684d478cc9042fa7b02e923a3d4",
+  "chain_summaries/sinusoid/manuscript_mid_band_exact.json": "e1dcd34c5cfddc866a977cb1b9d18d23d357f158d3692ecd0e40d67b6270898a",
+  "chain_summaries/sinusoid/manuscript_mid_band_pad.json": "5bc68146682c962f942ec1706114612ff69f36272883b6c2ede1f524e41143e6",
+  "chain_summaries/sinusoid/manuscript_mid_band_raw.json": "b527167c3d2a6557a83652fd2e549001e9b127913cdcd370b828c89f0472b908",
+  "chain_summaries/sinusoid/manuscript_mid_exact.json": "5d760af71a009d7bf37bcbfdc01b598d096e543e451a2687443c4d32b8a3c77c",
+  "chain_summaries/sinusoid/manuscript_mid_mid_cut.json": "738ea1dddca278f0e7addc31a85625b3173fcc9d3f54a34e69d6241696b59428",
+  "chain_summaries/sinusoid/manuscript_mid_mid_exact.json": "593ce80c37f523a7e6bbb710285af1bb6c285df9541415dee152c05a356f4cf4",
+  "chain_summaries/sinusoid/manuscript_mid_mid_pad.json": "9bad84d347cf01defe6011c69820701840732da1fcdb533ecec3d4e78691f352",
+  "chain_summaries/sinusoid/manuscript_mid_mid_raw.json": "d7ef5e4d219cfd29b1af5656a64d6b2512ee9f77168250b5c374dce98e03c07c",
+  "chain_summaries/sinusoid/manuscript_mid_tri_cut.json": "5ede1f0b2398de7a02daf41a92fcdb1e6360690b6a56727ab2360154170a411c",
+  "chain_summaries/sinusoid/manuscript_mid_tri_exact.json": "34616b92c7cb23e49638119f31d2ec2eb97bf39d912badd1cca9ad18fb8c27ab",
+  "chain_summaries/sinusoid/manuscript_mid_tri_pad.json": "e9de34d9711356e67b0df0044c5cbd1ada2673f2c410d63c093c997e2aaeceaa",
+  "chain_summaries/sinusoid/manuscript_mid_tri_raw.json": "1dffb8397ff2a9f73792de76e5898f33ce4c3e611be52c016883e52057bd96b4",
+  "chain_summaries/sinusoid/manuscript_mid_whittle_cut.json": "607da1934c519556aaaeaee753107c6c334c4e3e7f379b203e0ee660d0705ff8",
+  "chain_summaries/sinusoid/manuscript_mid_whittle_raw.json": "cccd6f3d1f61ac571c65bc4391c9c5dbd23fc8013d0a7b0f61370efae23693c7",
   "frozen_trees.json": "d16088555d918d58629e2a2762e169a92442562758b0bc0d3cdfef94a0a10844",
   "frozen_trees_files.tsv.gz": "c08ebaa833440b04c774aac8832e56f85a1bdf4d32737074e2db489c201c6c5e",
   "galactic_binary/chain_rows/gb_12mo/band_pad_flow_seed3005.fast.json": "a935c98a89fb1985b44c791f16ecc8ad6426f6d71703c47da1cdcb9843008bb7",
@@ -223,6 +268,186 @@
   "wdm/paper_june_alg12.npz": "a8076126ce3c958ac6019e803af38f3a6b097b8b4e13839d8710f4b87425619a"
  },
  "provenance": {
+  "chain_summaries/sinusoid/manuscript_high_band_cut.json": {
+   "root": "wdm_paper_2/sinusoid_final",
+   "script": "scripts/golden/summarise_chains.py"
+  },
+  "chain_summaries/sinusoid/manuscript_high_band_exact.json": {
+   "root": "wdm_paper_2/sinusoid_final",
+   "script": "scripts/golden/summarise_chains.py"
+  },
+  "chain_summaries/sinusoid/manuscript_high_band_pad.json": {
+   "root": "wdm_paper_2/sinusoid_final",
+   "script": "scripts/golden/summarise_chains.py"
+  },
+  "chain_summaries/sinusoid/manuscript_high_band_raw.json": {
+   "root": "wdm_paper_2/sinusoid_final",
+   "script": "scripts/golden/summarise_chains.py"
+  },
+  "chain_summaries/sinusoid/manuscript_high_exact.json": {
+   "root": "wdm_paper_2/sinusoid_final",
+   "script": "scripts/golden/summarise_chains.py"
+  },
+  "chain_summaries/sinusoid/manuscript_high_mid_cut.json": {
+   "root": "wdm_paper_2/sinusoid_final",
+   "script": "scripts/golden/summarise_chains.py"
+  },
+  "chain_summaries/sinusoid/manuscript_high_mid_exact.json": {
+   "root": "wdm_paper_2/sinusoid_final",
+   "script": "scripts/golden/summarise_chains.py"
+  },
+  "chain_summaries/sinusoid/manuscript_high_mid_pad.json": {
+   "root": "wdm_paper_2/sinusoid_final",
+   "script": "scripts/golden/summarise_chains.py"
+  },
+  "chain_summaries/sinusoid/manuscript_high_mid_raw.json": {
+   "root": "wdm_paper_2/sinusoid_final",
+   "script": "scripts/golden/summarise_chains.py"
+  },
+  "chain_summaries/sinusoid/manuscript_high_tri_cut.json": {
+   "root": "wdm_paper_2/sinusoid_final",
+   "script": "scripts/golden/summarise_chains.py"
+  },
+  "chain_summaries/sinusoid/manuscript_high_tri_exact.json": {
+   "root": "wdm_paper_2/sinusoid_final",
+   "script": "scripts/golden/summarise_chains.py"
+  },
+  "chain_summaries/sinusoid/manuscript_high_tri_pad.json": {
+   "root": "wdm_paper_2/sinusoid_final",
+   "script": "scripts/golden/summarise_chains.py"
+  },
+  "chain_summaries/sinusoid/manuscript_high_tri_raw.json": {
+   "root": "wdm_paper_2/sinusoid_final",
+   "script": "scripts/golden/summarise_chains.py"
+  },
+  "chain_summaries/sinusoid/manuscript_high_whittle_cut.json": {
+   "root": "wdm_paper_2/sinusoid_final",
+   "script": "scripts/golden/summarise_chains.py"
+  },
+  "chain_summaries/sinusoid/manuscript_high_whittle_raw.json": {
+   "root": "wdm_paper_2/sinusoid_final",
+   "script": "scripts/golden/summarise_chains.py"
+  },
+  "chain_summaries/sinusoid/manuscript_low_band_cut.json": {
+   "root": "wdm_paper_2/sinusoid_final",
+   "script": "scripts/golden/summarise_chains.py"
+  },
+  "chain_summaries/sinusoid/manuscript_low_band_exact.json": {
+   "root": "wdm_paper_2/sinusoid_final",
+   "script": "scripts/golden/summarise_chains.py"
+  },
+  "chain_summaries/sinusoid/manuscript_low_band_pad.json": {
+   "root": "wdm_paper_2/sinusoid_final",
+   "script": "scripts/golden/summarise_chains.py"
+  },
+  "chain_summaries/sinusoid/manuscript_low_band_raw.json": {
+   "root": "wdm_paper_2/sinusoid_final",
+   "script": "scripts/golden/summarise_chains.py"
+  },
+  "chain_summaries/sinusoid/manuscript_low_exact.json": {
+   "root": "wdm_paper_2/sinusoid_final",
+   "script": "scripts/golden/summarise_chains.py"
+  },
+  "chain_summaries/sinusoid/manuscript_low_mid_cut.json": {
+   "root": "wdm_paper_2/sinusoid_final",
+   "script": "scripts/golden/summarise_chains.py"
+  },
+  "chain_summaries/sinusoid/manuscript_low_mid_exact.json": {
+   "root": "wdm_paper_2/sinusoid_final",
+   "script": "scripts/golden/summarise_chains.py"
+  },
+  "chain_summaries/sinusoid/manuscript_low_mid_pad.json": {
+   "root": "wdm_paper_2/sinusoid_final",
+   "script": "scripts/golden/summarise_chains.py"
+  },
+  "chain_summaries/sinusoid/manuscript_low_mid_raw.json": {
+   "root": "wdm_paper_2/sinusoid_final",
+   "script": "scripts/golden/summarise_chains.py"
+  },
+  "chain_summaries/sinusoid/manuscript_low_tri_cut.json": {
+   "root": "wdm_paper_2/sinusoid_final",
+   "script": "scripts/golden/summarise_chains.py"
+  },
+  "chain_summaries/sinusoid/manuscript_low_tri_exact.json": {
+   "root": "wdm_paper_2/sinusoid_final",
+   "script": "scripts/golden/summarise_chains.py"
+  },
+  "chain_summaries/sinusoid/manuscript_low_tri_pad.json": {
+   "root": "wdm_paper_2/sinusoid_final",
+   "script": "scripts/golden/summarise_chains.py"
+  },
+  "chain_summaries/sinusoid/manuscript_low_tri_raw.json": {
+   "root": "wdm_paper_2/sinusoid_final",
+   "script": "scripts/golden/summarise_chains.py"
+  },
+  "chain_summaries/sinusoid/manuscript_low_whittle_cut.json": {
+   "root": "wdm_paper_2/sinusoid_final",
+   "script": "scripts/golden/summarise_chains.py"
+  },
+  "chain_summaries/sinusoid/manuscript_low_whittle_raw.json": {
+   "root": "wdm_paper_2/sinusoid_final",
+   "script": "scripts/golden/summarise_chains.py"
+  },
+  "chain_summaries/sinusoid/manuscript_mid_band_cut.json": {
+   "root": "wdm_paper_2/sinusoid_final",
+   "script": "scripts/golden/summarise_chains.py"
+  },
+  "chain_summaries/sinusoid/manuscript_mid_band_exact.json": {
+   "root": "wdm_paper_2/sinusoid_final",
+   "script": "scripts/golden/summarise_chains.py"
+  },
+  "chain_summaries/sinusoid/manuscript_mid_band_pad.json": {
+   "root": "wdm_paper_2/sinusoid_final",
+   "script": "scripts/golden/summarise_chains.py"
+  },
+  "chain_summaries/sinusoid/manuscript_mid_band_raw.json": {
+   "root": "wdm_paper_2/sinusoid_final",
+   "script": "scripts/golden/summarise_chains.py"
+  },
+  "chain_summaries/sinusoid/manuscript_mid_exact.json": {
+   "root": "wdm_paper_2/sinusoid_final",
+   "script": "scripts/golden/summarise_chains.py"
+  },
+  "chain_summaries/sinusoid/manuscript_mid_mid_cut.json": {
+   "root": "wdm_paper_2/sinusoid_final",
+   "script": "scripts/golden/summarise_chains.py"
+  },
+  "chain_summaries/sinusoid/manuscript_mid_mid_exact.json": {
+   "root": "wdm_paper_2/sinusoid_final",
+   "script": "scripts/golden/summarise_chains.py"
+  },
+  "chain_summaries/sinusoid/manuscript_mid_mid_pad.json": {
+   "root": "wdm_paper_2/sinusoid_final",
+   "script": "scripts/golden/summarise_chains.py"
+  },
+  "chain_summaries/sinusoid/manuscript_mid_mid_raw.json": {
+   "root": "wdm_paper_2/sinusoid_final",
+   "script": "scripts/golden/summarise_chains.py"
+  },
+  "chain_summaries/sinusoid/manuscript_mid_tri_cut.json": {
+   "root": "wdm_paper_2/sinusoid_final",
+   "script": "scripts/golden/summarise_chains.py"
+  },
+  "chain_summaries/sinusoid/manuscript_mid_tri_exact.json": {
+   "root": "wdm_paper_2/sinusoid_final",
+   "script": "scripts/golden/summarise_chains.py"
+  },
+  "chain_summaries/sinusoid/manuscript_mid_tri_pad.json": {
+   "root": "wdm_paper_2/sinusoid_final",
+   "script": "scripts/golden/summarise_chains.py"
+  },
+  "chain_summaries/sinusoid/manuscript_mid_tri_raw.json": {
+   "root": "wdm_paper_2/sinusoid_final",
+   "script": "scripts/golden/summarise_chains.py"
+  },
+  "chain_summaries/sinusoid/manuscript_mid_whittle_cut.json": {
+   "root": "wdm_paper_2/sinusoid_final",
+   "script": "scripts/golden/summarise_chains.py"
+  },
+  "chain_summaries/sinusoid/manuscript_mid_whittle_raw.json": {
+   "root": "wdm_paper_2/sinusoid_final",
+   "script": "scripts/golden/summarise_chains.py"
+  },
   "galactic_binary/chain_rows/gb_12mo/band_pad_flow_seed3005.fast.json": {
    "args": [
     "--workspace",
