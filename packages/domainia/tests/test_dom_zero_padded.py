@@ -17,8 +17,8 @@ from wdm.backend import NUMPY
 from wdm.grid import active_mask
 
 import domtest_inputs as T
-from domainia.covariance import (BlockTridiagonalCovariance, DiagonalCovariance, Eq45Covariance, PaddedFactor,
-                                 ZeroPadded)
+from domainia.covariance import (BlockTridiagonalCovariance, DenseCovariance, DiagonalCovariance, Eq45Covariance,
+                                 PaddedFactor, ZeroPadded)
 from domainia.domains import CellSet
 from domainia.nuisance import FlatMarginal, FourierBandNuisance
 from domainia.spectra import LogLinearPSD
@@ -70,6 +70,13 @@ def test_time_marginal_arguments_are_checked():
         ZeroPadded(DiagonalCovariance(np.ones(3), 3), strategy="time_marginal", grid=EXT)
     with pytest.raises(ValueError, match="strategy"):
         ZeroPadded(_base("diag"), strategy="taper")
+    for pad in (0, EXT.Nt):                     # no padding / no data columns
+        with pytest.raises(ValueError, match="pad_columns"):
+            ZeroPadded(_base("diag"), strategy="time_marginal", grid=EXT, pad_columns=pad)
+    with pytest.raises(ValueError, match="cell_congruence only"):
+        ZeroPadded(_base("diag"), strategy="time_marginal", grid=EXT, pad_columns=PAD, factor="schur")
+    with pytest.raises(ValueError, match="chol_impl"):
+        ZeroPadded(_base("diag"), strategy="time_marginal", grid=EXT, pad_columns=PAD, chol_impl="lu")
     # a failed (ragged) Lambda: WT's LinAlgError before Q_pp -> ok False, no exception
     sizes = tuple(c for _, c in CellSet.all_active(EXT).band_sizes())
     bad = BlockTridiagonalCovariance(lambda nu, be: ([be.asarray(-np.eye(s)) for s in sizes],
@@ -172,6 +179,23 @@ def test_cell_congruence_arguments_are_checked(rng):
     with pytest.raises(ValueError, match="factor"):
         ZeroPadded(DiagonalCovariance(np.ones(18), 18), strategy="cell_congruence", mask=_Mask(rng), n_bands=2,
                    n_columns=4, factor="lu")
+    mask = _Mask(rng)
+    with pytest.raises(ValueError, match="band_blocks"):       # no diagonal, no store-band blocks
+        ZeroPadded(DenseCovariance(np.eye(18), 18, chol_impl="numpy"), strategy="cell_congruence", mask=mask,
+                   n_bands=2, n_columns=4)
+    with pytest.raises(ValueError, match="A_E has 18 columns"):  # the base must cover the store
+        ZeroPadded(DiagonalCovariance(np.ones(12), 12), strategy="cell_congruence", mask=mask, n_bands=2,
+                   n_columns=4)
+    with pytest.raises(ValueError, match="Kpos"):               # n_bands x n_columns must be the kept cells
+        ZeroPadded(DiagonalCovariance(np.ones(18), 18), strategy="cell_congruence", mask=mask, n_bands=2,
+                   n_columns=3)
+    with pytest.raises(ValueError, match="chol_impl"):
+        ZeroPadded(DiagonalCovariance(np.ones(18), 18), strategy="cell_congruence", mask=mask, n_bands=2,
+                   n_columns=4, chol_impl="lu")
+    d, u = _blocks(rng)                                          # ragged lists: refused, not an AttributeError
+    ragged = BlockTridiagonalCovariance(lambda nu, be: (list(d), list(u)), (6, 6, 6), layout="ragged")
+    with pytest.raises(ValueError, match="ragged lists"):
+        ZeroPadded(ragged, strategy="cell_congruence", mask=mask, n_bands=2, n_columns=4).dense(np.zeros(1))
 
 
 @pytest.mark.jax

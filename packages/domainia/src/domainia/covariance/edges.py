@@ -284,12 +284,19 @@ class ZeroPadded(Covariance):
             raise ValueError(f"unknown padding strategy {strategy!r}")
         if factor not in ("dense", "schur"):
             raise ValueError(f"factor must be 'dense' or 'schur'; got {factor!r}")
+        if chol_impl not in (None, "numpy", "scipy"):   # else it raises only at the first factor
+            raise ValueError(f"chol_impl must be 'numpy' or 'scipy'; got {chol_impl!r}")
         self.base, self.strategy, self.factor_kind = base_ext, strategy, factor
         self.pad_columns = int(pad_columns)
         self.jittable = base_ext.jittable
         if strategy == "time_marginal":
             if grid is None:
                 raise ValueError("time_marginal needs the extended grid")
+            if factor != "dense":                       # never silently ignored
+                raise ValueError("factor applies to cell_congruence only; time_marginal has one "
+                                 "factorisation (WT PaddedMarginal)")
+            if not 0 < self.pad_columns < grid.Nt:
+                raise ValueError(f"pad_columns must lie in (0, {grid.Nt}); got {self.pad_columns}")
             if base_ext.n != grid.N:
                 raise ValueError(f"the base covers {base_ext.n} cells; the extended grid has {grid.N}")
             self.grid = grid
@@ -298,7 +305,18 @@ class ZeroPadded(Covariance):
             return
         if mask is None or n_bands is None or n_columns is None:
             raise ValueError("cell_congruence needs mask, n_bands and n_columns")
-        self.mask, self.n_bands, self.n_columns = mask, int(n_bands), int(n_columns)
+        if not (isinstance(base_ext, DiagonalCovariance) or hasattr(base_ext, "band_blocks")):
+            raise ValueError("cell_congruence needs a DiagonalCovariance or a base with band_blocks "
+                             f"(store-band blocks); got {type(base_ext).__name__}")
+        n_R = np.asarray(mask.AE).shape[1]
+        if base_ext.n != n_R:
+            raise ValueError(f"the base covers {base_ext.n} cells; the mask's A_E has {n_R} columns")
+        nK, NT = int(n_bands), int(n_columns)
+        kpos = (mask.k0 + np.repeat(np.arange(nK), NT)) * mask.NT_ext + np.tile(np.arange(NT), nK)
+        if not np.array_equal(np.asarray(mask.Kpos), kpos):     # the layout _congruence_pieces assumes
+            raise ValueError(f"mask.Kpos must be the {nK} x {NT} kept cells in band order, "
+                             "(k0 + b) NT_ext + n with n < n_columns")
+        self.mask, self.n_bands, self.n_columns = mask, nK, NT
         self.n = int(np.asarray(mask.Kpos).size)
         self.chol_impl = chol_impl or "numpy"
         self.e = np.asarray(mask.E, int)
@@ -356,6 +374,9 @@ class ZeroPadded(Covariance):
             v = self.base.variances(C["base"], nu, be)
             return xp.diag(v[Kpos]), AE * v[None, :], None
         d, u = self.base.band_blocks(C["base"], nu, be)
+        if isinstance(d, (list, tuple)):
+            raise ValueError("cell_congruence needs the store-band blocks as arrays (nB, NT', NT') "
+                             "and (nB - 1, NT', NT'), not ragged lists")
         nB, NTp = d.shape[0], d.shape[1]
         A3 = AE.reshape(nE, nB, NTp)
         Y = xp.einsum("ebn,bnm->ebm", A3, d)
