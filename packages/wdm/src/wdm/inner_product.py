@@ -205,9 +205,9 @@ def _residual(w_d: Array, w_h: Array) -> Array:
 def _diagonal_inner(w_a: Array, w_b: Array, var: Array, Nf: int, cells: Cells = "active") -> float:
     """Common implementation of the diagonal inner products.
 
-    Sums $w_a w_b / \\sigma^2$ over the active interior pixels.
-    Edge bands are excluded by default; callers that want them
-    included should sum manually with the appropriate variance.
+    Sums $w_a w_b / \\sigma^2$ over the cells selected by ``cells`` (see the
+    module docstring): every active cell by default, the interior bands
+    $m = 1 \\ldots N_f-1$ with ``cells="interior"``.
     """
     w_a, w_b, var = _as_grids(w_a, w_b, var)
     _check_grids(w_a, w_b, var, Nf, batched=False, cells=cells)
@@ -215,11 +215,12 @@ def _diagonal_inner(w_a: Array, w_b: Array, var: Array, Nf: int, cells: Cells = 
 
 
 def _reduce_diagonal(w_a: Array, w_b: Array, var: Array, Nf: int, cells: Cells = "active") -> Array:
-    """$\\sum w_a w_b/\\sigma^2$ over the interior pixels of the last two axes.
+    """$\\sum w_a w_b/\\sigma^2$ over the summed cells of the last two axes.
 
     Leading axes are preserved, so this serves both the scalar and the batched
-    inner products from one expression.  Interior bands $m = 1 \\ldots N_f-1$
-    only; the active mask there is all-True, so no masking is needed.
+    inner products from one expression.  ``cells="interior"`` slices the bands
+    $m = 1 \\ldots N_f-1$ (the active mask there is all-True); ``cells="active"``
+    masks with :func:`wdm.grid.active_mask`.
     """
     # Divide before multiplying (lisa/wdm b5973b7). ``w_a * w_b`` forms the
     # *square* of a coefficient grid in the input dtype, and at strain
@@ -258,8 +259,9 @@ def whittle(w_a: Array, w_b: Array, var: Array, Nf: int, *, cells: Cells = "acti
     With ``var`` produced by :func:`wdm.whittle_variance`, this equals
     $2\\sum w_a w_b / S_n(f_m)$.  Cost $O(N)$.
 
-    Sums interior bands ($m = 1, \\ldots, N_f-1$) only, matching the
-    convention of dropping edge bands from the likelihood.
+    Sums every active cell, DC and Nyquist included (``cells="active"``, the
+    default since wdm-paper 1.0), or the interior bands $m = 1, \\ldots, N_f-1$
+    only (``cells="interior"``, the vendored convention).
 
     Parameters
     ----------
@@ -268,6 +270,11 @@ def whittle(w_a: Array, w_b: Array, var: Array, Nf: int, *, cells: Cells = "acti
     var : ndarray, shape (Nf+1, Nt)
         Per-pixel variance grid (e.g. from :func:`wdm.whittle_variance`).
     Nf : int
+    cells : {"active", "interior"}, optional
+        Cells summed: every active cell, DC and Nyquist included (default),
+        or the interior bands $m = 1 \\ldots N_f-1$ only (the vendored
+        convention).  The variance grid must be finite and strictly positive
+        on them; other pixels are ignored.
 
     Returns
     -------
@@ -300,6 +307,11 @@ def band_averaged(
     w_a, w_b : ndarray, shape (Nf+1, Nt)
     var : ndarray, shape (Nf+1, Nt)
     Nf : int
+    cells : {"active", "interior"}, optional
+        Cells summed: every active cell, DC and Nyquist included (default),
+        or the interior bands $m = 1 \\ldots N_f-1$ only (the vendored
+        convention).  The variance grid must be finite and strictly positive
+        on them; other pixels are ignored.
 
     Returns
     -------
@@ -338,6 +350,11 @@ def evolutionary_whittle(
     var_tf : ndarray, shape (Nf+1, Nt)
         Per-pixel variance, varying in both $m$ and $n$.
     Nf : int
+    cells : {"active", "interior"}, optional
+        Cells summed: every active cell, DC and Nyquist included (default),
+        or the interior bands $m = 1 \\ldots N_f-1$ only (the vendored
+        convention).  The variance grid must be finite and strictly positive
+        on them; other pixels are ignored.
 
     Returns
     -------
@@ -595,6 +612,11 @@ def whittle_many(
     w_a, w_b : ndarray, float, shape (B, Nf+1, Nt)
     var : ndarray, float, shape (Nf+1, Nt) or (B, Nf+1, Nt)
     Nf : int
+    cells : {"active", "interior"}, optional
+        Cells summed: every active cell, DC and Nyquist included (default),
+        or the interior bands $m = 1 \\ldots N_f-1$ only (the vendored
+        convention).  The variance grid must be finite and strictly positive
+        on them; other pixels are ignored.
 
     Returns
     -------
@@ -643,6 +665,11 @@ def loglike_whittle_many(
     include_logdet : bool, optional
         The log-determinant depends only on ``var``, so with one shared noise
         grid it is a constant added to every entry.
+    cells : {"active", "interior"}, optional
+        Cells summed: every active cell, DC and Nyquist included (default),
+        or the interior bands $m = 1 \\ldots N_f-1$ only (the vendored
+        convention).  The variance grid must be finite and strictly positive
+        on them; other pixels are ignored.
 
     Returns
     -------
@@ -697,7 +724,7 @@ def loglike_whittle(
     \\left[\\frac{(w^{(d)}_{mn} - w^{(h)}_{mn})^2}{\\sigma_{mn}^2}
     + \\ln(2\\pi\\sigma_{mn}^2)\\right].$$
 
-    Sums interior bands only (matching :func:`whittle`).  The
+    Both terms sum the same cells as :func:`whittle` (``cells``).  The
     log-determinant term should be included whenever the variance grid
     can change between evaluations (e.g. PSD inference); set
     ``include_logdet=False`` to drop it during waveform parameter
@@ -711,6 +738,11 @@ def loglike_whittle(
     Nf : int
     include_logdet : bool, optional
         If True (default), include $-\\tfrac{1}{2}\\sum\\ln(2\\pi\\sigma^2)$.
+    cells : {"active", "interior"}, optional
+        Cells summed: every active cell, DC and Nyquist included (default),
+        or the interior bands $m = 1 \\ldots N_f-1$ only (the vendored
+        convention).  The variance grid must be finite and strictly positive
+        on them; other pixels are ignored.
 
     Returns
     -------
@@ -755,6 +787,11 @@ def loglike_band_averaged(
     var : ndarray, shape (Nf+1, Nt)
     Nf : int
     include_logdet : bool, optional
+    cells : {"active", "interior"}, optional
+        Cells summed: every active cell, DC and Nyquist included (default),
+        or the interior bands $m = 1 \\ldots N_f-1$ only (the vendored
+        convention).  The variance grid must be finite and strictly positive
+        on them; other pixels are ignored.
 
     Returns
     -------
@@ -797,6 +834,11 @@ def loglike_evolutionary_whittle(
     var_tf : ndarray, shape (Nf+1, Nt)
     Nf : int
     include_logdet : bool, optional
+    cells : {"active", "interior"}, optional
+        Cells summed: every active cell, DC and Nyquist included (default),
+        or the interior bands $m = 1 \\ldots N_f-1$ only (the vendored
+        convention).  The variance grid must be finite and strictly positive
+        on them; other pixels are ignored.
 
     Returns
     -------
