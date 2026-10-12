@@ -51,7 +51,7 @@ class HermitianFactor:
 
     def quad(self, b: Any, *, form: QuadForm = "whiten", be: Backend | None = None) -> Any:
         """``Re(b^H M^-1 b)``: ``"whiten"`` = ``Re(vdot(w, w))`` (GB ``noise_state`` ``q0``)."""
-        be = be or get_backend(b)
+        be = be or get_backend(b, self.L if self.blocks is None else self.blocks.Ls)
         xp = be.xp
         if form == "whiten":
             w = self.whiten(b, be=be)
@@ -66,13 +66,21 @@ class HermitianCovariance(Covariance):
     the block-tridiagonal Cholesky with ``b``-bin blocks (``n % b == 0``).
 
     ``matrix`` is an evaluator (``ExactFourierCovariance``), a callable ``fn(nu, be)`` or
-    a fixed array.  ``logdet = 2 sum log Re diag L`` (GB ``logdet_of``).
+    a fixed array.  ``n`` defaults to ``matrix.n`` (a fixed array: its size) and must
+    agree with it when both are given.  ``logdet = 2 sum log Re diag L`` (GB ``logdet_of``).
     """
 
     def __init__(self, matrix: Any, n: int | None = None, *, block: int | None = None) -> None:
         self.matrix = as_evaluator(matrix)
-        self.n = int(getattr(matrix, "n", n) if n is None else n)
-        if block is not None and self.n % int(block):
+        own = getattr(matrix, "n", None)
+        if own is None and not (hasattr(matrix, "evaluate") or callable(matrix)):
+            own = np.shape(matrix)[0]
+        if n is None and own is None:
+            raise ValueError("n is required: the matrix evaluator has no .n")
+        if n is not None and own is not None and int(n) != int(own):
+            raise ValueError(f"n = {n} but the matrix is ({own}, {own})")
+        self.n = int(own if n is None else n)
+        if block is not None and (int(block) <= 0 or self.n % int(block)):
             raise ValueError(f"{self.n} bins are not whole blocks of {block}")
         self.block = None if block is None else int(block)
 
@@ -96,6 +104,8 @@ class HermitianCovariance(Covariance):
         ``fullcache.block_is_exact``), so the block factor is exact to round-off."""
         if self.block is None:
             raise ValueError("block_is_exact needs block=b")
+        if not hasattr(self.matrix, "ghat"):
+            raise ValueError("block_is_exact needs an ExactFourierCovariance (a matrix with .ghat)")
         b = self.block
         gh = np.abs(np.asarray(self.matrix.ghat(np.asarray(nu), np.arange(b, 2 * b + 1))))
         return bool(gh.max() < rtol * abs(np.asarray(self.matrix.ghat(np.asarray(nu), np.array([0])))[0]))

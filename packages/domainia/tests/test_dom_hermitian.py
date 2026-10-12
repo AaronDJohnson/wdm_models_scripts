@@ -93,8 +93,22 @@ def test_lag_guard_and_not_positive_definite():
     (sI, _), (sG, _) = c.psd.components
     with pytest.raises(ValueError, match="Nyquist"):
         ExactFourierCovariance(SeparablePSD(((sI, None), (sG, small)), ("A", "E")), c.nominal)
+    with pytest.raises(ValueError, match="channel"):
+        ExactFourierCovariance(c.psd, c.nominal, channel=2)
+    with pytest.raises(ValueError, match="components"):
+        ExactFourierCovariance(SeparablePSD(((sG, c.env), (sI, None)), ("A", "E")), c.nominal)
     F = HermitianCovariance(-np.eye(4, dtype=complex), 4).factor(np.zeros(1))
     assert not bool(F.ok)
+    # n: the matrix's own size by default, and it must agree with an explicit n
+    assert HermitianCovariance(np.eye(4, dtype=complex)).n == 4
+    with pytest.raises(ValueError, match="n = 7"):
+        HermitianCovariance(ExactFourierCovariance(c.psd, c.nominal), 7)
+    with pytest.raises(ValueError, match="n is required"):
+        HermitianCovariance(lambda nu, be: np.eye(4, dtype=complex))
+    with pytest.raises(ValueError, match="whole blocks"):
+        HermitianCovariance(np.eye(4, dtype=complex), block=0)
+    with pytest.raises(ValueError, match="ghat"):
+        HermitianCovariance(np.eye(4, dtype=complex), block=2).block_is_exact(np.zeros(1))
 
 
 @pytest.mark.jax
@@ -110,6 +124,8 @@ def test_jax_matches_numpy(jax_be, case):
     assert type(Fj.logdet).__module__.startswith("jax")
     assert float(Fj.logdet) == pytest.approx(float(Fn.logdet), rel=1e-12, abs=1e-10)
     assert float(Fj.quad(jnp.asarray(z))) == pytest.approx(float(Fn.quad(z)), rel=1e-12)
+    # the backend follows the factor too: host data on a JAX factor stays on JAX
+    assert type(Fj.quad(z)).__module__.startswith("jax")
 
 
 def _numpy():

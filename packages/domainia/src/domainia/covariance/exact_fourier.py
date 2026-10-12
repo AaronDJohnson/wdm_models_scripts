@@ -42,9 +42,12 @@ class ExactFourierCovariance:
     def __init__(self, psd: Any, bins: Any, *, channel: int = 0) -> None:
         if "fourier_toeplitz" not in getattr(psd, "capabilities", frozenset()):
             raise ValueError(f"ExactFourierCovariance needs a separable PSD; got {type(psd).__name__}")
-        (tab_I, env_I), (tab_G, env_G) = psd.components
-        if env_I is not None or env_G is None:
+        comps = tuple(psd.components)
+        if len(comps) != 2 or comps[0][1] is not None or comps[1][1] is None:
             raise ValueError("ExactFourierCovariance needs components ((s_I, None), (s_G, envelope))")
+        (tab_I, _), (_, env_G) = comps
+        if not 0 <= int(channel) < tab_I.channels:
+            raise ValueError(f"channel {channel} is not one of the PSD's {tab_I.channels} channels")
         self.psd, self.bins, self.channel, self.envelope = psd, bins, int(channel), env_G
         self.n = int(bins.n)
         L = int(np.shape(env_G.basis_L)[1])
