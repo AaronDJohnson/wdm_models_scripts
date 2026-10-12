@@ -1,6 +1,6 @@
 """Run one section-B golden worker in its lineage subprocess and copy its payload into golden/.
 
-    $PY -P scripts/golden/capture_payload.py [--timeout S] [--replace] LINEAGE WORKER -- [worker args]
+    $PY -m scripts.golden.capture_payload [--timeout S] [--replace] LINEAGE WORKER -- [worker args]
 
 The worker writes ``<out_dir>/payload/<relpath>`` and ``<out_dir>/payload_index.json``
 (``gbw_common.Payload``). Every listed file is sha-checked, copied to ``golden/<relpath>``
@@ -21,18 +21,11 @@ import shutil
 import sys
 from pathlib import Path
 
-if not sys.flags.safe_path:
-    raise SystemExit("run with python -P (PYTHONSAFEPATH)")
-HERE = Path(__file__).resolve().parent
-REL = HERE.parents[1]
-for _p in (str(HERE), str(REL)):
-    if _p not in sys.path:
-        sys.path.insert(0, _p)
-import manifest_merge  # noqa: E402
-from scripts.golden import lineage  # noqa: E402  (Section A: LINEAGES, run_worker)
-from scripts.golden.capture import FrozenTreeChanged, guard_state  # noqa: E402  (Section A, A10)
-from scripts.golden.paths import GOLDEN, ROOT  # noqa: E402
-from tools import frozen_tree_hashes as fth  # noqa: E402  (Section A, A2)
+from scripts.golden import lineage  # (Section A: LINEAGES, run_worker)
+from scripts.golden import manifest_merge
+from scripts.golden.capture import FrozenTreeChanged, guard_state  # (Section A, A10)
+from scripts.golden.paths import GOLDEN, ROOT
+from tools import frozen_tree_hashes as fth  # (Section A, A2)
 
 
 def run_guarded(lineage_name: str, worker: str, worker_args, *, timeout: float,
@@ -83,6 +76,8 @@ def capture(lineage_name: str, worker: str, worker_args, *, timeout: float = 180
 
 
 def main(argv=None) -> int:
+    if not sys.flags.safe_path:          # spec §1 guard 5: no cwd injection
+        raise SystemExit("run with python -P or PYTHONSAFEPATH=1 (source env/activate.sh)")
     argv = list(sys.argv[1:] if argv is None else argv)
     worker_args = []
     if "--" in argv:

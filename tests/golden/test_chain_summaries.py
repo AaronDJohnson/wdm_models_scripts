@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import importlib.util
 import json
 import os
 import subprocess
@@ -12,6 +11,7 @@ from pathlib import Path
 import numpy as np
 import pytest
 
+from scripts.golden import summarise_chains as sc
 from scripts.golden.paths import ROOT, legacy_available
 
 pytestmark = pytest.mark.golden
@@ -23,15 +23,6 @@ SIN_ROOT = ROOT / "wdm_paper_2" / "sinusoid_final"
 #: impulse v2 checkout at 964283c (env/constraints.txt); the Geyer code is vendored from it.
 IMPULSE_DIAGNOSTICS = Path.home() / "Documents" / "github" / "impulse_mcmc" / "impulse" / "diagnostics.py"
 
-
-def _load(name: str, path: Path):
-    spec = importlib.util.spec_from_file_location(name, path)
-    mod = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(mod)
-    return mod
-
-
-sc = _load("summarise_chains", REL / "scripts" / "golden" / "summarise_chains.py")
 
 IMPULSE_SCRIPT = r"""
 import importlib.util, sys
@@ -85,9 +76,9 @@ def test_refusal_comes_before_any_write(tmp_path, monkeypatch):
     before = snapshot()
     argv = ["--toy", "sinusoid", "--targets", "manuscript_low/band_raw"]
     with pytest.raises(SystemExit, match="--replace"):    # --no-hash drops `files`: other bytes
-        sc.main(argv + ["--no-hash"])
+        sc.cli(argv + ["--no-hash"])
     assert snapshot() == before
-    assert sc.main(argv) == 0                               # same bytes: written, manifest merged
+    assert sc.cli(argv) == 0                                # same bytes: written, manifest merged
     assert snapshot()[rel] == before[rel] == (GOLDEN / rel).read_bytes()
     assert json.loads(snapshot()["MANIFEST.json"])["files"] == json.loads(before["MANIFEST.json"])["files"]
 

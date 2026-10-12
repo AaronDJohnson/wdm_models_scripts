@@ -1,6 +1,6 @@
 """Copy the shipped galactic-binary inputs from the frozen trees into ``data/``.
 
-    $PY -P scripts/golden/ship_gb_data.py [--workspace DIR] [--replace]
+    $PY -m scripts.golden.ship_gb_data [--workspace DIR] [--replace]
 
 Read-only toward the sources: each file is copied byte for byte, its sha256 is checked
 before and after the copy, and ``data/MANIFEST.json`` gains, per file, A4's schema:
@@ -15,15 +15,8 @@ import shutil
 import sys
 from pathlib import Path
 
-if not sys.flags.safe_path:
-    raise SystemExit("run with python -P (PYTHONSAFEPATH)")
-HERE = Path(__file__).resolve().parent
-REL = HERE.parents[1]
-for _p in (str(HERE), str(REL)):
-    if _p not in sys.path:
-        sys.path.insert(0, _p)
-import manifest_merge  # noqa: E402
-from scripts.golden.paths import DATA, ROOT  # noqa: E402  (Section A)
+from scripts.golden import manifest_merge
+from scripts.golden.paths import DATA, ROOT  # (Section A)
 
 DEFAULT_WORKSPACE = ROOT
 STUDY = "wdm_paper_2/final_chains/gb_duration_study"
@@ -73,6 +66,8 @@ def ship(workspace: Path, data_dir: Path, *, replace: bool = False) -> dict[str,
 
 
 def main(argv=None) -> int:
+    if not sys.flags.safe_path:          # spec §1 guard 5: no cwd injection
+        raise SystemExit("run with python -P or PYTHONSAFEPATH=1 (source env/activate.sh)")
     ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     ap.add_argument("--workspace", type=Path, default=DEFAULT_WORKSPACE)
     ap.add_argument("--data-dir", type=Path, default=DATA)

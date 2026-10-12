@@ -1,9 +1,9 @@
 """Capture the galactic-binary goldens (lineage C) with the absolute paths filled in.
 
-    $PY -P scripts/golden/capture_gb.py rows --case gb_3mo [--tier fast] [--backends numpy,jax] [--models M,..]
-    $PY -P scripts/golden/capture_gb.py products
-    $PY -P scripts/golden/capture_gb.py intermediates --case gb_3mo
-    $PY -P scripts/golden/capture_gb.py stress --case gb_3mo [--tier fast] [--backends numpy,jax]
+    $PY -m scripts.golden.capture_gb rows --case gb_3mo [--tier fast] [--backends numpy,jax] [--models M,..]
+    $PY -m scripts.golden.capture_gb products
+    $PY -m scripts.golden.capture_gb intermediates --case gb_3mo
+    $PY -m scripts.golden.capture_gb stress --case gb_3mo [--tier fast] [--backends numpy,jax]
 
 Everything after the subcommand that this script does not know is passed to the worker
 (``workers/gb_legacy.py`` -> ``workers/gbw_<subcommand>.py``); ``--workspace`` and
@@ -16,17 +16,15 @@ import argparse
 import sys
 from pathlib import Path
 
-if not sys.flags.safe_path:
-    raise SystemExit("run with python -P (PYTHONSAFEPATH)")
-HERE = Path(__file__).resolve().parent
-sys.path.insert(0, str(HERE))
-import capture_payload  # noqa: E402  (also puts $REL on sys.path)
-from scripts.golden.paths import DATA, ROOT  # noqa: E402  (Section A)
+from scripts.golden import capture_payload
+from scripts.golden.paths import DATA, ROOT  # (Section A)
 
 SUBCOMMANDS = ("rows", "products", "intermediates", "stress")
 
 
 def main(argv=None) -> int:
+    if not sys.flags.safe_path:          # spec §1 guard 5: no cwd injection
+        raise SystemExit("run with python -P or PYTHONSAFEPATH=1 (source env/activate.sh)")
     ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     ap.add_argument("subcommand", choices=SUBCOMMANDS)
     ap.add_argument("--workspace", type=Path, default=ROOT)   # the root lineage C imports from

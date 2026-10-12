@@ -1,7 +1,7 @@
 """G8: posterior summaries of the final chains, computed read-only (spec 7.4).
 
-    $PY -P scripts/golden/summarise_chains.py --toy sinusoid [--targets CASE/MODEL,...] [--no-hash]
-    $PY -P scripts/golden/summarise_chains.py --toy galactic_binary [--targets ...] [--no-hash]
+    $PY -m scripts.golden.summarise_chains --toy sinusoid [--targets CASE/MODEL,...] [--no-hash]
+    $PY -m scripts.golden.summarise_chains --toy galactic_binary [--targets ...] [--no-hash]
 
 Reads ``wdm_paper_2/sinusoid_final/manifest.json`` (45 runs) or
 ``wdm_paper_2/final_chains/gb_likelihood_matrix/manifest.json`` (38 targets, 58 run
@@ -54,15 +54,8 @@ from pathlib import Path
 
 import numpy as np
 
-if not sys.flags.safe_path:
-    raise SystemExit("run with python -P (PYTHONSAFEPATH)")
-HERE = Path(__file__).resolve().parent
-REL = HERE.parents[1]
-for _p in (str(HERE), str(REL)):
-    if _p not in sys.path:
-        sys.path.insert(0, _p)
-import manifest_merge  # noqa: E402
-from scripts.golden.paths import GOLDEN, ROOT  # noqa: E402  (Section A)
+from scripts.golden import manifest_merge
+from scripts.golden.paths import GOLDEN, ROOT  # (Section A)
 
 ROOTS = {"sinusoid": "wdm_paper_2/sinusoid_final",
          "galactic_binary": "wdm_paper_2/final_chains/gb_likelihood_matrix"}
@@ -496,6 +489,13 @@ def summarise_target(toy: str, root: Path, case: str, model: str, run_rels: list
 
 
 def main(argv=None) -> int:
+    if not sys.flags.safe_path:          # spec §1 guard 5: no cwd injection
+        raise SystemExit("run with python -P or PYTHONSAFEPATH=1 (source env/activate.sh)")
+    return cli(argv)
+
+
+def cli(argv=None) -> int:
+    """``main`` without the safe-path guard (the tests call it in-process)."""
     ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     ap.add_argument("--toy", choices=sorted(ROOTS), required=True)
     ap.add_argument("--workspace", type=Path, default=ROOT)

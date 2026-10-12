@@ -2,13 +2,14 @@
 
 from __future__ import annotations
 
-import importlib.util
 import json
 import math
 import shutil
 from pathlib import Path
 
 import pytest
+
+from scripts.golden import measure_tolerances_gb as mt
 
 pytestmark = pytest.mark.golden
 
@@ -57,15 +58,6 @@ def test_g4_masks_and_gates(measured):
 
 # --- the measurement script itself (B8 quality review) -------------------------------------------
 
-def _load_script():
-    spec = importlib.util.spec_from_file_location(
-        "measure_tolerances_gb", REL / "scripts" / "golden" / "measure_tolerances_gb.py")
-    mod = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(mod)
-    return mod
-
-
-mt = _load_script()
 OUT = "galactic_binary/tolerances_measured.json"
 
 
@@ -97,10 +89,10 @@ def test_refusal_comes_before_any_write(tmp_path, monkeypatch):
     row_file.write_text(json.dumps(r, indent=1, sort_keys=True) + "\n")
     before = snapshot()
     with pytest.raises(SystemExit, match="--replace"):
-        mt.main([])
+        mt.cli([])
     assert snapshot() == before
     row_file.write_bytes(original)                         # same inputs: written, manifest merged
-    assert mt.main([]) == 0
+    assert mt.cli([]) == 0
     after = snapshot()
     assert after[OUT] == (GOLDEN / OUT).read_bytes()
     assert json.loads(after["MANIFEST.json"])["files"] == json.loads(before["MANIFEST.json"])["files"]

@@ -1,6 +1,6 @@
 """P0 measurement of the galactic-binary gates (spec 7.3) from the captured G3/G4 goldens.
 
-    $PY -P scripts/golden/measure_tolerances_gb.py [--replace]
+    $PY -m scripts.golden.measure_tolerances_gb [--replace]
 
 Reads ``golden/galactic_binary/chain_rows/**`` and ``golden/galactic_binary/stress/**`` (every
 tier present), writes ``golden/galactic_binary/tolerances_measured.json`` and merges a summary
@@ -45,14 +45,9 @@ import math
 import sys
 from pathlib import Path
 
-if not sys.flags.safe_path:
-    raise SystemExit("run with python -P (PYTHONSAFEPATH)")
-HERE = Path(__file__).resolve().parent
-sys.path.insert(0, str(HERE))
-import manifest_merge  # noqa: E402
+from scripts.golden import manifest_merge
+from scripts.golden.paths import GOLDEN
 
-REL = HERE.parents[1]
-GOLDEN = REL / "golden"
 EPS = 2.220446049250313e-16
 FLOOR = {"G3_numpy": 1e-9, "G3_jax": 1e-8, "G4_jax_floor": 1e-10, "G4_jax_ceiling": 1e-6,
          "G4_numpy_abs": 1e-10, "G4_numpy_rel": 1e-12}
@@ -236,6 +231,13 @@ def render(result: dict) -> bytes:
 
 
 def main(argv=None) -> int:
+    if not sys.flags.safe_path:          # spec §1 guard 5: no cwd injection
+        raise SystemExit("run with python -P or PYTHONSAFEPATH=1 (source env/activate.sh)")
+    return cli(argv)
+
+
+def cli(argv=None) -> int:
+    """``main`` without the safe-path guard (the tests call it in-process)."""
     ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     ap.add_argument("--replace", action="store_true")
     a = ap.parse_args(argv)

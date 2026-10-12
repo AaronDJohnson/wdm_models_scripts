@@ -1,6 +1,6 @@
 """Capture the Paper I lineage-D oracle values (June ``wdm``) into golden/wdm/.
 
-    $PY -P scripts/golden/capture_paper1.py [--workspace DIR] [--replace]
+    $PY -m scripts.golden.capture_paper1 [--workspace DIR] [--replace]
 """
 
 from __future__ import annotations
@@ -9,15 +9,13 @@ import argparse
 import sys
 from pathlib import Path
 
-if not sys.flags.safe_path:
-    raise SystemExit("run with python -P (PYTHONSAFEPATH)")
-HERE = Path(__file__).resolve().parent
-sys.path.insert(0, str(HERE))
-import capture_payload  # noqa: E402  (also puts $REL on sys.path)
-from scripts.golden.paths import ROOT  # noqa: E402  (Section A)
+from scripts.golden import capture_payload
+from scripts.golden.paths import ROOT  # (Section A)
 
 
 def main(argv=None) -> int:
+    if not sys.flags.safe_path:          # spec §1 guard 5: no cwd injection
+        raise SystemExit("run with python -P or PYTHONSAFEPATH=1 (source env/activate.sh)")
     ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     ap.add_argument("--workspace", type=Path, default=ROOT)   # the root lineage D imports from
     ap.add_argument("--replace", action="store_true")
