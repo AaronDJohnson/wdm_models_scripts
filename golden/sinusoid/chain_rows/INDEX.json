@@ -1,0 +1,862 @@
+{
+ "fast_positions": [
+  0,
+  1,
+  19
+ ],
+ "layout": "impulse v2 964283c: float64 rows of ndim + 4 columns = parameters, lnlike, lnprob, accepted, temperature (impulse/file_io.py ncols, save_chain)",
+ "n_random": 18,
+ "runs": {
+  "manuscript_high_band_cut": {
+   "case": "manuscript_high",
+   "chain_0_sha256": "8132678f91cda0566b2d5e30f33b6fb26a9d1d5c435fd6fed89d9bc9fd717fff",
+   "device": "cpu",
+   "model": "band_cut",
+   "ndim": 6,
+   "nrows": 25000,
+   "parameter_names": [
+    "A_h",
+    "f_0",
+    "phi_0",
+    "log10_A_n",
+    "alpha_c",
+    "alpha_d"
+   ],
+   "run": "manuscript_high/band_cut_flow_seed303",
+   "run_meta_sha256": "ced36b6b63518a94d5f2b9f4201ee93bdb8f6a70ad59a20f7171c56266df6680",
+   "thin": 1
+  },
+  "manuscript_high_band_exact": {
+   "case": "manuscript_high",
+   "chain_0_sha256": "3abe6ec97ffdd606bab5f72dbb1ec0354f342348d653f7b5296ef71ec4588d88",
+   "device": "cuda:0",
+   "model": "band_exact",
+   "ndim": 6,
+   "nrows": 20000,
+   "parameter_names": [
+    "A_h",
+    "f_0",
+    "phi_0",
+    "log10_A_n",
+    "alpha_c",
+    "alpha_d"
+   ],
+   "run": "manuscript_high/band_exact_seed101",
+   "run_meta_sha256": "f8aaed24c6066eed09bdded2f0df151f17eaf51cc0ace1ed9eb4e9efbc50ebed",
+   "thin": 10
+  },
+  "manuscript_high_band_pad": {
+   "case": "manuscript_high",
+   "chain_0_sha256": "331c89e9e0c738221cfa6eb35a0977dbeb1772b4a712ab9c2e087c266553dc8b",
+   "device": "cuda:0",
+   "model": "band_pad",
+   "ndim": 6,
+   "nrows": 17000,
+   "parameter_names": [
+    "A_h",
+    "f_0",
+    "phi_0",
+    "log10_A_n",
+    "alpha_c",
+    "alpha_d"
+   ],
+   "run": "manuscript_high/band_pad_seed101",
+   "run_meta_sha256": "7fe3243f6e26a2314c110cd5db7ef6c1442ac6ea9f7bd345fb93e15ed4b52028",
+   "thin": 10
+  },
+  "manuscript_high_band_raw": {
+   "case": "manuscript_high",
+   "chain_0_sha256": "97d3e5565f42399e419802602ac42844b4aec854b1c7b6a9bc33150ff976da06",
+   "device": "cpu",
+   "model": "band_raw",
+   "ndim": 6,
+   "nrows": 150000,
+   "parameter_names": [
+    "A_h",
+    "f_0",
+    "phi_0",
+    "log10_A_n",
+    "alpha_c",
+    "alpha_d"
+   ],
+   "run": "manuscript_high/band_raw_flow_seed301",
+   "run_meta_sha256": "8dbe54d3d742758ba7e1d7ae699c207c1da1723772fa19b96fbc228ddfc4ffd5",
+   "thin": 1
+  },
+  "manuscript_high_exact": {
+   "case": "manuscript_high",
+   "chain_0_sha256": "2853b1de6fac57dc29cade95b6aa0b49d5582ecad61c4f8b3e0badee968c15c1",
+   "device": "cpu",
+   "model": "exact",
+   "ndim": 6,
+   "nrows": 24000,
+   "parameter_names": [
+    "A_h",
+    "f_0",
+    "phi_0",
+    "log10_A_n",
+    "alpha_c",
+    "alpha_d"
+   ],
+   "run": "manuscript_high/exact_flow_seed301",
+   "run_meta_sha256": "0a2570c7a1a8678eca8bf943f8d97ee3864e61ec8c4a2b7f35342d3fb3164581",
+   "thin": 1
+  },
+  "manuscript_high_mid_cut": {
+   "case": "manuscript_high",
+   "chain_0_sha256": "d00ae5c175ea53549d05f772b296064173f3da8b19058b6111a75e4e695c775f",
+   "device": "cpu",
+   "model": "mid_cut",
+   "ndim": 6,
+   "nrows": 25000,
+   "parameter_names": [
+    "A_h",
+    "f_0",
+    "phi_0",
+    "log10_A_n",
+    "alpha_c",
+    "alpha_d"
+   ],
+   "run": "manuscript_high/mid_cut_flow_seed303",
+   "run_meta_sha256": "eefd4e48dc1875f6257a59079b6be716ea79cfe66496ce3051b3262d79285bf9",
+   "thin": 1
+  },
+  "manuscript_high_mid_exact": {
+   "case": "manuscript_high",
+   "chain_0_sha256": "758d32dda0cec77b349f490f90d599676b1425fdb034a98536866450930c570a",
+   "device": "cuda:0",
+   "model": "mid_exact",
+   "ndim": 6,
+   "nrows": 26000,
+   "parameter_names": [
+    "A_h",
+    "f_0",
+    "phi_0",
+    "log10_A_n",
+    "alpha_c",
+    "alpha_d"
+   ],
+   "run": "manuscript_high/mid_exact_seed101",
+   "run_meta_sha256": "544c30b66daa7a4740a4d8ca35b06b6bf1c440cbb540a67b915b2008f331e6a2",
+   "thin": 10
+  },
+  "manuscript_high_mid_pad": {
+   "case": "manuscript_high",
+   "chain_0_sha256": "5d506e44d2c8cfb757858ce62911f3776d4ef34fe70686bbd33139f151110338",
+   "device": "cuda:0",
+   "model": "mid_pad",
+   "ndim": 6,
+   "nrows": 19000,
+   "parameter_names": [
+    "A_h",
+    "f_0",
+    "phi_0",
+    "log10_A_n",
+    "alpha_c",
+    "alpha_d"
+   ],
+   "run": "manuscript_high/mid_pad_seed101",
+   "run_meta_sha256": "a9f31bb162177aa6652f81cb655657995d4a894f2a788808b4bd7bfa7534c329",
+   "thin": 10
+  },
+  "manuscript_high_mid_raw": {
+   "case": "manuscript_high",
+   "chain_0_sha256": "c76e6c5cedf793efd42cc704347871c25070680564124f0a7503912fe24b58d5",
+   "device": "cpu",
+   "model": "mid_raw",
+   "ndim": 6,
+   "nrows": 52000,
+   "parameter_names": [
+    "A_h",
+    "f_0",
+    "phi_0",
+    "log10_A_n",
+    "alpha_c",
+    "alpha_d"
+   ],
+   "run": "manuscript_high/mid_raw_flow_seed301",
+   "run_meta_sha256": "5f793a3f05699f1a3b4af57633744bb44fb4ae7b24934edaf555964db3603099",
+   "thin": 1
+  },
+  "manuscript_high_tri_cut": {
+   "case": "manuscript_high",
+   "chain_0_sha256": "fa35bed5261dab81ea687446f2252a012f5437b022173ed14266a7a5be78dcb1",
+   "device": "cpu",
+   "model": "tri_cut",
+   "ndim": 6,
+   "nrows": 18000,
+   "parameter_names": [
+    "A_h",
+    "f_0",
+    "phi_0",
+    "log10_A_n",
+    "alpha_c",
+    "alpha_d"
+   ],
+   "run": "manuscript_high/tri_cut_flow_seed303",
+   "run_meta_sha256": "1de757507cdf26111062a016626afc119b5f4f76a58e8b998edadc2dc40fcb02",
+   "thin": 1
+  },
+  "manuscript_high_tri_exact": {
+   "case": "manuscript_high",
+   "chain_0_sha256": "0952dd669243461cd752f4606934825067005523dae712ea2c6f4dc42dba3bfd",
+   "device": "cuda:0",
+   "model": "tri_exact",
+   "ndim": 6,
+   "nrows": 24400,
+   "parameter_names": [
+    "A_h",
+    "f_0",
+    "phi_0",
+    "log10_A_n",
+    "alpha_c",
+    "alpha_d"
+   ],
+   "run": "manuscript_high/tri_exact_seed101",
+   "run_meta_sha256": "ad49cda5c17cad8733aa0450a603d44480a3e43bfa190450d93d1dead3752bd6",
+   "thin": 10
+  },
+  "manuscript_high_tri_pad": {
+   "case": "manuscript_high",
+   "chain_0_sha256": "d48e288fc3311b4f64dc7f5f7496dce93ce893742bfcda424883682503e30551",
+   "device": "cuda:0",
+   "model": "tri_pad",
+   "ndim": 6,
+   "nrows": 20000,
+   "parameter_names": [
+    "A_h",
+    "f_0",
+    "phi_0",
+    "log10_A_n",
+    "alpha_c",
+    "alpha_d"
+   ],
+   "run": "manuscript_high/tri_pad_seed101",
+   "run_meta_sha256": "47e59102aec0c82315bacdf31cdc64c13eeea70601e1794740dab2e31fb84b5d",
+   "thin": 10
+  },
+  "manuscript_high_tri_raw": {
+   "case": "manuscript_high",
+   "chain_0_sha256": "bd485ecae077d901ef72967122d0c08d35a7cd4b05eeaf3c3a5b8b705dc55dd1",
+   "device": "cuda:0",
+   "model": "tri_raw",
+   "ndim": 6,
+   "nrows": 80000,
+   "parameter_names": [
+    "A_h",
+    "f_0",
+    "phi_0",
+    "log10_A_n",
+    "alpha_c",
+    "alpha_d"
+   ],
+   "run": "manuscript_high/tri_raw_seed102",
+   "run_meta_sha256": "fb22bf2fdbe3dcb7bcd7ceb468cd398986817105b01ec2a1e2c79573089a199c",
+   "thin": 10
+  },
+  "manuscript_high_whittle_cut": {
+   "case": "manuscript_high",
+   "chain_0_sha256": "939d6e802c97c92784df1857cec96aedba8ae5334569ad8b5b9da27086f560fe",
+   "device": "cpu",
+   "model": "whittle_cut",
+   "ndim": 5,
+   "nrows": 324000,
+   "parameter_names": [
+    "A_h",
+    "f_0",
+    "phi_0",
+    "log10_A_n",
+    "alpha"
+   ],
+   "run": "manuscript_high/whittle_cut_flow_seed304",
+   "run_meta_sha256": "b69ccb22d243bb52adeba51d948df2c816cfced22e35407d8a03abb5f99f97cb",
+   "thin": 1
+  },
+  "manuscript_high_whittle_raw": {
+   "case": "manuscript_high",
+   "chain_0_sha256": "890ef8ba0d97ff08a18c9a3aaa98563cbeb23ccf0e8eb79ce5d77e19b913853f",
+   "device": "cpu",
+   "model": "whittle_raw",
+   "ndim": 5,
+   "nrows": 425000,
+   "parameter_names": [
+    "A_h",
+    "f_0",
+    "phi_0",
+    "log10_A_n",
+    "alpha"
+   ],
+   "run": "manuscript_high/whittle_raw_flow_seed311",
+   "run_meta_sha256": "cf77474048e1c538ebd336ed6f9011980f2f1dc32ba0735b7b3f810886b42504",
+   "thin": 1
+  },
+  "manuscript_low_band_cut": {
+   "case": "manuscript_low",
+   "chain_0_sha256": "d3fec63ad86d09040b429dce4fc7f5e991c3b9b8b14c99e5f71681bd4eed55b1",
+   "device": "cpu",
+   "model": "band_cut",
+   "ndim": 6,
+   "nrows": 25000,
+   "parameter_names": [
+    "A_h",
+    "f_0",
+    "phi_0",
+    "log10_A_n",
+    "alpha_c",
+    "alpha_d"
+   ],
+   "run": "manuscript_low/band_cut_flow_seed303",
+   "run_meta_sha256": "5328c256a5e621c2840479ac2fbc5a5fd4ea3a31764db9465fc3b227e56281a6",
+   "thin": 1
+  },
+  "manuscript_low_band_exact": {
+   "case": "manuscript_low",
+   "chain_0_sha256": "b809d59be264cad30da28c82bd2b7c6ffbc24a695ffcb8a743d773a3e2ab2aa6",
+   "device": "cuda:0",
+   "model": "band_exact",
+   "ndim": 6,
+   "nrows": 20000,
+   "parameter_names": [
+    "A_h",
+    "f_0",
+    "phi_0",
+    "log10_A_n",
+    "alpha_c",
+    "alpha_d"
+   ],
+   "run": "manuscript_low/band_exact_seed101",
+   "run_meta_sha256": "85bac439cc8f0e57a7d6e9aa6b7f42b8237f71a86bd4c0c1c3c14386efd2e737",
+   "thin": 10
+  },
+  "manuscript_low_band_pad": {
+   "case": "manuscript_low",
+   "chain_0_sha256": "9d136c6cc8088bafd9962f1c795888f3988220bb75356c412bfade9fed5da9ca",
+   "device": "cuda:0",
+   "model": "band_pad",
+   "ndim": 6,
+   "nrows": 20000,
+   "parameter_names": [
+    "A_h",
+    "f_0",
+    "phi_0",
+    "log10_A_n",
+    "alpha_c",
+    "alpha_d"
+   ],
+   "run": "manuscript_low/band_pad_seed101",
+   "run_meta_sha256": "af73e4847ca81ca8e25d82ff0d1e4f01df526601e21c75a012d0777a45a803c3",
+   "thin": 10
+  },
+  "manuscript_low_band_raw": {
+   "case": "manuscript_low",
+   "chain_0_sha256": "045620ea118c242d58069888e44142114d8731ce26a69d5de344005a250306bc",
+   "device": "cpu",
+   "model": "band_raw",
+   "ndim": 6,
+   "nrows": 25000,
+   "parameter_names": [
+    "A_h",
+    "f_0",
+    "phi_0",
+    "log10_A_n",
+    "alpha_c",
+    "alpha_d"
+   ],
+   "run": "manuscript_low/band_raw_flow_seed301",
+   "run_meta_sha256": "c150b5b8ee5e68417d224a9ee7ae7994b3df013e9b1e10e48b681449f9c3b95f",
+   "thin": 1
+  },
+  "manuscript_low_exact": {
+   "case": "manuscript_low",
+   "chain_0_sha256": "5cb84f0784377fd7dead3215f9f886ef9f14498b329c769ddf4e74968807e734",
+   "device": "cpu",
+   "model": "exact",
+   "ndim": 6,
+   "nrows": 25000,
+   "parameter_names": [
+    "A_h",
+    "f_0",
+    "phi_0",
+    "log10_A_n",
+    "alpha_c",
+    "alpha_d"
+   ],
+   "run": "manuscript_low/exact_flow_seed301",
+   "run_meta_sha256": "41d858806c21968e912e615085e81f1427ef9a0a34deda1f17c4da8dffe0333e",
+   "thin": 1
+  },
+  "manuscript_low_mid_cut": {
+   "case": "manuscript_low",
+   "chain_0_sha256": "80ee4667eba8148b7a6e011b014e6f2b6284f2f643e96785233e15320403762e",
+   "device": "cpu",
+   "model": "mid_cut",
+   "ndim": 6,
+   "nrows": 25000,
+   "parameter_names": [
+    "A_h",
+    "f_0",
+    "phi_0",
+    "log10_A_n",
+    "alpha_c",
+    "alpha_d"
+   ],
+   "run": "manuscript_low/mid_cut_flow_seed303",
+   "run_meta_sha256": "396193d080deb347a15dd7380ebc6fa062d410ac2093ef7f0987fbc9b41a2b8c",
+   "thin": 1
+  },
+  "manuscript_low_mid_exact": {
+   "case": "manuscript_low",
+   "chain_0_sha256": "6ca5a5a17be7e27e777b306f2660c76bbe1582136c7f41a21fb1cb6f01635731",
+   "device": "cuda:0",
+   "model": "mid_exact",
+   "ndim": 6,
+   "nrows": 20000,
+   "parameter_names": [
+    "A_h",
+    "f_0",
+    "phi_0",
+    "log10_A_n",
+    "alpha_c",
+    "alpha_d"
+   ],
+   "run": "manuscript_low/mid_exact_seed101",
+   "run_meta_sha256": "35522e8980ffed8fb62d601959a959dfc4499743ca9cc11268a6c2c3d4f5e582",
+   "thin": 10
+  },
+  "manuscript_low_mid_pad": {
+   "case": "manuscript_low",
+   "chain_0_sha256": "02bf89065478c4f3ce8845bcf2b1acb3cb2c499d326889fe3bec0c4a2e14929d",
+   "device": "cuda:0",
+   "model": "mid_pad",
+   "ndim": 6,
+   "nrows": 20000,
+   "parameter_names": [
+    "A_h",
+    "f_0",
+    "phi_0",
+    "log10_A_n",
+    "alpha_c",
+    "alpha_d"
+   ],
+   "run": "manuscript_low/mid_pad_seed101",
+   "run_meta_sha256": "e5c7bd62d8e62e9b3f4fe0d090b83381378ff7a7f1191d7399e526c131771e72",
+   "thin": 10
+  },
+  "manuscript_low_mid_raw": {
+   "case": "manuscript_low",
+   "chain_0_sha256": "46f66b040d8308e1afe44e9764c570e8371ce9a6fea89a08e43cd92c3edb1750",
+   "device": "cpu",
+   "model": "mid_raw",
+   "ndim": 6,
+   "nrows": 20000,
+   "parameter_names": [
+    "A_h",
+    "f_0",
+    "phi_0",
+    "log10_A_n",
+    "alpha_c",
+    "alpha_d"
+   ],
+   "run": "manuscript_low/mid_raw_flow_seed301",
+   "run_meta_sha256": "012418e9bfddb270fa3433a7e9df771083ab3207f404e98927113800066743b5",
+   "thin": 1
+  },
+  "manuscript_low_tri_cut": {
+   "case": "manuscript_low",
+   "chain_0_sha256": "963f313bde8dc721a9415b211b9d949e6ce40a2288bc264598a96af336e7972c",
+   "device": "cpu",
+   "model": "tri_cut",
+   "ndim": 6,
+   "nrows": 22000,
+   "parameter_names": [
+    "A_h",
+    "f_0",
+    "phi_0",
+    "log10_A_n",
+    "alpha_c",
+    "alpha_d"
+   ],
+   "run": "manuscript_low/tri_cut_flow_seed303",
+   "run_meta_sha256": "89c9addb5586d50b8fb7debb8485e5d0f7e8f1f9a6bead35fe07f9388df47aea",
+   "thin": 1
+  },
+  "manuscript_low_tri_exact": {
+   "case": "manuscript_low",
+   "chain_0_sha256": "088436a49ba4756ddd7ef3c0f2ae21d8d3a174e2306f37a9be7da1a7694acaad",
+   "device": "cuda:0",
+   "model": "tri_exact",
+   "ndim": 6,
+   "nrows": 32100,
+   "parameter_names": [
+    "A_h",
+    "f_0",
+    "phi_0",
+    "log10_A_n",
+    "alpha_c",
+    "alpha_d"
+   ],
+   "run": "manuscript_low/tri_exact_seed101",
+   "run_meta_sha256": "307dd2b5a91c3d4eed075effb93a52933e67354182126a16c866ab54b5186ba4",
+   "thin": 10
+  },
+  "manuscript_low_tri_pad": {
+   "case": "manuscript_low",
+   "chain_0_sha256": "1d422540c6aac90fa88cfe573656b17a0caa348337266a39ea18218f11db030e",
+   "device": "cuda:0",
+   "model": "tri_pad",
+   "ndim": 6,
+   "nrows": 20000,
+   "parameter_names": [
+    "A_h",
+    "f_0",
+    "phi_0",
+    "log10_A_n",
+    "alpha_c",
+    "alpha_d"
+   ],
+   "run": "manuscript_low/tri_pad_seed101",
+   "run_meta_sha256": "3fb861344e39de9056af1149572533e47b0b8db649e9df6dcdbb1c6108d08b03",
+   "thin": 10
+  },
+  "manuscript_low_tri_raw": {
+   "case": "manuscript_low",
+   "chain_0_sha256": "9e22b8d5d5cdd8a629f91c40d308ad1246b94cca26aa0fb23af6ec2ad504d1c1",
+   "device": "cpu",
+   "model": "tri_raw",
+   "ndim": 6,
+   "nrows": 19000,
+   "parameter_names": [
+    "A_h",
+    "f_0",
+    "phi_0",
+    "log10_A_n",
+    "alpha_c",
+    "alpha_d"
+   ],
+   "run": "manuscript_low/tri_raw_flow_seed301",
+   "run_meta_sha256": "36ea236f49fd5b94d185a105224c5dd583289489c0db5a4bdbed12c6ba97fa80",
+   "thin": 1
+  },
+  "manuscript_low_whittle_cut": {
+   "case": "manuscript_low",
+   "chain_0_sha256": "86cc2a5bc48766f3ee9e4e9047cec75045bc6c01fedec862b16c05f6ac9da22f",
+   "device": "cpu",
+   "model": "whittle_cut",
+   "ndim": 5,
+   "nrows": 25000,
+   "parameter_names": [
+    "A_h",
+    "f_0",
+    "phi_0",
+    "log10_A_n",
+    "alpha"
+   ],
+   "run": "manuscript_low/whittle_cut_flow_seed304",
+   "run_meta_sha256": "07c62a7398249359b6a6a61bdec0526b21303c5f1ff4cb5401b09244a1609f6f",
+   "thin": 1
+  },
+  "manuscript_low_whittle_raw": {
+   "case": "manuscript_low",
+   "chain_0_sha256": "85b3e297d0247c5044d51a384ab740c14f7a69e99b34cdc952273eef77968c24",
+   "device": "cpu",
+   "model": "whittle_raw",
+   "ndim": 5,
+   "nrows": 25000,
+   "parameter_names": [
+    "A_h",
+    "f_0",
+    "phi_0",
+    "log10_A_n",
+    "alpha"
+   ],
+   "run": "manuscript_low/whittle_raw_flow_seed301",
+   "run_meta_sha256": "53b94a7f111e575e07a02435545d47529b17a06d643e063c6e26c991a69a4ee2",
+   "thin": 1
+  },
+  "manuscript_mid_band_cut": {
+   "case": "manuscript_mid",
+   "chain_0_sha256": "49e83fd08cb744458b470e059ec0f57a0b04241e0336869ef583886bde39bc92",
+   "device": "cpu",
+   "model": "band_cut",
+   "ndim": 6,
+   "nrows": 25000,
+   "parameter_names": [
+    "A_h",
+    "f_0",
+    "phi_0",
+    "log10_A_n",
+    "alpha_c",
+    "alpha_d"
+   ],
+   "run": "manuscript_mid/band_cut_flow_seed303",
+   "run_meta_sha256": "a2cb1329a316d230511c1092d98183ddc60ffff8cf54b37c30c13ca65958d67d",
+   "thin": 1
+  },
+  "manuscript_mid_band_exact": {
+   "case": "manuscript_mid",
+   "chain_0_sha256": "aa2250912818daae53e1e02c3818f6d37018e85a4eafa20011a9de9cb0edc84f",
+   "device": "cuda:0",
+   "model": "band_exact",
+   "ndim": 6,
+   "nrows": 70000,
+   "parameter_names": [
+    "A_h",
+    "f_0",
+    "phi_0",
+    "log10_A_n",
+    "alpha_c",
+    "alpha_d"
+   ],
+   "run": "manuscript_mid/band_exact_seed101",
+   "run_meta_sha256": "651ee57221c301085df5aaba975c7ba1d948759bd09d6dc9aba9f8bbfa307e3d",
+   "thin": 10
+  },
+  "manuscript_mid_band_pad": {
+   "case": "manuscript_mid",
+   "chain_0_sha256": "32c5314d75cf7856a8229edf182ef3fcb4a17f61ade44591d47416efa2183f41",
+   "device": "cuda:0",
+   "model": "band_pad",
+   "ndim": 6,
+   "nrows": 20000,
+   "parameter_names": [
+    "A_h",
+    "f_0",
+    "phi_0",
+    "log10_A_n",
+    "alpha_c",
+    "alpha_d"
+   ],
+   "run": "manuscript_mid/band_pad_seed101",
+   "run_meta_sha256": "78bea3e1775245c42e77eb13cdd9e2250c2cc5ab48ff4c8a08d6c80e6dad1f85",
+   "thin": 10
+  },
+  "manuscript_mid_band_raw": {
+   "case": "manuscript_mid",
+   "chain_0_sha256": "85a7e23702cd712378e03b6fc91c665527ceb8d9a0d067aa7ace73235d99caad",
+   "device": "cpu",
+   "model": "band_raw",
+   "ndim": 6,
+   "nrows": 195000,
+   "parameter_names": [
+    "A_h",
+    "f_0",
+    "phi_0",
+    "log10_A_n",
+    "alpha_c",
+    "alpha_d"
+   ],
+   "run": "manuscript_mid/band_raw_flow_seed302",
+   "run_meta_sha256": "64db4edd681e6f27027687d3b869f09a7cc96d947ac8e830fbe0a5fafebb5355",
+   "thin": 1
+  },
+  "manuscript_mid_exact": {
+   "case": "manuscript_mid",
+   "chain_0_sha256": "93b7835eb6dcf2512cbfc5d6e31e96f17cfa72eb6e472451c2c7c20951c74068",
+   "device": "cpu",
+   "model": "exact",
+   "ndim": 6,
+   "nrows": 32500,
+   "parameter_names": [
+    "A_h",
+    "f_0",
+    "phi_0",
+    "log10_A_n",
+    "alpha_c",
+    "alpha_d"
+   ],
+   "run": "manuscript_mid/exact_flow_seed301",
+   "run_meta_sha256": "1fad64fd4e5193013deb2a78194a5dea571db16cdee70ea8ce0bdc4ffe78d3e7",
+   "thin": 1
+  },
+  "manuscript_mid_mid_cut": {
+   "case": "manuscript_mid",
+   "chain_0_sha256": "97f383dddccabbd2360440e950e08369d254efbe7895cb970d781a3117eade8f",
+   "device": "cpu",
+   "model": "mid_cut",
+   "ndim": 6,
+   "nrows": 25000,
+   "parameter_names": [
+    "A_h",
+    "f_0",
+    "phi_0",
+    "log10_A_n",
+    "alpha_c",
+    "alpha_d"
+   ],
+   "run": "manuscript_mid/mid_cut_flow_seed303",
+   "run_meta_sha256": "7d6f0a621e75707f4a113a187e17c6952cf2d6f5baccca0bf48f37087ce4be29",
+   "thin": 1
+  },
+  "manuscript_mid_mid_exact": {
+   "case": "manuscript_mid",
+   "chain_0_sha256": "b43aaa1f6cd7cc71aaf60cc9daa917f3b41c6e9eae408c2c16f39bf716c1b125",
+   "device": "cuda:0",
+   "model": "mid_exact",
+   "ndim": 6,
+   "nrows": 76000,
+   "parameter_names": [
+    "A_h",
+    "f_0",
+    "phi_0",
+    "log10_A_n",
+    "alpha_c",
+    "alpha_d"
+   ],
+   "run": "manuscript_mid/mid_exact_seed101",
+   "run_meta_sha256": "b550c4aec54a07fae6e26e7450478e70361561765b6107d79d483fb20664d532",
+   "thin": 10
+  },
+  "manuscript_mid_mid_pad": {
+   "case": "manuscript_mid",
+   "chain_0_sha256": "3c1ad67f996acb011d50dbd1d38f762fb083aa09ad0a1f2330bace9ff85207d5",
+   "device": "cuda:0",
+   "model": "mid_pad",
+   "ndim": 6,
+   "nrows": 20000,
+   "parameter_names": [
+    "A_h",
+    "f_0",
+    "phi_0",
+    "log10_A_n",
+    "alpha_c",
+    "alpha_d"
+   ],
+   "run": "manuscript_mid/mid_pad_seed101",
+   "run_meta_sha256": "a174a6333fbbce7d5cab96b179abee7cfc49c7fefa3b117fd73b742e9df6541c",
+   "thin": 10
+  },
+  "manuscript_mid_mid_raw": {
+   "case": "manuscript_mid",
+   "chain_0_sha256": "b46b4dd986254ae2741159981806c51e774953371d5d0cfa36bffcb1c07c1925",
+   "device": "cpu",
+   "model": "mid_raw",
+   "ndim": 6,
+   "nrows": 112000,
+   "parameter_names": [
+    "A_h",
+    "f_0",
+    "phi_0",
+    "log10_A_n",
+    "alpha_c",
+    "alpha_d"
+   ],
+   "run": "manuscript_mid/mid_raw_flow_seed311",
+   "run_meta_sha256": "006e2ae3bd93d36df333555def453916a4b905047e3ee663e73b2dc89cc784ed",
+   "thin": 1
+  },
+  "manuscript_mid_tri_cut": {
+   "case": "manuscript_mid",
+   "chain_0_sha256": "1fe8c7cc0d93dc7751d81d8b0b20b880b5a90f0c95f7fc1aea97eb9edf51a04e",
+   "device": "cpu",
+   "model": "tri_cut",
+   "ndim": 6,
+   "nrows": 33000,
+   "parameter_names": [
+    "A_h",
+    "f_0",
+    "phi_0",
+    "log10_A_n",
+    "alpha_c",
+    "alpha_d"
+   ],
+   "run": "manuscript_mid/tri_cut_flow_seed303",
+   "run_meta_sha256": "12f6779b699e846e5d527b1175604ac52ced868f8c0af36dea7dc3e8719ba89d",
+   "thin": 1
+  },
+  "manuscript_mid_tri_exact": {
+   "case": "manuscript_mid",
+   "chain_0_sha256": "d8f35f9141232bac30ed25294da83cfbd92299d718cad73dbb8ecd342e510c38",
+   "device": "cuda:0",
+   "model": "tri_exact",
+   "ndim": 6,
+   "nrows": 40000,
+   "parameter_names": [
+    "A_h",
+    "f_0",
+    "phi_0",
+    "log10_A_n",
+    "alpha_c",
+    "alpha_d"
+   ],
+   "run": "manuscript_mid/tri_exact_seed101",
+   "run_meta_sha256": "8d4c128861b0fe5ccab9a1db5e5df146ee387084083c64071a00efc2e19fa25b",
+   "thin": 10
+  },
+  "manuscript_mid_tri_pad": {
+   "case": "manuscript_mid",
+   "chain_0_sha256": "9f883b123d7bb31cdf252e8381c3757d0dd38123f4517b38aa794b03d93fb7d7",
+   "device": "cuda:0",
+   "model": "tri_pad",
+   "ndim": 6,
+   "nrows": 35000,
+   "parameter_names": [
+    "A_h",
+    "f_0",
+    "phi_0",
+    "log10_A_n",
+    "alpha_c",
+    "alpha_d"
+   ],
+   "run": "manuscript_mid/tri_pad_seed101",
+   "run_meta_sha256": "3dfcd269d40feabb70bb0137f65efd5c19d8b6c0e5055689dd8769e232bd40d5",
+   "thin": 10
+  },
+  "manuscript_mid_tri_raw": {
+   "case": "manuscript_mid",
+   "chain_0_sha256": "4cb55a6a0f5153a17e4da4f8689676b9250c1565c2a62992b8edcc06cb6ae00d",
+   "device": "cpu",
+   "model": "tri_raw",
+   "ndim": 6,
+   "nrows": 25000,
+   "parameter_names": [
+    "A_h",
+    "f_0",
+    "phi_0",
+    "log10_A_n",
+    "alpha_c",
+    "alpha_d"
+   ],
+   "run": "manuscript_mid/tri_raw_flow_seed301",
+   "run_meta_sha256": "9d201d6a63215f962f7f2fc2f703beca7c8d2413068cce6f365de667911ac1a0",
+   "thin": 1
+  },
+  "manuscript_mid_whittle_cut": {
+   "case": "manuscript_mid",
+   "chain_0_sha256": "293f6563eb76fd91ac9ea94df7cab930b5174ea244e8519d364c55e913a630eb",
+   "device": "cpu",
+   "model": "whittle_cut",
+   "ndim": 5,
+   "nrows": 336000,
+   "parameter_names": [
+    "A_h",
+    "f_0",
+    "phi_0",
+    "log10_A_n",
+    "alpha"
+   ],
+   "run": "manuscript_mid/whittle_cut_flow_seed312",
+   "run_meta_sha256": "c43e5fd06464fb6af3151ca8da9883039a33ae3ca132c4d9be89ef9d07623d21",
+   "thin": 1
+  },
+  "manuscript_mid_whittle_raw": {
+   "case": "manuscript_mid",
+   "chain_0_sha256": "91bf0ddb1073f93ee0d4720a26a605904de674a2597e586ac29d8f1d25e82924",
+   "device": "cpu",
+   "model": "whittle_raw",
+   "ndim": 5,
+   "nrows": 384000,
+   "parameter_names": [
+    "A_h",
+    "f_0",
+    "phi_0",
+    "log10_A_n",
+    "alpha"
+   ],
+   "run": "manuscript_mid/whittle_raw_flow_seed311",
+   "run_meta_sha256": "65d9d612f4c2330a16acf87ef80e0a73b0147f45eb96f735fd0ef007dad3cbe3",
+   "thin": 1
+  }
+ },
+ "schema": 1,
+ "seed": 20261011
+}

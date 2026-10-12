@@ -238,6 +238,114 @@ def eval_cmd(argv: list[str]) -> dict:
     return run_reference_eval(a.lineage, a.tier)
 
 
+# --- G2: sinusoid chain rows (Task A8) -----------------------------------------------------
+G2_SEED = 20261011
+G2_RANDOM = 18
+#: Positions within the 20 stored rows re-evaluated in the fast tier: first row, first random
+#: row, last row.
+G2_FAST_POSITIONS = (0, 1, 19)
+#: impulse v2 964283c: impulse/file_io.py ncols = ndim + 4; save_chain column_stack order.
+CHAIN_EXTRA_COLUMNS = ("lnlike", "lnprob", "accepted", "temperature")
+
+
+def chain_row_index(nrows: int) -> np.ndarray:
+    """First and last row plus G2_RANDOM distinct interior rows from default_rng(G2_SEED), sorted."""
+    rng = np.random.default_rng(G2_SEED)
+    middle = rng.choice(np.arange(1, nrows - 1), size=G2_RANDOM, replace=False)
+    return np.sort(np.r_[0, middle, nrows - 1]).astype(np.int64)
+
+
+@command("g2")
+def g2(argv: list[str]) -> dict:
+    """20 rows of each sinusoid_final run's cold chain (chain_0.bin): theta and lnlike."""
+    argparse.ArgumentParser(prog="sinusoid_goldens g2").parse_args(argv)
+    manifest = read_json(SINUSOID_FINAL / "manifest.json")
+    CHAIN_ROWS.mkdir(parents=True, exist_ok=True)
+    runs = {}
+    for case in CASES:
+        for model in MODELS:
+            run = manifest["runs"][case][model]
+            meta_path = SINUSOID_FINAL / run / "run_meta.json"
+            meta = read_json(meta_path)
+            names = list(meta["parameter_names"])
+            ndim = len(names)
+            if meta.get("ndim") != ndim or (meta["target"]["case"], meta["target"]["model"]) != (case, model):
+                raise ValueError(f"{run}: run_meta disagrees with ({case}, {model}, ndim {ndim})")
+            path = SINUSOID_FINAL / run / "chain_0.bin"
+            ncols = ndim + len(CHAIN_EXTRA_COLUMNS)
+            size = path.stat().st_size
+            if size % (8 * ncols):
+                raise ValueError(f"{path}: {size} bytes is not a whole number of {ncols}-column rows")
+            nrows = size // (8 * ncols)
+            idx = chain_row_index(nrows)
+            rows = np.array(np.memmap(path, dtype="<f8", mode="r", shape=(nrows, ncols))[idx])
+            lnlike, lnprob, accepted, temperature = (rows[:, ndim + k].copy() for k in range(4))
+            if not np.all(temperature == 1.0):
+                raise ValueError(f"{path}: chain_0 is not the cold chain")
+            if not np.all(np.isfinite(lnlike)):
+                raise ValueError(f"{path}: non-finite lnlike in a stored row")
+            write_npz(CHAIN_ROWS / f"{case}_{model}.npz",
+                      {"row_index": idx, "theta": rows[:, :ndim].copy(), "lnlike": lnlike, "lnprob": lnprob,
+                       "accepted": accepted, "temperature": temperature})
+            runs[f"{case}_{model}"] = {"case": case, "model": model, "run": run, "nrows": int(nrows),
+                                       "ndim": ndim, "parameter_names": names,
+                                       "chain_0_sha256": sha256_file(path),
+                                       "run_meta_sha256": sha256_file(meta_path),
+                                       "device": meta.get("device"), "thin": meta.get("thin")}
+    write_json(CHAIN_ROWS / "INDEX.json", {
+        "schema": 1, "seed": G2_SEED, "n_random": G2_RANDOM, "fast_positions": list(G2_FAST_POSITIONS),
+        "layout": "impulse v2 964283c: float64 rows of ndim + 4 columns = parameters, lnlike, lnprob, "
+                  "accepted, temperature (impulse/file_io.py ncols, save_chain)",
+        "runs": runs})
+    print(f"G2: 20 rows from each of {len(runs)} sinusoid_final cold chains -> {CHAIN_ROWS}")
+    return runs
+
+
+def run_chain_eval(lineage: str, tier: str = "fast") -> dict:
+    """Re-evaluate stored chain rows (phase wrapped as gpu/run.py did) against their lnlike column."""
+    from scripts.golden.legacy_eval import Job, evaluate_jobs
+    jobs, expected = [], {}
+    for case in CASES:
+        for model in MODELS:
+            rows = read_npz(CHAIN_ROWS / f"{case}_{model}.npz")
+            pos = np.asarray(G2_FAST_POSITIONS if tier == "fast" else np.arange(len(rows["lnlike"])), dtype=int)
+            tag = f"{case}__{model}"
+            jobs.append(Job(tag, case, model, rows["theta"][pos], wrap_phase=True))
+            expected[tag] = (case, model, rows["row_index"][pos], rows["lnlike"][pos])
+    results, meta = evaluate_jobs(lineage, "sinusoid", jobs, timeout=7200.0)
+    report = {"schema": 1, "family": "sinusoid", "kind": "chain_rows", "lineage": lineage, "tier": tier,
+              "worker": _portable_worker(meta), "models": {}, "points": {}}
+    for tag, (case, model, row_index, chain_ll) in expected.items():
+        r = results[tag]
+        cmp = compare(r["lnlike"], chain_ll, np.ones(len(chain_ll), dtype=bool))
+        point = {"case": case, "model": model, "row_index": row_index, "reference": chain_ll,
+                 "value": r["lnlike"], "abs_delta": cmp["abs_delta"], "rel_delta": cmp["rel_delta"],
+                 "seconds": r["seconds"], "inf_mismatch": cmp["inf_mismatch"], "info": r["info"]}
+        if "failed" in r:
+            if not np.array_equal(r["failed"], r["lnlike"] == -np.inf):
+                raise AssertionError(f"{tag}: last_failed disagrees with the -inf values")
+            point["failed"] = r["failed"]
+        report["points"][tag] = point
+        m = report["models"].setdefault(model, {"max_abs": 0.0, "max_rel": 0.0, "inf_mismatch": 0, "n_rows": 0})
+        m["max_abs"] = max(m["max_abs"], cmp["near_max_abs"])
+        m["max_rel"] = max(m["max_rel"], float(cmp["rel_delta"].max(initial=0.0)))
+        m["inf_mismatch"] += cmp["inf_mismatch"]
+        m["n_rows"] += len(chain_ll)
+    EVAL.mkdir(parents=True, exist_ok=True)
+    write_json(EVAL / f"{lineage}_chain_rows_{tier}.json", report)
+    _print_models(f"lineage {lineage}, chain rows, {tier} tier:", report["models"])
+    return report
+
+
+@command("eval-chains")
+def eval_chains_cmd(argv: list[str]) -> dict:
+    ap = argparse.ArgumentParser(prog="sinusoid_goldens eval-chains")
+    ap.add_argument("--lineage", choices=("A", "B"), required=True)
+    ap.add_argument("--tier", choices=("fast", "full"), default="fast")
+    a = ap.parse_args(argv)
+    return run_chain_eval(a.lineage, a.tier)
+
+
 def main(argv: list[str] | None = None) -> int:
     if not sys.flags.safe_path:          # spec §1 guard 5: no cwd injection
         raise SystemExit("run with python -P or PYTHONSAFEPATH=1 (source env/activate.sh)")
