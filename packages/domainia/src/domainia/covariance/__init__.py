@@ -11,6 +11,7 @@ from .base import CholFactor, Covariance, DiagFactor, Evaluator, Factor, QuadFor
 from .blocktri import BlockTriCovFactor, BlockTridiagonalCovariance
 from .dense import DenseCovariance, dense_factor
 from .diagonal import DiagonalCovariance
+from .edges import SchurEdge, SchurFactor, assemble_edge_rows, cut, schur_factor
 from .eq45 import Eq45Covariance, keep_mask, window_bins
 from .exact_fourier import ExactFourierCovariance, ghat
 from .exact_time import CovOperator, ExactTimeCovariance, OperatorFactor, bessel_coefficients
@@ -37,14 +38,19 @@ __all__ = [
     "OperatorFactor",
     "PushedRows",
     "QuadForm",
+    "SchurEdge",
+    "SchurFactor",
     "as_evaluator",
+    "assemble_edge_rows",
     "bessel_coefficients",
     "cheb_order",
     "cheb_tail",
+    "cut",
     "dense_factor",
     "ghat",
     "keep_mask",
     "positions",
     "quad_form",
+    "schur_factor",
     "window_bins",
 ]
