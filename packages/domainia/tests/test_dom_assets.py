@@ -70,6 +70,16 @@ def test_sha256_and_identity_mismatches_fail_closed(shipped, tmp_path):
         renamed.load_npz()
     with pytest.raises(ValueError, match="cannot carry an identity"):
         Artifact(ROOT / "data" / CN, identity={"N": 16384}).load_npy()
+    # Unreadable or wrong-format files (no sha256 pinned) are ArtifactErrors too.
+    truncated, empty, npy_named_npz = (tmp_path / n for n in ("t.npz", "e.npz", "cN.npz"))
+    truncated.write_bytes(src.read_bytes()[:40])
+    empty.write_bytes(b"")
+    shutil.copyfile(ROOT / "data" / CN, npy_named_npz)
+    for bad in (truncated, empty, npy_named_npz):
+        with pytest.raises(ArtifactError, match="npz"):
+            Artifact(bad).load_npz()
+    with pytest.raises(ArtifactError, match="not a .npy"):
+        Artifact(src).load_npy()
 
 
 def test_writes_need_allow_write_and_are_atomic(tmp_path):
@@ -86,6 +96,17 @@ def test_writes_need_allow_write_and_are_atomic(tmp_path):
     assert json.loads(str(back["metadata"])) == {"identity": ident, "note": "test"}
     with pytest.raises(FileExistsError):
         art.save_npz({"a": np.zeros(1)}, allow_write=True)
+    refused = tmp_path / "refused"                                      # invalid saves create nothing
+    with pytest.raises(ValueError, match="metadata= argument"):
+        Artifact(refused / "a.npz").save_npz({"metadata": np.zeros(1)}, allow_write=True)
+    with pytest.raises(ValueError, match="differs from the artifact's identity"):
+        Artifact(refused / "b.npz", ident).save_npz(
+            {"a": np.zeros(1)}, metadata={"identity": {"N": 9}}, allow_write=True)
+    with pytest.raises(ValueError, match="object arrays"):
+        Artifact(refused / "c.npz").save_npz({"a": np.array([{}], dtype=object)}, allow_write=True)
+    with pytest.raises(ValueError, match="object arrays"):
+        Artifact(refused / "d.npy").save_npy(np.array([{}], dtype=object), allow_write=True)
+    assert not refused.exists()
     npy = Artifact(tmp_path / "c.npy")
     with pytest.raises(PermissionError):
         npy.save_npy(np.float64(0.5))
@@ -96,3 +117,5 @@ def test_writes_need_allow_write_and_are_atomic(tmp_path):
 def test_sha256_must_be_hex():
     with pytest.raises(ValueError, match="64 lowercase hex"):
         Artifact(Path("x.npz"), sha256="ABC")
+    with pytest.raises(ValueError, match="64 lowercase hex"):
+        Artifact(Path("x.npz"), sha256=b"a" * 64)

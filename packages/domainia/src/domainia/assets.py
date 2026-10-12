@@ -18,6 +18,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import zipfile
 from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
@@ -34,6 +35,10 @@ class ArtifactError(ValueError):
 
 class ArtifactMissing(FileNotFoundError):
     """The artifact's file does not exist; it is never created implicitly."""
+
+
+# What ``np.load`` (allow_pickle=False) raises on a truncated, empty or foreign file.
+_READ_ERRORS = (OSError, ValueError, EOFError, zipfile.BadZipFile)
 
 
 def identity_key(identity: Mapping[str, Any], length: int = 20) -> str:
@@ -58,7 +63,7 @@ class Artifact:
         object.__setattr__(self, "path", Path(self.path))
         if self.identity is not None:
             object.__setattr__(self, "identity", _canonical(self.identity))
-        if self.sha256 is not None and (len(self.sha256) != 64
+        if self.sha256 is not None and (not isinstance(self.sha256, str) or len(self.sha256) != 64
                                         or any(c not in "0123456789abcdef" for c in self.sha256)):
             raise ValueError(f"sha256 must be 64 lowercase hex digits; got {self.sha256!r}")
 
@@ -95,11 +100,18 @@ class Artifact:
         """Every array of the ``.npz`` (``allow_pickle=False``), after :meth:`verify` and,
         when an identity is given, ``metadata["identity"] == identity``."""
         self.verify()
-        try:
-            with np.load(self.path, allow_pickle=False) as z:
-                arrays = {k: np.array(z[k]) for k in z.files}
-        except (OSError, ValueError) as err:
+        try:                                  # our handle: closed even when np.load fails
+            with self.path.open("rb") as fh:
+                z = np.load(fh, allow_pickle=False)
+                if isinstance(z, np.lib.npyio.NpzFile):
+                    with z:
+                        arrays = {k: np.array(z[k]) for k in z.files}
+                else:
+                    arrays = None
+        except _READ_ERRORS as err:
             raise ArtifactError(f"{self.path}: not a readable .npz") from err
+        if arrays is None:
+            raise ArtifactError(f"{self.path}: not a .npz archive")
         if self.identity is not None:
             if "metadata" not in arrays:
                 raise ArtifactError(f"{self.path}: records no metadata/identity")
@@ -118,9 +130,16 @@ class Artifact:
             raise ValueError("an .npy artifact cannot carry an identity; pin it by sha256")
         self.verify()
         try:
-            return np.load(self.path, allow_pickle=False)
-        except (OSError, ValueError) as err:
+            with self.path.open("rb") as fh:
+                array = np.load(fh, allow_pickle=False)
+                if not isinstance(array, np.ndarray):                 # an .npz archive
+                    array.close()
+                    array = None
+        except _READ_ERRORS as err:
             raise ArtifactError(f"{self.path}: not a readable .npy") from err
+        if array is None:
+            raise ArtifactError(f"{self.path}: not a .npy array")
+        return array
 
     # -- writing (explicit only) -------------------------------------------------
     def _target(self, allow_write: bool, overwrite: bool) -> None:
@@ -130,6 +149,13 @@ class Artifact:
         if self.exists() and not overwrite:
             raise FileExistsError(f"{self.path} exists; pass overwrite=True to replace it")
         self.path.parent.mkdir(parents=True, exist_ok=True)
+
+    @staticmethod
+    def _storable(array: Any) -> np.ndarray:
+        array = np.asarray(array)
+        if array.dtype.hasobject:
+            raise ValueError("object arrays cannot be stored (they load only with allow_pickle)")
+        return array
 
     def _atomic(self, write: Any) -> str:
         tmp = self.path.with_name(self.path.name + ".tmp")
@@ -145,9 +171,8 @@ class Artifact:
     def save_npz(self, arrays: Mapping[str, Any], *, metadata: Mapping[str, Any] | None = None,
                  allow_write: bool = False, overwrite: bool = False) -> str:
         """Write ``arrays`` (+ ``metadata`` as a JSON string with this artifact's identity);
-        returns the new file's sha256."""
-        self._target(allow_write, overwrite)
-        payload = {k: np.asarray(v) for k, v in arrays.items()}
+        returns the new file's sha256.  Everything is validated before anything is written."""
+        payload = {k: self._storable(v) for k, v in arrays.items()}
         if "metadata" in payload:
             raise ValueError("pass metadata through the metadata= argument")
         if metadata is not None or self.identity is not None:
@@ -157,11 +182,13 @@ class Artifact:
                     raise ValueError("metadata['identity'] differs from the artifact's identity")
                 meta["identity"] = self.identity
             payload["metadata"] = np.asarray(json.dumps(meta, sort_keys=True))
+        self._target(allow_write, overwrite)
         return self._atomic(lambda fh: np.savez(fh, **payload))
 
     def save_npy(self, array: Any, *, allow_write: bool = False, overwrite: bool = False) -> str:
         """Write one array as ``.npy``; returns the new file's sha256."""
         if self.identity is not None:
             raise ValueError("an .npy artifact cannot carry an identity; pin it by sha256")
+        array = self._storable(array)
         self._target(allow_write, overwrite)
-        return self._atomic(lambda fh: np.save(fh, np.asarray(array)))
+        return self._atomic(lambda fh: np.save(fh, array, allow_pickle=False))
