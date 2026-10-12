@@ -2,8 +2,10 @@
 
 from .base import (BinSelect, Compose, Identity, LinearMap, PushedCovariance, Restrict,
                    SupportsDense, SupportsMatvec, domain_size, on_backend)
+from .fourier import FourierCrop, FourierZeroPad, crop_maps, pad_maps
 from .time import CropTime, TimeToFourier, TimeToWDM, WDMToTime, ZeroPadTime
 
-__all__ = ["BinSelect", "Compose", "CropTime", "Identity", "LinearMap", "PushedCovariance",
-           "Restrict", "SupportsDense", "SupportsMatvec", "TimeToFourier", "TimeToWDM",
-           "WDMToTime", "ZeroPadTime", "domain_size", "on_backend"]
+__all__ = ["BinSelect", "Compose", "CropTime", "FourierCrop", "FourierZeroPad", "Identity",
+           "LinearMap", "PushedCovariance", "Restrict", "SupportsDense", "SupportsMatvec",
+           "TimeToFourier", "TimeToWDM", "WDMToTime", "ZeroPadTime", "crop_maps",
+           "domain_size", "on_backend", "pad_maps"]
