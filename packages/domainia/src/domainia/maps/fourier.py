@@ -21,7 +21,7 @@ from wdm.grid import carrier_phase
 from wdm.transform import band_atoms
 
 from ..domains import FourierDomain, WDMDomain
-from .base import _BUILD, LinearMap
+from .base import _BUILD, LinearMap, _last_axis
 
 __all__ = ["FourierCrop", "FourierToWDM", "FourierZeroPad", "crop_maps", "pad_maps"]
 
@@ -272,12 +272,17 @@ class FourierToWDM(LinearMap):
 
     @property
     def window(self) -> FourierDomain:
-        """The band windows' bins ``[g0, g0 + G)`` of the record (480 / 876 / 1800 for the GB)."""
+        """The band windows' bins ``[g0, g0 + G)`` of the cells' grid record
+        (480 / 876 / 1800 for the GB).  The record is ``dst``'s grid, not ``src``'s: the two
+        agree for a built map (the constructor checks it), while a map returned by
+        :meth:`after` reads the bins of the outer record."""
         geo = _geometry(self.dst)
-        return FourierDomain(self.src.N, self.src.dt, geo["g0"], geo["G"], self.src.units)
+        g = self.dst.cells.grid
+        return FourierDomain(g.N, g.dt, geo["g0"], geo["G"], self.src.units)
 
     def apply(self, z, be=None):
         be = self._be(z, be)
+        _last_axis(z, self.src.n, "FourierToWDM.apply")
         z = be.asarray(z)
         if self.impl == "dense":
             return be.xp.real(z[..., self.lo:self.lo + self.width] @ self.C.T)
@@ -289,6 +294,7 @@ class FourierToWDM(LinearMap):
     def adjoint(self, w, be=None):
         """``C^H w`` on ``src`` (complex), the real-inner-product adjoint."""
         be = self._be(w, be)
+        _last_axis(w, self.shape[0], "FourierToWDM.adjoint")
         w = be.asarray(w)
         part = w @ be.xp.conj(self.C)
         out = be.xp.zeros((*w.shape[:-1], self.src.n), dtype=complex)
@@ -317,8 +323,11 @@ class FourierToWDM(LinearMap):
         ``C = (analyse(A[idx]) + conj(analyse(B[idx]))) * inner.scale``, rows of ``dst``.
 
         The atoms are rebuilt from ``dst``'s geometry, so ``self.src`` must be exactly the
-        band window: a ``restrict=True`` map (truncated atoms) or a composite returned by
-        ``after`` (whose ``src`` is the outer record) is refused rather than misread."""
+        band window :attr:`window` of the cells' grid record: a ``restrict=True`` map
+        (truncated atoms) or a composite returned by ``after`` (whose ``src`` lies on the
+        outer record, of another length ``N``) is refused rather than misread.  The one
+        composite that passes, a crop to the whole record (``start = 0``, same ``N``), is
+        the map itself (its ``C`` equals the atoms to roundoff)."""
         if self.impl != "dense" or inner.dst != self.src or self.src != self.window:
             raise ValueError("after() needs a dense map whose src is exactly inner.dst = "
                              "the band window")

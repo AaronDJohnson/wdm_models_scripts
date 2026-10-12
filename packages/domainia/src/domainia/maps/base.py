@@ -59,6 +59,12 @@ class _Build:
 _BUILD: Any = _Build()
 
 
+def _last_axis(x: Any, n: int, what: str) -> None:
+    """Refuse a vector whose last axis is not ``n`` long (shapes are static under ``jit``)."""
+    if np.shape(x)[-1:] != (n,):
+        raise ValueError(f"{what}: last axis must have length {n}; got shape {np.shape(x)}")
+
+
 def domain_size(dom: Any) -> int:
     """Length of a vector on ``dom``: samples, bins (complex) or cells."""
     if isinstance(dom, TimeDomain):

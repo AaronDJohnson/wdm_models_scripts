@@ -18,7 +18,7 @@ from wdm.backend import pytree_dataclass
 from wdm.transform import atom_spectrum, base_atom_spectra
 
 from ..domains import FourierDomain, TimeDomain, WDMDomain
-from .base import _BUILD, LinearMap
+from .base import _BUILD, LinearMap, _last_axis
 
 __all__ = ["CropTime", "TimeToFourier", "TimeToWDM", "WDMToTime", "ZeroPadTime"]
 
@@ -29,12 +29,6 @@ def _check_grid(time: TimeDomain, dom: WDMDomain) -> wdm.Grid:
         raise ValueError(f"time domain (N={time.N}, dt={time.dt}) does not match the cells' grid "
                          f"(N={g.N}, dt={g.dt})")
     return g
-
-
-def _last_axis(x: Any, n: int, what: str) -> None:
-    """Refuse a vector whose last axis is not ``n`` long (shapes are static under ``jit``)."""
-    if np.shape(x)[-1:] != (n,):
-        raise ValueError(f"{what}: last axis must have length {n}; got shape {np.shape(x)}")
 
 
 def _flat(x: Any, N: int) -> tuple[Any, tuple[int, ...]]:

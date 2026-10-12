@@ -89,6 +89,7 @@ def test_g6_pad_cell_matrix_and_its_cells(case):
     assert sha256_array(np.asarray(W.dst.cells.n, dtype=np.int64)) == fps["V_pad_n"]["sha256"]
     Mp = W.after(zp)
     assert Mp.src == _store(c) and Mp.C.shape == tuple(fps["V_pad_C"]["shape"])
+    assert Mp.window == W.window == W.src            # the padded record's band window
     assert check_blas_golden(fps["V_pad_C"], Mp.C, build, G6_RTOL)
     cells = Mp.apply(c["prep"]["store_z"])
     ref = c["g6"]["V_pad_cells"]
@@ -158,6 +159,18 @@ def test_restrict_truncates_the_atoms_to_a_sub_window():
     short = FourierDomain(c["N"] // 2, c["DT"], int(p["bin_offset"]) // 2, 8, "sigma0")
     with pytest.raises(ValueError, match="the band window"):
         Mr.after(FourierZeroPad(short, window))
+    # bins of another domain are refused, not read at the wrong offsets: the store fed to
+    # the band-window and analysis-window maps, the whole rfft fed to the store map
+    z = p["store_z"]
+    zfull = np.zeros((2, c["N"] // 2 + 1), complex)
+    zfull[:, full.src.k0:full.src.k0 + full.src.n] = z
+    with pytest.raises(ValueError, match="last axis"):
+        Mr.apply(z)
+    for impl in ("dense", "fft"):
+        with pytest.raises(ValueError, match="last axis"):
+            FourierToWDM(full.window, cells, impl=impl).apply(z)
+        with pytest.raises(ValueError, match="last axis"):
+            FourierToWDM(full.src, cells, impl=impl).apply(zfull)
 
 
 def test_adjoint_and_the_record_scale():
@@ -168,6 +181,8 @@ def test_adjoint_and_the_record_scale():
     z = rng.standard_normal((2, M.src.n)) + 1j * rng.standard_normal((2, M.src.n))
     lhs = np.sum(w * M.apply(z))
     assert abs(lhs - np.real(np.vdot(M.adjoint(w), z))) <= 1e-12 * abs(lhs)
+    with pytest.raises(ValueError, match="last axis"):
+        M.adjoint(w[:, :-1])
     # on a whole record z = rfft(x), the cells are sqrt(N / (2 dt)) times the WDM transform
     g = wdm.Grid(8, 16, 0.5)
     x = rng.standard_normal(g.N)
@@ -190,6 +205,12 @@ def test_adjoint_and_the_record_scale():
     crop2 = FourierCrop(FourierDomain(192, g.dt, 0, 97, "rfft"), crop.src, 8)
     with pytest.raises(ValueError, match="the band window"):
         W.after(crop).after(crop2)
+    # the band window lies on the cells' grid record (N = 128), never on a composite's
+    # outer record: a composite whose src has the window's bins [0, 64) is still refused
+    Wc = W.after(FourierCrop(FourierDomain(160, g.dt, 0, 64, "rfft"), W.src, 16))
+    assert Wc.window == W.window == W.src and Wc.src != Wc.window
+    with pytest.raises(ValueError, match="the band window"):
+        Wc.after(FourierCrop(FourierDomain(192, g.dt, 0, 64, "rfft"), Wc.src, 8))
 
 
 def test_edge_bands_are_refused():
