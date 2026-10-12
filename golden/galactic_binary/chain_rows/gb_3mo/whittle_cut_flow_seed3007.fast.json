@@ -1,0 +1,128 @@
+{
+ "backends": [
+  "numpy",
+  "jax"
+ ],
+ "build": {
+  "gbonfly": "0.1.0",
+  "jax": "0.9.0.1",
+  "jaxlib": "0.9.0.1",
+  "machine": "arm64",
+  "numpy": "2.3.5",
+  "platform": "macOS-14.3.1-arm64-arm-64bit",
+  "python": "3.12.4",
+  "scipy": "1.16.3",
+  "threads": {
+   "JAX_ENABLE_X64": "true",
+   "JAX_PLATFORMS": "cpu",
+   "MKL_NUM_THREADS": null,
+   "OMP_NUM_THREADS": null,
+   "OPENBLAS_NUM_THREADS": null,
+   "VECLIB_MAXIMUM_THREADS": null,
+   "XLA_FLAGS": null
+  }
+ },
+ "case": "gb_3mo",
+ "chain_file": {
+  "bytes": 73360000,
+  "path": "wdm_paper_2/final_chains/gb_likelihood_matrix/chains/gb_3mo/whittle_cut_flow_seed3007/chain_0.bin"
+ },
+ "evaluators": {
+  "jax": "gpu.jax_models.build(Prepared(path), model)  (CPU, x64)",
+  "numpy": "likelihoods.make_lnlike(Prepared(path), model, numpy_backend())"
+ },
+ "jax_counters": null,
+ "lnlike_column": 10,
+ "max_abs_delta_jax": 0.0,
+ "max_abs_delta_numpy": 0.0,
+ "model": "whittle_cut",
+ "ndim": 10,
+ "parameter_names": [
+  "f0T",
+  "cos_colat",
+  "lon",
+  "lnA",
+  "cos_iota",
+  "psi",
+  "phi0",
+  "fdotT2",
+  "log_gbar_A",
+  "log_gbar_E"
+ ],
+ "prepared_sha256": "ad440fc145b693c46bed9f16a90ba1d64b4fff60f2bdb6209c9f58482d0b6afc",
+ "row_indices": [
+  0,
+  327500,
+  654999
+ ],
+ "rows": [
+  {
+   "abs_delta_jax": 0.0,
+   "abs_delta_numpy": 0.0,
+   "lnlike_jax": -608.9594588611758,
+   "lnlike_numpy": -608.9594588611758,
+   "lnlike_stored": -608.9594588611758,
+   "numpy_raised": false,
+   "row": 0,
+   "theta": [
+    7884.0,
+    -0.20833333333333326,
+    0.0,
+    -48.68387547936903,
+    0.3,
+    0.7,
+    0.5,
+    6.2157456e-05,
+    -0.1128309114763464,
+    -0.07693028691214934
+   ]
+  },
+  {
+   "abs_delta_jax": 0.0,
+   "abs_delta_numpy": 0.0,
+   "lnlike_jax": -613.7161615190396,
+   "lnlike_numpy": -613.7161615190396,
+   "lnlike_stored": -613.7161615190396,
+   "numpy_raised": false,
+   "row": 327500,
+   "theta": [
+    7883.379141892675,
+    0.8099251637339173,
+    2.2625714362018545,
+    -48.02938733560046,
+    -0.19927330005559427,
+    1.7035651909524363,
+    2.329004779066678,
+    0.0002812738154024055,
+    -0.043450856880041785,
+    -0.08981476776653366
+   ]
+  },
+  {
+   "abs_delta_jax": 0.0,
+   "abs_delta_numpy": 0.0,
+   "lnlike_jax": -611.4197267817312,
+   "lnlike_numpy": -611.4197267817312,
+   "lnlike_stored": -611.4197267817312,
+   "numpy_raised": false,
+   "row": 654999,
+   "theta": [
+    7884.0342004513,
+    -0.7124671244688685,
+    5.898117209741612,
+    -48.651988733158525,
+    0.30386364504965707,
+    2.5832211797686684,
+    2.256905862050571,
+    0.0005190045221542233,
+    -0.05376815391209,
+    -0.0970304550644072
+   ]
+  }
+ ],
+ "rows_total": 655000,
+ "run": "whittle_cut_flow_seed3007",
+ "schema": 1,
+ "tier": "fast",
+ "width": 14
+}

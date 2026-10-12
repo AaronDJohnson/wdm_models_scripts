@@ -1,0 +1,128 @@
+{
+ "backends": [
+  "numpy",
+  "jax"
+ ],
+ "build": {
+  "gbonfly": "0.1.0",
+  "jax": "0.9.0.1",
+  "jaxlib": "0.9.0.1",
+  "machine": "arm64",
+  "numpy": "2.3.5",
+  "platform": "macOS-14.3.1-arm64-arm-64bit",
+  "python": "3.12.4",
+  "scipy": "1.16.3",
+  "threads": {
+   "JAX_ENABLE_X64": "true",
+   "JAX_PLATFORMS": "cpu",
+   "MKL_NUM_THREADS": null,
+   "OMP_NUM_THREADS": null,
+   "OPENBLAS_NUM_THREADS": null,
+   "VECLIB_MAXIMUM_THREADS": null,
+   "XLA_FLAGS": null
+  }
+ },
+ "case": "gb_6mo",
+ "chain_file": {
+  "bytes": 4480000,
+  "path": "wdm_paper_2/final_chains/gb_likelihood_matrix/chains/gb_6mo/whittle_raw_flow_seed3007/chain_0.bin"
+ },
+ "evaluators": {
+  "jax": "gpu.jax_models.build(Prepared(path), model)  (CPU, x64)",
+  "numpy": "likelihoods.make_lnlike(Prepared(path), model, numpy_backend())"
+ },
+ "jax_counters": null,
+ "lnlike_column": 10,
+ "max_abs_delta_jax": 0.0,
+ "max_abs_delta_numpy": 1.532498572487384e-10,
+ "model": "whittle_raw",
+ "ndim": 10,
+ "parameter_names": [
+  "f0T",
+  "cos_colat",
+  "lon",
+  "lnA",
+  "cos_iota",
+  "psi",
+  "phi0",
+  "fdotT2",
+  "log_gbar_A",
+  "log_gbar_E"
+ ],
+ "prepared_sha256": "2ced666ca77f564a40ae0a40baf707db6f913ee063e3df291baf2a0844dc9bd6",
+ "row_indices": [
+  0,
+  20000,
+  39999
+ ],
+ "rows": [
+  {
+   "abs_delta_jax": 0.0,
+   "abs_delta_numpy": 6.684786058031023e-11,
+   "lnlike_jax": -1339.261893556351,
+   "lnlike_numpy": -1339.2618935564178,
+   "lnlike_stored": -1339.261893556351,
+   "numpy_raised": false,
+   "row": 0,
+   "theta": [
+    15767.999894742039,
+    -0.2081848717473328,
+    8.807748744469102e-05,
+    -48.684692183561864,
+    0.29849910862649115,
+    0.7002452153540901,
+    0.4999481508465604,
+    0.0001797735627788516,
+    -0.0852065039299861,
+    0.12719824180753522
+   ]
+  },
+  {
+   "abs_delta_jax": 0.0,
+   "abs_delta_numpy": 1.532498572487384e-10,
+   "lnlike_jax": -1342.3375800090066,
+   "lnlike_numpy": -1342.3375800088534,
+   "lnlike_stored": -1342.3375800090066,
+   "numpy_raised": false,
+   "row": 20000,
+   "theta": [
+    15767.954125142784,
+    -0.06666802603083644,
+    6.228756846689576,
+    -48.79316734815727,
+    0.4182131428648052,
+    2.4876979369899335,
+    3.9079736407728713,
+    0.0010684204695256057,
+    -0.0585463350554828,
+    0.1751656568411518
+   ]
+  },
+  {
+   "abs_delta_jax": 0.0,
+   "abs_delta_numpy": 6.184563972055912e-11,
+   "lnlike_jax": -1339.205632599159,
+   "lnlike_numpy": -1339.2056325992207,
+   "lnlike_stored": -1339.205632599159,
+   "numpy_raised": false,
+   "row": 39999,
+   "theta": [
+    15767.952869032913,
+    -0.25080977087661344,
+    6.271434288816259,
+    -48.65961857695553,
+    0.31048820528088406,
+    0.798693994681831,
+    0.4590573492704635,
+    4.3250404165150126e-05,
+    -0.10681562096885532,
+    0.17538696512222657
+   ]
+  }
+ ],
+ "rows_total": 40000,
+ "run": "whittle_raw_flow_seed3007",
+ "schema": 1,
+ "tier": "fast",
+ "width": 14
+}

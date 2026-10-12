@@ -1,0 +1,52 @@
+{
+ "case": "gb_6mo",
+ "n_runs": 15,
+ "schema": 1,
+ "targets": {
+  "band_cut": [
+   "band_cut_flow_seed3007"
+  ],
+  "band_exact": [
+   "band_exact_flow_seed3001"
+  ],
+  "band_pad": [
+   "band_pad_flow_seed3007"
+  ],
+  "band_raw": [
+   "band_raw_flow_seed3001"
+  ],
+  "exact": [
+   "exact_flow_seed3007"
+  ],
+  "mid_cut": [
+   "mid_cut_flow_seed3007"
+  ],
+  "mid_exact": [
+   "mid_exact_flow_seed3007"
+  ],
+  "mid_pad": [
+   "mid_pad_flow_seed3007"
+  ],
+  "mid_raw": [
+   "mid_raw_flow_seed3007"
+  ],
+  "tri_cut": [
+   "tri_cut_flow_seed3007"
+  ],
+  "tri_exact": [
+   "tri_exact_flow_seed3007"
+  ],
+  "tri_pad": [
+   "tri_pad_flow_seed3007"
+  ],
+  "tri_raw": [
+   "tri_raw_flow_seed3001"
+  ],
+  "whittle_cut": [
+   "whittle_cut_flow_seed3007"
+  ],
+  "whittle_raw": [
+   "whittle_raw_flow_seed3007"
+  ]
+ }
+}

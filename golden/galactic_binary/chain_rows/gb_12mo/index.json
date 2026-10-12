@@ -1,0 +1,31 @@
+{
+ "case": "gb_12mo",
+ "n_runs": 8,
+ "schema": 1,
+ "targets": {
+  "band_pad": [
+   "band_pad_flow_seed3005"
+  ],
+  "band_raw": [
+   "band_raw_flow_seed3007"
+  ],
+  "exact": [
+   "exact_flow_seed3001"
+  ],
+  "mid_pad": [
+   "mid_pad_flow_seed3007"
+  ],
+  "mid_raw": [
+   "mid_raw_flow_seed3007"
+  ],
+  "tri_pad": [
+   "tri_pad_flow_seed3007"
+  ],
+  "tri_raw": [
+   "tri_raw_flow_seed3001"
+  ],
+  "whittle_raw": [
+   "whittle_raw_flow_seed3007"
+  ]
+ }
+}

@@ -1,0 +1,72 @@
+{
+ "case": "gb_3mo",
+ "n_runs": 35,
+ "schema": 1,
+ "targets": {
+  "band_cut": [
+   "band_cut_flow_seed3008"
+  ],
+  "band_exact": [
+   "band_exact_flow_seed3008"
+  ],
+  "band_pad": [
+   "band_pad_flow_seed3008"
+  ],
+  "band_raw": [
+   "band_raw_flow_seed3008"
+  ],
+  "exact": [
+   "exact_flow_seed3009",
+   "exact_flow_seed3010",
+   "exact_flow_seed3011",
+   "exact_flow_seed3012",
+   "exact_flow_seed3013"
+  ],
+  "mid_cut": [
+   "mid_cut_flow_seed3008"
+  ],
+  "mid_exact": [
+   "mid_exact_flow_seed3008"
+  ],
+  "mid_pad": [
+   "mid_pad_flow_seed3008"
+  ],
+  "mid_raw": [
+   "mid_raw_flow_seed3008"
+  ],
+  "tri_cut": [
+   "tri_cut_flow_seed3009",
+   "tri_cut_flow_seed3010",
+   "tri_cut_flow_seed3011",
+   "tri_cut_flow_seed3012",
+   "tri_cut_flow_seed3013"
+  ],
+  "tri_exact": [
+   "tri_exact_flow_seed3009",
+   "tri_exact_flow_seed3010",
+   "tri_exact_flow_seed3011",
+   "tri_exact_flow_seed3012",
+   "tri_exact_flow_seed3013"
+  ],
+  "tri_pad": [
+   "tri_pad_flow_seed3009",
+   "tri_pad_flow_seed3010",
+   "tri_pad_flow_seed3011",
+   "tri_pad_flow_seed3012",
+   "tri_pad_flow_seed3013"
+  ],
+  "tri_raw": [
+   "tri_raw_flow_seed3009",
+   "tri_raw_flow_seed3010",
+   "tri_raw_flow_seed3011",
+   "tri_raw_flow_seed3012",
+   "tri_raw_flow_seed3013"
+  ],
+  "whittle_cut": [
+   "whittle_cut_flow_seed3007"
+  ],
+  "whittle_raw": [
+   "whittle_raw_flow_seed3007"
+  ]
+ }
+}

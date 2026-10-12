@@ -1,0 +1,160 @@
+{
+ "backends": [
+  "numpy",
+  "jax"
+ ],
+ "build": {
+  "gbonfly": "0.1.0",
+  "jax": "0.9.0.1",
+  "jaxlib": "0.9.0.1",
+  "machine": "arm64",
+  "numpy": "2.3.5",
+  "platform": "macOS-14.3.1-arm64-arm-64bit",
+  "python": "3.12.4",
+  "scipy": "1.16.3",
+  "threads": {
+   "JAX_ENABLE_X64": "true",
+   "JAX_PLATFORMS": "cpu",
+   "MKL_NUM_THREADS": null,
+   "OMP_NUM_THREADS": null,
+   "OPENBLAS_NUM_THREADS": null,
+   "VECLIB_MAXIMUM_THREADS": null,
+   "XLA_FLAGS": null
+  }
+ },
+ "case": "gb_6mo",
+ "chain_file": {
+  "bytes": 14080000,
+  "path": "wdm_paper_2/final_chains/gb_likelihood_matrix/chains/gb_6mo/mid_cut_flow_seed3007/chain_0.bin"
+ },
+ "evaluators": {
+  "jax": "gpu.jax_models.build(Prepared(path), model)  (CPU, x64)",
+  "numpy": "likelihoods.make_lnlike(Prepared(path), model, numpy_backend())"
+ },
+ "jax_counters": null,
+ "lnlike_column": 18,
+ "max_abs_delta_jax": 0.0,
+ "max_abs_delta_numpy": 7.639755494892597e-11,
+ "model": "mid_cut",
+ "ndim": 18,
+ "parameter_names": [
+  "f0T",
+  "cos_colat",
+  "lon",
+  "lnA",
+  "cos_iota",
+  "psi",
+  "phi0",
+  "fdotT2",
+  "logg_mean_A",
+  "ann_c_A",
+  "ann_s_A",
+  "semi_c_A",
+  "semi_s_A",
+  "logg_mean_E",
+  "ann_c_E",
+  "ann_s_E",
+  "semi_c_E",
+  "semi_s_E"
+ ],
+ "prepared_sha256": "2ced666ca77f564a40ae0a40baf707db6f913ee063e3df291baf2a0844dc9bd6",
+ "row_indices": [
+  0,
+  40000,
+  79999
+ ],
+ "rows": [
+  {
+   "abs_delta_jax": 0.0,
+   "abs_delta_numpy": 7.639755494892597e-11,
+   "lnlike_jax": -2709.4826928090743,
+   "lnlike_numpy": -2709.4826928091506,
+   "lnlike_stored": -2709.4826928090743,
+   "numpy_raised": false,
+   "row": 0,
+   "theta": [
+    15767.999894742039,
+    -0.2081848717473328,
+    8.807748744469102e-05,
+    -48.684692183561864,
+    0.29849910862649115,
+    0.7002452153540901,
+    0.4999481508465604,
+    0.0001797735627788516,
+    -0.1633681355062811,
+    -0.2516109690324617,
+    0.34635448564494586,
+    0.007438471679190398,
+    0.05465429557864058,
+    0.030528148107392617,
+    -0.30860743520158423,
+    0.31856034580364095,
+    -0.13891524181911583,
+    -0.017570228742674807
+   ]
+  },
+  {
+   "abs_delta_jax": 0.0,
+   "abs_delta_numpy": 1.0459189070388675e-11,
+   "lnlike_jax": -2714.7516390010546,
+   "lnlike_numpy": -2714.751639001044,
+   "lnlike_stored": -2714.7516390010546,
+   "numpy_raised": false,
+   "row": 40000,
+   "theta": [
+    15767.936959564793,
+    -0.1115847963260206,
+    6.166102332254901,
+    -48.810717996419754,
+    0.3839482072657459,
+    0.8927611265991753,
+    0.6236819676068204,
+    0.00039089955783628227,
+    -0.2071136919156954,
+    -0.26923452902695516,
+    0.4083973745084274,
+    0.042785004756672095,
+    0.05909888519705382,
+    0.09967479334928613,
+    -0.3161979822272992,
+    0.31273695379253685,
+    -0.20883209107801687,
+    -0.012093708491752921
+   ]
+  },
+  {
+   "abs_delta_jax": 0.0,
+   "abs_delta_numpy": 5.4569682106375694e-12,
+   "lnlike_jax": -2716.9007189379654,
+   "lnlike_numpy": -2716.900718937971,
+   "lnlike_stored": -2716.9007189379654,
+   "numpy_raised": false,
+   "row": 79999,
+   "theta": [
+    15767.908382250014,
+    -0.3432066359636159,
+    6.195801829065337,
+    -48.545921772786215,
+    0.23349890474631677,
+    0.8302898483723227,
+    0.3275878045365088,
+    0.0013542887481955714,
+    -0.20107162195774234,
+    -0.1855375035637175,
+    0.36333482882055407,
+    0.015227422698784299,
+    0.055829696688415004,
+    0.15031939721727441,
+    -0.30321518808053266,
+    0.34925006136343084,
+    -0.12324453028748594,
+    0.0987453026744817
+   ]
+  }
+ ],
+ "rows_total": 80000,
+ "run": "mid_cut_flow_seed3007",
+ "schema": 1,
+ "tier": "fast",
+ "width": 22
+}
