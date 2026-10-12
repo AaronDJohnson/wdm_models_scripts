@@ -63,3 +63,10 @@ def evaluate(lineage: str, toy: str, case: str, model: str, theta, *, wrap_phase
     """lnL of ``model`` at the rows of ``theta`` in ``lineage`` (one subprocess)."""
     results, _ = evaluate_jobs(lineage, toy, [Job("query", case, model, np.atleast_2d(theta), wrap_phase)])
     return results["query"]["lnlike"]
+
+
+# --- galactic binary, lineage C (Task B12) --------------------------------------------------
+from scripts.golden.paths import ROOT  # noqa: E402
+
+WORKERS[("C", "galactic_binary")] = "gb_legacy"
+WORKER_ARGS["galactic_binary"] = lambda: ["--workspace", str(ROOT), "--data-dir", str(DATA)]
