@@ -66,22 +66,31 @@ def test_inputs_are_not_mutated(rng):
     assert np.array_equal(w, w0)
 
 
+def _on_device(out):
+    """``out`` as a host array, after checking it really came back as a ``jax.Array``
+    (an eager NumPy fallback would otherwise pass every parity check)."""
+    import jax
+
+    assert isinstance(out, jax.Array), type(out)
+    return np.asarray(out)
+
+
 @pytest.mark.parametrize("grid", [(4, 8, 1.0), (8, 16, 0.5), (16, 32, 2.0**-10), (64, 256, 2.0**-10)])
 def test_jax_matches_numpy(grid, jax_be, rng):
     Nf, Nt, dt = grid
     N = Nf * Nt
     X = rng.standard_normal((3, N))
     W_np = T.forward_time_many(X, Nf, Nt, dt)
-    W_jx = np.asarray(T.forward_time_many(jax_be.asarray(X), Nf, Nt, dt))
+    W_jx = _on_device(T.forward_time_many(jax_be.asarray(X), Nf, Nt, dt))
     assert np.max(np.abs(W_jx - W_np)) <= 1e-13 * np.max(np.abs(W_np))
     w_np = T.forward_time(X[0], Nf, Nt, dt)
-    w_jx = np.asarray(T.forward_time(jax_be.asarray(X[0]), Nf, Nt, dt))
+    w_jx = _on_device(T.forward_time(jax_be.asarray(X[0]), Nf, Nt, dt))
     assert np.max(np.abs(w_jx - w_np)) <= 1e-13 * np.max(np.abs(w_np))
     x_np = T.inverse_time_many(W_np, Nf, Nt, dt)
-    x_jx = np.asarray(T.inverse_time_many(jax_be.asarray(W_np), Nf, Nt, dt))
+    x_jx = _on_device(T.inverse_time_many(jax_be.asarray(W_np), Nf, Nt, dt))
     assert np.max(np.abs(x_jx - x_np)) <= 1e-13 * np.max(np.abs(x_np))
     r_np = T.inverse(W_np[0], Nf, Nt, dt)
-    r_jx = np.asarray(T.inverse(jax_be.asarray(W_np[0]), Nf, Nt, dt))
+    r_jx = _on_device(T.inverse(jax_be.asarray(W_np[0]), Nf, Nt, dt))
     assert np.max(np.abs(r_jx - r_np)) <= 1e-13 * np.max(np.abs(r_np))
 
 
@@ -93,10 +102,10 @@ def test_jax_jit_and_vmap(jax_be, rng):
     fwd = jax.jit(lambda x: T.forward_time(x, Nf, Nt, dt))
     batched = jax.vmap(fwd)(jax_be.asarray(X))
     ref = T.forward_time_many(X, Nf, Nt, dt)
-    assert np.max(np.abs(np.asarray(batched) - ref)) <= 1e-13 * np.max(np.abs(ref))
+    assert np.max(np.abs(_on_device(batched) - ref)) <= 1e-13 * np.max(np.abs(ref))
     inv = jax.jit(lambda w: T.inverse_time(w, Nf, Nt, dt))
     back = jax.vmap(inv)(batched)
-    assert np.max(np.abs(np.asarray(back) - X)) <= 1e-12
+    assert np.max(np.abs(_on_device(back) - X)) <= 1e-12
 
 
 def test_jax_rejects_nonfinite_concrete_input(jax_be):

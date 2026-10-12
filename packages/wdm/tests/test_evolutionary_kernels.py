@@ -215,6 +215,8 @@ def test_bessel_blocks_are_bitwise_the_wt_toy(tmp_path):
 
 
 def test_eq45_kernels_on_jax(jax_be):
+    import jax
+
     ac, ad = -2.0, 1.2
     plan = E.eq45_plan(NF, NT, DT)
     L = _L(plan.f)
@@ -223,12 +225,14 @@ def test_eq45_kernels_on_jax(jax_be):
         plan, lambda k: E.eq45_coeffs_bessel(jax_be.asarray(L[k]), ac, ad, 24), be=jax_be)
     scale = max(np.abs(b).max() for b in diag)
     for a, b in zip(diag + up, jd + ju, strict=True):
+        assert isinstance(b, jax.Array), type(b)      # no eager NumPy fallback
         assert np.max(np.abs(np.asarray(b) - a)) <= 1e-13 * scale
     gp = E.eq45_gram_plan(plan)
     al = ac + ad * (gp.gT / (N * DT) - 0.5)
     gL = E.eq45_gram_gather(gp, L)
     nd, nu = E.eq45_blocks_gram(gp, al, gL)
     xd, xu = E.eq45_blocks_gram(gp, jax_be.asarray(al), jax_be.asarray(gL))
+    assert isinstance(xd, jax.Array) and isinstance(xu, jax.Array), (type(xd), type(xu))
     assert np.max(np.abs(np.asarray(xd) - nd)) <= 1e-13 * scale
     assert np.max(np.abs(np.asarray(xu) - nu)) <= 1e-13 * scale
 
@@ -249,6 +253,7 @@ def test_separable_kernels_and_assembly(backend, rng):
     ref = KI + g_half[half] * KG
     got = E.eq45_separable_assemble(backend.asarray(KI), backend.asarray(KG),
                                     backend.asarray(g_half), half, be=backend)
+    assert type(got) is type(backend.asarray(ref))      # the backend's array type
     assert np.max(np.abs(np.asarray(got) - ref)) <= 1e-15 * np.abs(ref).max()
 
 
@@ -256,7 +261,9 @@ def test_separable_kernels_and_assembly(backend, rng):
 
 def test_special(backend, rng):
     a = rng.uniform(-3.2, 3.2, 40)
-    got = np.asarray(special.bessel_i(24, backend.asarray(a), be=backend))
+    got = special.bessel_i(24, backend.asarray(a), be=backend)
+    assert type(got) is type(backend.asarray(a))      # the backend's array type
+    got = np.asarray(got)
     from scipy.special import ive
     ref = ive(np.arange(24)[:, None], a[None, :]) * np.exp(np.abs(a))[None, :]
     assert np.max(np.abs(got - ref) / np.abs(ref)) <= 1e-13

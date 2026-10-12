@@ -139,12 +139,20 @@ def test_psd_round_trips(grid):
     assert np.max(np.abs(stat.psd_from_lambda_blocks(d, o, n, Nf, Nt, dt) / S - 1)) < 1e-12
 
 
+def _on_device(out):
+    """``out`` on the host, after checking it came back as a ``jax.Array``."""
+    import jax
+
+    assert isinstance(out, jax.Array), type(out)      # no eager NumPy fallback
+    return np.asarray(out)
+
+
 def test_apply_lambda_from_psd_on_jax(jax_be, rng):
     Nf, Nt, dt = 8, 16, 0.5
     S = _psd(np.fft.rfftfreq(Nf * Nt, d=dt))
     x = rng.standard_normal((Nf + 1, Nt))
     ref = stat.apply_lambda_from_psd(x, Nf, Nt, dt, S)
-    got = np.asarray(stat.apply_lambda_from_psd(jax_be.asarray(x), Nf, Nt, dt, jax_be.asarray(S)))
+    got = _on_device(stat.apply_lambda_from_psd(jax_be.asarray(x), Nf, Nt, dt, jax_be.asarray(S)))
     assert np.max(np.abs(got - ref)) <= 1e-13 * np.max(np.abs(ref))
 
 
@@ -162,8 +170,8 @@ def test_apply_lambda_from_psd_under_jit(jax_be, rng):
     x = rng.standard_normal((Nf + 1, Nt))
     ref = stat.apply_lambda_from_psd(x, Nf, Nt, dt, S)
     xj, Sj = jax_be.asarray(x), jax_be.asarray(S)
-    eager = np.asarray(stat.apply_lambda_from_psd(xj, Nf, Nt, dt, Sj))
-    got = np.asarray(_jit_apply(Nf, Nt, dt)(xj, Sj))
+    eager = _on_device(stat.apply_lambda_from_psd(xj, Nf, Nt, dt, Sj))
+    got = _on_device(_jit_apply(Nf, Nt, dt)(xj, Sj))
     assert np.max(np.abs(got - eager)) <= 1e-13 * np.max(np.abs(eager))
     assert np.max(np.abs(got - ref)) <= 1e-13 * np.max(np.abs(ref))
 
@@ -181,8 +189,8 @@ def test_apply_lambda_from_psd_inf_psd_under_jit(jax_be, rng):
     ref = stat.apply_lambda_from_psd(x, Nf, Nt, dt, S)
     assert np.all(np.isfinite(ref))
     xj, Sj = jax_be.asarray(x), jax_be.asarray(S)
-    eager = np.asarray(stat.apply_lambda_from_psd(xj, Nf, Nt, dt, Sj))
-    got = np.asarray(_jit_apply(Nf, Nt, dt)(xj, Sj))
+    eager = _on_device(stat.apply_lambda_from_psd(xj, Nf, Nt, dt, Sj))
+    got = _on_device(_jit_apply(Nf, Nt, dt)(xj, Sj))
     assert np.all(np.isfinite(got)), f"{np.count_nonzero(~np.isfinite(got))} non-finite"
     assert np.max(np.abs(got - ref)) <= 1e-13 * np.max(np.abs(ref))
     assert np.max(np.abs(got - eager)) <= 1e-13 * np.max(np.abs(eager))

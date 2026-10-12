@@ -68,11 +68,17 @@ def test_pack_unpack_round_trip_and_active_W_order(rng):
 
 
 def test_pack_unpack_on_jax(jax_be, rng):
+    import jax
+
     Nf, Nt = 8, 16
     w = rng.standard_normal((2, Nf + 1, Nt))
-    assert np.array_equal(np.asarray(pack(jax_be.asarray(w), Nf, Nt)), pack(w, Nf, Nt))
+    packed = pack(jax_be.asarray(w), Nf, Nt)
+    assert isinstance(packed, jax.Array), type(packed)      # no eager NumPy fallback
+    assert np.array_equal(np.asarray(packed), pack(w, Nf, Nt))
     y = pack(w, Nf, Nt)
-    assert np.array_equal(np.asarray(unpack(jax_be.asarray(y), Nf, Nt)), unpack(y, Nf, Nt))
+    unpacked = unpack(jax_be.asarray(y), Nf, Nt)
+    assert isinstance(unpacked, jax.Array), type(unpacked)
+    assert np.array_equal(np.asarray(unpacked), unpack(y, Nf, Nt))
 
 
 def test_edge_columns_and_endpoint_weights():
@@ -224,9 +230,11 @@ def test_band_analysis_checks_are_skipped_under_jit(jax_be, rng):
     w = rng.standard_normal((bands.size, Nt))
     fwd = jax.jit(lambda z: forward_bands(z, 0, bands, Nf, Nt, dt))
     inv = jax.jit(lambda w: inverse_bands(w, 0, 40, bands, Nf, Nt, dt))
-    assert np.allclose(np.asarray(fwd(jax_be.asarray(z))),
+    cells, bins = fwd(jax_be.asarray(z)), inv(jax_be.asarray(w))
+    assert isinstance(cells, jax.Array) and isinstance(bins, jax.Array)
+    assert np.allclose(np.asarray(cells),
                        forward_bands(z, 0, bands, Nf, Nt, dt), rtol=0, atol=1e-12)
-    assert np.allclose(np.asarray(inv(jax_be.asarray(w))),
+    assert np.allclose(np.asarray(bins),
                        inverse_bands(w, 0, 40, bands, Nf, Nt, dt), rtol=0, atol=1e-12)
 
 

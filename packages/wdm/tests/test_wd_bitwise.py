@@ -30,6 +30,10 @@ def test_wd_bitwise(case):
 
 @pytest.mark.parametrize("case", CASES)
 def test_wd_jax(case, jax_be):
+    import jax
+
     z = _load(case)
-    w = np.asarray(wdm.forward_time(jax_be.asarray(z["d"]), NF, NT, DT))
+    out = wdm.forward_time(jax_be.asarray(z["d"]), NF, NT, DT)
+    assert isinstance(out, jax.Array), type(out)      # no eager NumPy fallback
+    w = np.asarray(out)
     assert np.max(np.abs(w - z["w_d"])) <= 1e-13 * np.max(np.abs(z["w_d"]))
