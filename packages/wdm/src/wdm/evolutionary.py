@@ -327,7 +327,9 @@ def eq45_plan(Nf: int, Nt: int, dt: float, keep: BoolArray | None = None, *,
     eta = np.ones(K)
     eta[[0, -1]] = 0.5
     base = base_atom_spectra(Nf, Nt, dt)
-    keep = np.ones(m.size, bool) if keep is None else np.asarray(keep, bool)
+    keep = np.ones(m.size, bool) if keep is None else np.asarray(keep)
+    if keep.dtype != np.bool_:   # an index array (e.g. np.arange(N)) would silently drop cell 0
+        raise TypeError("keep must be a boolean mask over the packed cells")
     if keep.shape != (m.size,):
         raise ValueError(f"keep must be a mask over the {m.size} packed cells; got {keep.shape}")
     t_max = float(T if t_max is None else t_max)

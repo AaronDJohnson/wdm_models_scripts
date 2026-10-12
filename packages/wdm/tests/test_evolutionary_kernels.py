@@ -144,7 +144,16 @@ def test_eq45_is_exact_for_stationary_noise():
     assert np.max(np.abs(C - ref)) <= 1e-11 * np.abs(ref).max()
 
 
-@pytest.mark.parametrize("Nt_grid, keep_cols, r", [(NT, None, 1.0), (NT + 4, None, (NT + 4) / NT)])
+def test_eq45_plan_rejects_a_non_boolean_keep():
+    # np.arange(N) has the mask's shape: cast to bool it would silently drop cell 0
+    N = NF * NT
+    for keep in (np.arange(N), np.ones(N, int), list(range(N))):
+        with pytest.raises(TypeError, match="boolean mask"):
+            E.eq45_plan(NF, NT, DT, keep)
+    assert E.eq45_plan(NF, NT, DT, [True] * N).cells.size == N
+
+
+@pytest.mark.parametrize("Nt_grid, keep_cols, r",[(NT, None, 1.0), (NT + 4, None, (NT + 4) / NT)])
 def test_bessel_blocks_match_the_direct_sum_and_gram(Nt_grid, keep_cols, r):
     """bessel (exact Chebyshev) vs direct sum vs gram, log-linear S, both <= 1e-12."""
     ac, ad = -2.0, 1.2
