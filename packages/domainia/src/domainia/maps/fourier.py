@@ -9,6 +9,7 @@ Ported from ``toy_models/galactic_binary/matrix.py`` (frozen): ``_geometric``,
 
 from __future__ import annotations
 
+import operator
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -65,9 +66,22 @@ def crop_maps(N: int, start: int, Nc: int, k_out, j_in):
     return out[0], out[1]
 
 
+class _WidelyLinear(LinearMap):
+    """``z -> scale (A z + B conj z)`` (kind ``"widely"``): there is no complex matrix
+    ``M`` with ``M z`` equal to it, so :meth:`rows` (and :meth:`LinearMap.dense`) refuse
+    instead of returning ``conj(A^H e + B^T e)``; read ``.A``, ``.B`` (and ``.scale``).
+    ``push`` raises in :class:`LinearMap`."""
+
+    kind = "widely"
+
+    def rows(self, idx):
+        raise TypeError(f"{type(self).__name__} is widely linear (A z + B conj z): it has no "
+                        "complex row matrix; use its .A, .B and .scale")
+
+
 @pytree_dataclass(data=("A", "B"), meta=("src", "dst", "scale"))
 @dataclass(frozen=True, eq=False)
-class FourierZeroPad(LinearMap):
+class FourierZeroPad(_WidelyLinear):
     """Bins ``dst`` of the record zero-padded from ``src.N`` to ``dst.N`` samples, from the
     bins ``src``: ``z' = scale (A z + B conj z)``, ``scale = sqrt(N / N')`` (kind
     ``"widely"``).  ``A, B`` are :func:`pad_maps`; ``scale`` keeps the padded record's
@@ -78,8 +92,6 @@ class FourierZeroPad(LinearMap):
     A: Any = field(default=_BUILD, kw_only=True)
     B: Any = field(default=_BUILD, kw_only=True)
     scale: float = field(default=_BUILD, kw_only=True)
-
-    kind = "widely"
 
     def __post_init__(self) -> None:
         if self.A is _BUILD:
@@ -104,7 +116,7 @@ class FourierZeroPad(LinearMap):
 
 @pytree_dataclass(data=("A", "B"), meta=("src", "dst", "start"))
 @dataclass(frozen=True, eq=False)
-class FourierCrop(LinearMap):
+class FourierCrop(_WidelyLinear):
     """Bins ``dst`` of the record cropped to samples ``[start, start + dst.N)``, from the
     bins ``src``: ``z^c = A z + B conj z`` (:func:`crop_maps`; GB ``whittle_map`` and
     ``mask_rows``).  ``apply`` is the template call site ``(h @ A.T) + (conj(h) @ B.T)``
@@ -116,10 +128,10 @@ class FourierCrop(LinearMap):
     A: Any = field(default=_BUILD, kw_only=True)
     B: Any = field(default=_BUILD, kw_only=True)
 
-    kind = "widely"
     scale = 1.0
 
     def __post_init__(self) -> None:
+        object.__setattr__(self, "start", operator.index(self.start))
         if self.A is _BUILD:
             s, d = self.src, self.dst
             if not (0 <= self.start and self.start + d.N <= s.N) or d.dt != s.dt or d.units != s.units:

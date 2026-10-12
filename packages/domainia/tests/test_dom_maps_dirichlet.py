@@ -87,6 +87,15 @@ def test_widely_linear_adjoint_and_no_push(cls):
     assert abs(lhs - np.real(np.vdot(M.adjoint(y), z))) <= 1e-12 * abs(lhs)
     with pytest.raises(TypeError, match="widely linear"):
         M.push(DenseCov(np.eye(41)))
+    # no complex row matrix exists (rows of the adjoint would be A[k] + conj(B[k])): refuse
+    with pytest.raises(TypeError, match="widely linear"):
+        M.rows([0])
+    with pytest.raises(TypeError, match="widely linear"):
+        M.dense()
+    if cls == "crop":           # start is a sample index (CropTime's operator.index rule)
+        assert type(FourierCrop(SRC, M.dst, np.int64(24)).start) is int
+        with pytest.raises(TypeError):
+            FourierCrop(SRC, M.dst, 24.0)
 
 
 def test_gb_whittle_cut_data_and_template_sites_agree():
