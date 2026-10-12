@@ -393,6 +393,12 @@ def _require_complete(f: Any) -> None:
                          "and map the row to -inf")
 
 
+def _check_impl(impl: str) -> None:
+    """The ``impl`` check of ``Backend.cholesky``, made before any failed-base shortcut."""
+    if impl not in ("numpy", "scipy"):
+        raise ValueError(f"impl must be 'numpy' or 'scipy'; got {impl!r}")
+
+
 def _factor_arrays(f: BlockTriFactor) -> tuple[Any, ...]:
     """The factor's arrays, for picking the backend when ``b`` is a host array."""
     return tuple(f.Ls) if f.layout == "ragged" else (f.Ls,)
@@ -616,8 +622,14 @@ def schur_factor(base: Any, A_ee: Any, B_ei: Any, *, e: Any, i: Any, form: Schur
       ``S = A - W B^T``;
 
     ``Ls = chol(0.5 (S + S^T))`` with ``impl`` (``"scipy"`` WT, ``"numpy"`` GB) and
-    ``logdet = base.logdet + 2 sum log diag Ls``.
+    ``logdet = base.logdet + 2 sum log diag Ls``.  ``form``, ``impl`` and the base type
+    are checked first, also when the base failed.
     """
+    if form not in ("solve", "scaled"):
+        raise ValueError(f"form must be 'solve' or 'scaled'; got {form!r}")
+    if form == "scaled" and not isinstance(base, DiagFactor):
+        raise TypeError("form='scaled' needs a DiagFactor interior")
+    _check_impl(impl)
     be = _be(be, A_ee, B_ei)
     xp = be.xp
     A_ee, B_ei = be.asarray(A_ee), be.asarray(B_ei)
@@ -628,13 +640,9 @@ def schur_factor(base: Any, A_ee: Any, B_ei: Any, *, e: Any, i: Any, form: Schur
     if form == "solve":
         W = factor_solve(base, B_ei.T, be=be)
         Sc = A - B_ei @ W
-    elif form == "scaled":
-        if not isinstance(base, DiagFactor):
-            raise TypeError("form='scaled' needs a DiagFactor interior")
+    else:
         W = B_ei / base.v[None, :]
         Sc = A - W @ B_ei.T
-    else:
-        raise ValueError(f"form must be 'solve' or 'scaled'; got {form!r}")
     Ls, ok = be.cholesky(0.5 * (Sc + Sc.T), impl=impl)
     logdet = base.logdet + 2.0 * xp.sum(xp.log(xp.diagonal(Ls)))
     return SchurFactor(base, B_ei, W, Ls, logdet, base.ok & ok, be.asarray(e), be.asarray(i),
@@ -705,7 +713,9 @@ def padded_factor(lam: Any, Wp: Any, *, n_ext: int, dt: float, impl: CholImpl,
     """WT ``PaddedMarginal.__init__`` + ``logdet`` (matrix.py:631-635, 649-651; ``impl="scipy"``) and the
     WG ``_factor`` pad branch (matrix.py:578-583): ``LiWp = Lambda^-1 W_p``,
     ``Q = W_p^T LiWp``, ``Lq = chol(0.5 (Q + Q^T))``.  ``n_ext`` is the extended record's
-    sample count ``N'`` (17408 for the sinusoid)."""
+    sample count ``N'`` (17408 for the sinusoid).  ``impl`` is checked first, also when
+    the base failed."""
+    _check_impl(impl)
     be = _be(be, Wp)
     xp = be.xp
     Wp = be.asarray(Wp)

@@ -274,6 +274,16 @@ def test_schur_failures(hybrid):
     with pytest.raises(TypeError, match="DiagFactor"):
         la.schur_factor(base, R[:, h["e"]], R[:, h["i"]], e=h["e"], i=h["i"], form="scaled",
                         impl="numpy")
+    # the arguments are checked before the failed-base shortcut (fail closed)
+    with pytest.raises(TypeError, match="DiagFactor"):
+        la.schur_factor(bad, R[:, h["e"]], R[:, h["i"]], e=h["e"], i=h["i"], form="scaled",
+                        impl="numpy")
+    with pytest.raises(ValueError, match="form must be"):
+        la.schur_factor(bad, R[:, h["e"]], R[:, h["i"]], e=h["e"], i=h["i"], form="dense",
+                        impl="scipy")
+    with pytest.raises(ValueError, match="impl must be"):
+        la.schur_factor(bad, R[:, h["e"]], R[:, h["i"]], e=h["e"], i=h["i"], form="solve",
+                        impl="lapack")
 
 
 # -- padded marginal --------------------------------------------------------------------
@@ -341,6 +351,8 @@ def test_padded_with_a_diagonal_base_and_failures(padded, rng):
     assert g.ok is False and g.Lq is None
     with pytest.raises(ValueError, match="positive definite"):
         la.padded_solve(g, np.ones(NP))
+    with pytest.raises(ValueError, match="impl must be"):
+        la.padded_factor(bad, p["Wp"], n_ext=NP, dt=DT, impl="lapack")
 
 
 def test_factor_solve_dispatches_on_the_factor_type(rng):
