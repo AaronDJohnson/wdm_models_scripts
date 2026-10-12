@@ -90,7 +90,7 @@ Filter (in :mod:`wdm.filter`):
 
 from __future__ import annotations
 
-from . import evolutionary, filter, inner_product, matrix, noise, stationary
+from . import backend, evolutionary, filter, inner_product, matrix, noise, stationary
 from .filter import phi_centered, phi_fft_order
 from .grid import (
     Grid,
@@ -138,6 +138,7 @@ __all__ = [
     "__version__",
     "__wdm_api__",
     "active_mask",
+    "backend",
     "band_averaged_variance",
     "band_frequencies",
     "count_active",
