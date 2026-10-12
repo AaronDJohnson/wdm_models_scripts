@@ -81,10 +81,15 @@ def test_stress_fast_tier(case, model):
 
 
 @pytest.mark.parametrize("case", ["gb_3mo", "gb_6mo"])
-@pytest.mark.parametrize("model", ["band_raw", "band_cut", "mid_raw", "mid_cut"])
+@pytest.mark.parametrize("model", ["whittle_raw", "whittle_cut", "band_raw", "band_cut", "mid_raw",
+                                   "mid_cut"])
 def test_diagonal_targets_carry_the_pd_margin(case, model):
-    """Re-captured with the diagonal PD margin (review I2): every entry is > 0 at all 11 points, so
-    nothing is exempted as marginal (the +-8 corners were, under min/max|.|, at 8e-18..1e-11)."""
+    """Every target whose covariance is diagonal (``gbw_stress.Covariances.matrix`` kind 'diag':
+    Whittle raw/cut and the band/mid raw/cut WDM diagonals) is captured with the diagonal PD margin
+    (review I2): every entry is > 0 at all 11 points, so the margin is 1.0 and nothing is exempted
+    as marginal. Under the old min/max|.| the band/mid +-8 corners sat at 8e-18..1e-11 (falsely
+    marginal); the Whittle files stored a 0.94..0.99 conditioning ratio (never marginal under either
+    rule, but not the margin the worker now defines)."""
     pts = _load(case, model)["points"]
     assert all(p["pd_margin_channels"] == [1.0, 1.0] and p["pd_margin"] == 1.0 for p in pts)
     assert not any(p["marginal"] for p in pts)

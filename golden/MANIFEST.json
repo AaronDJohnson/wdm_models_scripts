@@ -147,8 +147,8 @@
   "galactic_binary/stress/gb_3mo/tri_exact.fast.json": "ab7771542bc13004bf6f8391a057f724ed6ed74b4c9a1c83c2c7916dc827b379",
   "galactic_binary/stress/gb_3mo/tri_pad.fast.json": "d4ca5837738a49f1670b7a23fca3a4e012a7186384fed045f86926670ebdd39e",
   "galactic_binary/stress/gb_3mo/tri_raw.fast.json": "0af98c2e123b1a68d649e38a03fe61dd85a17c4f81561691172d657a30288f43",
-  "galactic_binary/stress/gb_3mo/whittle_cut.fast.json": "db25c24ed3c23d8f0a0e720bf6d684b63bb8e867f8311ad42689703789398cd7",
-  "galactic_binary/stress/gb_3mo/whittle_raw.fast.json": "9ae8017f8a028ed0f980f542d52c5d510fddb448763f0b6b4d597eb5ec0f1d07",
+  "galactic_binary/stress/gb_3mo/whittle_cut.fast.json": "c060dd9b06d9d4c34424b0bc3688bca5bfaf973cefe330a72fea4380d9a283eb",
+  "galactic_binary/stress/gb_3mo/whittle_raw.fast.json": "afeafe40142c9bc5edcedee63a6226f10bc1700805e6d14f15e52aba91f7365d",
   "galactic_binary/stress/gb_6mo/band_cut.fast.json": "6cae7d170f55cab7a98bd9a1c53636d4219c0447d279f7507781953cf0031985",
   "galactic_binary/stress/gb_6mo/band_exact.fast.json": "57077747b7f2f82732f8da5863c2355f195cd2b6a974ed96ca76817f2a09018b",
   "galactic_binary/stress/gb_6mo/band_pad.fast.json": "6ed7d0192120b8f04ebc134f224be31f1c513811ba127ad9b343c64948c1eaa6",
@@ -162,8 +162,8 @@
   "galactic_binary/stress/gb_6mo/tri_exact.fast.json": "815637dcd467d260657d4cdea0f1c7ed72823018f3c482d156fd5aacaf3472e8",
   "galactic_binary/stress/gb_6mo/tri_pad.fast.json": "dc39d215dd66e98d3cf374c1687ead8132bd5bd82531ae2b0def29201fb3f040",
   "galactic_binary/stress/gb_6mo/tri_raw.fast.json": "50111cde2c5a70cfb995f9866f16ccbd61fa52678048821eb32f7af9fddd30ab",
-  "galactic_binary/stress/gb_6mo/whittle_cut.fast.json": "ce00b312cdbdf1761b523a2edbc79b119305903adf4aba39bde39ac3dbdb59cb",
-  "galactic_binary/stress/gb_6mo/whittle_raw.fast.json": "1b95653218eb36811440e6b9adf2af1e451bbc0f2844675453a0c5dd571d570d",
+  "galactic_binary/stress/gb_6mo/whittle_cut.fast.json": "8186ebe6164cd88d7d5eae86391700bf6165df0e96911422319d8db150a82509",
+  "galactic_binary/stress/gb_6mo/whittle_raw.fast.json": "ec926198ffa8a99b9a042d60abc9cb744c3fb44d63b4ec4c83e7476ca2c6c86c",
   "galactic_binary/tolerances_measured.json": "981bfd8d2f3ac8a9ba2f4c6e6d9bfa4b968e39f05a9a5fe5ff791f7f015c4fee",
   "sinusoid/chain_rows/INDEX.json": "8216fd4aeb0a229340da0e51f9255179c5b6ad36f4a71a5eebf68e45a2ef881a",
   "sinusoid/chain_rows/manuscript_high_band_cut.npz": "67d42255e92ceecb9a0713aeef2255e9a1a7f78c06a05c1e13cc8d5837b618b3",
@@ -3576,7 +3576,9 @@
     "--case",
     "gb_3mo",
     "--tier",
-    "fast"
+    "fast",
+    "--models",
+    "whittle_raw,whittle_cut"
    ],
    "build": {
     "gbonfly": "0.1.0",
@@ -3614,7 +3616,9 @@
     "--case",
     "gb_3mo",
     "--tier",
-    "fast"
+    "fast",
+    "--models",
+    "whittle_raw,whittle_cut"
    ],
    "build": {
     "gbonfly": "0.1.0",
@@ -4154,7 +4158,9 @@
     "--case",
     "gb_6mo",
     "--tier",
-    "fast"
+    "fast",
+    "--models",
+    "whittle_raw,whittle_cut"
    ],
    "build": {
     "gbonfly": "0.1.0",
@@ -4192,7 +4198,9 @@
     "--case",
     "gb_6mo",
     "--tier",
-    "fast"
+    "fast",
+    "--models",
+    "whittle_raw,whittle_cut"
    ],
    "build": {
     "gbonfly": "0.1.0",

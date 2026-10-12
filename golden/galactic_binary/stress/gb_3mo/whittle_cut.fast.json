@@ -38,10 +38,10 @@
    "marginal": false,
    "mask_consistent": true,
    "name": "anchor",
-   "pd_margin": 0.9464001638986487,
+   "pd_margin": 1.0,
    "pd_margin_channels": [
-    0.9466610962701759,
-    0.9464001638986487
+    1.0,
+    1.0
    ],
    "ref_raised": false,
    "source_out": false,
@@ -66,10 +66,10 @@
    "marginal": false,
    "mask_consistent": true,
    "name": "noise_hi",
-   "pd_margin": 0.9383458198458274,
+   "pd_margin": 1.0,
    "pd_margin_channels": [
-    0.9383458198458274,
-    0.9383458198458274
+    1.0,
+    1.0
    ],
    "ref_raised": false,
    "source_out": false,
@@ -94,10 +94,10 @@
    "marginal": false,
    "mask_consistent": true,
    "name": "noise_lo",
-   "pd_margin": 0.9890363964949664,
+   "pd_margin": 1.0,
    "pd_margin_channels": [
-    0.9890363964949664,
-    0.9890363964949664
+    1.0,
+    1.0
    ],
    "ref_raised": false,
    "source_out": false,
@@ -122,10 +122,10 @@
    "marginal": false,
    "mask_consistent": true,
    "name": "noise_mixed",
-   "pd_margin": 0.9383458198458274,
+   "pd_margin": 1.0,
    "pd_margin_channels": [
-    0.9383458198458274,
-    0.9890363964949664
+    1.0,
+    1.0
    ],
    "ref_raised": false,
    "source_out": false,
@@ -150,10 +150,10 @@
    "marginal": false,
    "mask_consistent": true,
    "name": "edge_A_hi",
-   "pd_margin": 0.9383458226604778,
+   "pd_margin": 1.0,
    "pd_margin_channels": [
-    0.9383458226604778,
-    0.9464001638986487
+    1.0,
+    1.0
    ],
    "ref_raised": false,
    "source_out": false,
@@ -178,10 +178,10 @@
    "marginal": false,
    "mask_consistent": true,
    "name": "edge_E_lo",
-   "pd_margin": 0.9466610962701759,
+   "pd_margin": 1.0,
    "pd_margin_channels": [
-    0.9466610962701759,
-    0.9890366036330801
+    1.0,
+    1.0
    ],
    "ref_raised": false,
    "source_out": false,
@@ -206,10 +206,10 @@
    "marginal": false,
    "mask_consistent": true,
    "name": "edge_cross",
-   "pd_margin": 0.9383458226604778,
+   "pd_margin": 1.0,
    "pd_margin_channels": [
-    0.9890366036330801,
-    0.9383458226604778
+    1.0,
+    1.0
    ],
    "ref_raised": false,
    "source_out": false,
@@ -234,10 +234,10 @@
    "marginal": false,
    "mask_consistent": true,
    "name": "level_up",
-   "pd_margin": 0.941529526496077,
+   "pd_margin": 1.0,
    "pd_margin_channels": [
-    0.9416407377934339,
-    0.941529526496077
+    1.0,
+    1.0
    ],
    "ref_raised": false,
    "source_out": false,
@@ -262,10 +262,10 @@
    "marginal": false,
    "mask_consistent": true,
    "name": "level_down",
-   "pd_margin": 0.9567513097957622,
+   "pd_margin": 1.0,
    "pd_margin_channels": [
-    0.9572498035861222,
-    0.9567513097957622
+    1.0,
+    1.0
    ],
    "ref_raised": false,
    "source_out": false,
@@ -290,10 +290,10 @@
    "marginal": false,
    "mask_consistent": true,
    "name": "source_out_lnA",
-   "pd_margin": 0.9464001638986487,
+   "pd_margin": 1.0,
    "pd_margin_channels": [
-    0.9466610962701759,
-    0.9464001638986487
+    1.0,
+    1.0
    ],
    "ref_raised": false,
    "source_out": true,
@@ -318,10 +318,10 @@
    "marginal": false,
    "mask_consistent": true,
    "name": "source_out_f0",
-   "pd_margin": 0.9464001638986487,
+   "pd_margin": 1.0,
    "pd_margin_channels": [
-    0.9466610962701759,
-    0.9464001638986487
+    1.0,
+    1.0
    ],
    "ref_raised": false,
    "source_out": true,
