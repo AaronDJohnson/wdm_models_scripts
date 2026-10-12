@@ -217,7 +217,10 @@
   "sinusoid/references/manuscript_mid_tri_raw_reference.npz": "13d86095d9fe8ea38204633ee054ede708bedbd7d3f7eb971a9600903493fbdc",
   "sinusoid/references/manuscript_mid_whittle_cut_reference.npz": "3a82077976544262b7ce38f22e6dcf2a8088818c40b99b64ffcbc9454f9d0e0b",
   "sinusoid/references/manuscript_mid_whittle_raw_reference.npz": "92a8de78a7907fc5878250f4b710dadbfb85543e3997ae5c45cbe3821ab56746",
-  "sinusoid/tolerances_measured.json": "8ce014c5c71807d6bdaa7cd7f691e8d16f8e43ba3ac1377b914032d89917b1bb"
+  "sinusoid/tolerances_measured.json": "8ce014c5c71807d6bdaa7cd7f691e8d16f8e43ba3ac1377b914032d89917b1bb",
+  "wdm/alg4_reference.json": "10ad9d8ec957410d35cb561b99688206d0b39649ee2e83d3134209fc3eb5ec89",
+  "wdm/alg4_reference.npz": "74ea5b700721691ef32f8b7ea03dc8e9a50b0d02f158c9661d06769bb4f6f7a9",
+  "wdm/paper_june_alg12.npz": "a8076126ce3c958ac6019e803af38f3a6b097b8b4e13839d8710f4b87425619a"
  },
  "provenance": {
   "galactic_binary/chain_rows/gb_12mo/band_pad_flow_seed3005.fast.json": {
@@ -3975,6 +3978,105 @@
    "lineage": "C",
    "subcommand": "stress",
    "worker": "gb_legacy"
+  },
+  "wdm/alg4_reference.json": {
+   "args": [
+    "--workspace",
+    "/Users/aaron/Documents/GitHub/wdm_test"
+   ],
+   "build": {
+    "machine": "arm64",
+    "numpy": "2.3.5",
+    "platform": "macOS-14.3.1-arm64-arm-64bit",
+    "python": "3.12.4",
+    "scipy": "1.16.3",
+    "threads": {
+     "JAX_ENABLE_X64": "true",
+     "JAX_PLATFORMS": "cpu",
+     "MKL_NUM_THREADS": null,
+     "OMP_NUM_THREADS": null,
+     "OPENBLAS_NUM_THREADS": null,
+     "VECLIB_MAXIMUM_THREADS": null,
+     "XLA_FLAGS": null
+    }
+   },
+   "inputs": {
+    "wdm/filter.py": "2bf466c79c980f460e813a1d472b9b0fa3231625111197af5494ab545b825ea8",
+    "wdm/paper_algorithms.py": "23a08a17cf6619c42d149955491ac642a822175db37fe8206918e40b405aa9ae",
+    "wdm/stationary.py": "93edc5e3be88061970ed6500588d5e2df080aa9fb93e2280731c461b4e3c1ecd",
+    "wdm/transform.py": "fedbaeba486b0def07b4d620292e0ab524c16c4e7cfbdc518ee42f864da3a8bb",
+    "wdm_paper_1/notes/inverse_psd_new_section.py": "c90ea4d4071154f92967448796ef2785b4df8d8d84fc4db6377788f7e4e989aa",
+    "wdm_paper_1/notes/psd_backward_offdiag.py": "19968b3b8370f5fd62dd448d8886bc597cebceda48a488b16e485e48b8cc774e"
+   },
+   "lineage": "D",
+   "subcommand": "alg4",
+   "worker": "paper1_june"
+  },
+  "wdm/alg4_reference.npz": {
+   "args": [
+    "--workspace",
+    "/Users/aaron/Documents/GitHub/wdm_test"
+   ],
+   "build": {
+    "machine": "arm64",
+    "numpy": "2.3.5",
+    "platform": "macOS-14.3.1-arm64-arm-64bit",
+    "python": "3.12.4",
+    "scipy": "1.16.3",
+    "threads": {
+     "JAX_ENABLE_X64": "true",
+     "JAX_PLATFORMS": "cpu",
+     "MKL_NUM_THREADS": null,
+     "OMP_NUM_THREADS": null,
+     "OPENBLAS_NUM_THREADS": null,
+     "VECLIB_MAXIMUM_THREADS": null,
+     "XLA_FLAGS": null
+    }
+   },
+   "inputs": {
+    "wdm/filter.py": "2bf466c79c980f460e813a1d472b9b0fa3231625111197af5494ab545b825ea8",
+    "wdm/paper_algorithms.py": "23a08a17cf6619c42d149955491ac642a822175db37fe8206918e40b405aa9ae",
+    "wdm/stationary.py": "93edc5e3be88061970ed6500588d5e2df080aa9fb93e2280731c461b4e3c1ecd",
+    "wdm/transform.py": "fedbaeba486b0def07b4d620292e0ab524c16c4e7cfbdc518ee42f864da3a8bb",
+    "wdm_paper_1/notes/inverse_psd_new_section.py": "c90ea4d4071154f92967448796ef2785b4df8d8d84fc4db6377788f7e4e989aa",
+    "wdm_paper_1/notes/psd_backward_offdiag.py": "19968b3b8370f5fd62dd448d8886bc597cebceda48a488b16e485e48b8cc774e"
+   },
+   "lineage": "D",
+   "subcommand": "alg4",
+   "worker": "paper1_june"
+  },
+  "wdm/paper_june_alg12.npz": {
+   "args": [
+    "--workspace",
+    "/Users/aaron/Documents/GitHub/wdm_test"
+   ],
+   "build": {
+    "machine": "arm64",
+    "numpy": "2.3.5",
+    "platform": "macOS-14.3.1-arm64-arm-64bit",
+    "python": "3.12.4",
+    "scipy": "1.16.3",
+    "threads": {
+     "JAX_ENABLE_X64": "true",
+     "JAX_PLATFORMS": "cpu",
+     "MKL_NUM_THREADS": null,
+     "OMP_NUM_THREADS": null,
+     "OPENBLAS_NUM_THREADS": null,
+     "VECLIB_MAXIMUM_THREADS": null,
+     "XLA_FLAGS": null
+    }
+   },
+   "inputs": {
+    "wdm/filter.py": "2bf466c79c980f460e813a1d472b9b0fa3231625111197af5494ab545b825ea8",
+    "wdm/paper_algorithms.py": "23a08a17cf6619c42d149955491ac642a822175db37fe8206918e40b405aa9ae",
+    "wdm/stationary.py": "93edc5e3be88061970ed6500588d5e2df080aa9fb93e2280731c461b4e3c1ecd",
+    "wdm/transform.py": "fedbaeba486b0def07b4d620292e0ab524c16c4e7cfbdc518ee42f864da3a8bb",
+    "wdm_paper_1/notes/inverse_psd_new_section.py": "c90ea4d4071154f92967448796ef2785b4df8d8d84fc4db6377788f7e4e989aa",
+    "wdm_paper_1/notes/psd_backward_offdiag.py": "19968b3b8370f5fd62dd448d8886bc597cebceda48a488b16e485e48b8cc774e"
+   },
+   "lineage": "D",
+   "subcommand": "alg4",
+   "worker": "paper1_june"
   }
  },
  "schema": 1,
