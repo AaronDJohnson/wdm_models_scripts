@@ -5,6 +5,7 @@ from __future__ import annotations
 import os
 import subprocess
 import sys
+import warnings
 from pathlib import Path
 
 import numpy as np
@@ -23,8 +24,17 @@ def _spd(n, rng):
 def _run(code: str) -> str:
     env = dict(os.environ, PYTHONDONTWRITEBYTECODE="1", PYTHONPATH=str(SRC))
     out = subprocess.run([sys.executable, "-P", "-c", code], env=env, capture_output=True,
-                         text=True, check=True)
+                         text=True)
+    assert out.returncode == 0, f"subprocess failed:\n{code}\n--- stderr ---\n{out.stderr}"
     return out.stdout.strip()
+
+
+def _recording_warnings(f):
+    """``(f(), set of warning categories f raised)``."""
+    with warnings.catch_warnings(record=True) as seen:
+        warnings.simplefilter("always")
+        out = f()
+    return out, {w.category for w in seen}
 
 
 def test_numpy_backend_identity():
@@ -77,6 +87,14 @@ def test_cholesky_solves_and_flags_failure(backend, impl, rng):
     bad[0, 0] = -1.0
     _, ok_bad = backend.cholesky(backend.asarray(bad), impl=impl)
     assert not bool(ok_bad)
+    # Only the lower triangle is read, on both backends: an SPD matrix assembled
+    # lower-only, or with a junk upper triangle, gives the same factor bit for
+    # bit.  (JAX's default symmetrize_input=True would factor (A + A^T)/2: a
+    # factor off by O(0.1) for the first, ok=False for the second.)
+    junk = np.triu(rng.standard_normal((7, 7)) * 10.0, 1)
+    for M in (np.tril(A), np.tril(A) + junk):
+        L2, ok2 = backend.cholesky(backend.asarray(M), impl=impl)
+        assert bool(ok2) and np.array_equal(np.asarray(L2), L)
 
 
 def test_numpy_scipy_cholesky_matches_cho_factor_bitwise(rng):
@@ -168,8 +186,25 @@ def test_jax_add_at_static_fold_accepts_ellipsis_and_1d(jax_be, rng):
         v = rng.standard_normal((*shape[:-1], 37))
         ref = NUMPY.add_at(a, idx, v)
         got = jax_be.add_at(jax_be.asarray(a), idx, jax_be.asarray(v), static_fold=(5, 16))
-        assert got.shape == a.shape
+        assert got.shape == a.shape and got.dtype == a.dtype
         assert np.allclose(np.asarray(got), ref, rtol=0, atol=1e-14), (shape, idx)
+    # Mixed dtypes: the fold keeps a's dtype, the values and the warnings of
+    # a.at[idx].add(v) (FutureWarning for an unsafe cast, plus ComplexWarning for
+    # complex -> real).  Half-integer v keeps every sum exact, so the values must
+    # agree bit for bit.  Before the fix the fold returned the promoted dtype.
+    idx = (slice(None), k)
+    for a_dt, v_dt, unsafe in [(np.float32, np.float64, True), (np.float64, np.complex128, True),
+                               (np.int64, np.float64, True), (np.float64, np.float32, False)]:
+        a = jax_be.asarray(rng.integers(-9, 9, (3, 16)).astype(a_dt))
+        vh = rng.integers(-9, 9, (3, 37)) + 0.5
+        v = jax_be.asarray((vh + 1j * rng.standard_normal(vh.shape) if v_dt is np.complex128
+                            else vh).astype(v_dt))
+        ref, w_ref = _recording_warnings(lambda a=a, v=v: a.at[idx].add(v))
+        got, w_got = _recording_warnings(
+            lambda a=a, v=v: jax_be.add_at(a, idx, v, static_fold=(5, 16)))
+        assert got.dtype == ref.dtype == a.dtype, (a_dt, v_dt, got.dtype)
+        assert np.array_equal(np.asarray(got), np.asarray(ref)), (a_dt, v_dt)
+        assert w_got == w_ref and (FutureWarning in w_got) is unsafe, (a_dt, v_dt, w_got, w_ref)
 
 
 def test_jax_add_at_static_fold_rejects_anything_but_the_fold(jax_be, rng):
@@ -215,22 +250,40 @@ def _has_jax() -> bool:
     return True
 
 
+_DECORATE_F = (
+    "from wdm.backend import pytree_dataclass\n"
+    "@pytree_dataclass(data=('x', 'y'), meta=('n',))\n"
+    "class F:\n    x: object\n    y: object\n    n: int\n"
+)
+# An unregistered dataclass is itself ONE leaf, so a registered F must flatten
+# to its two jax.Array data fields and carry the static field in the treedef.
+_CHECK_F_IS_A_PYTREE = (
+    "import jax, jax.numpy as jnp\n"
+    "leaves, tree = jax.tree_util.tree_flatten(F(jnp.ones(2), jnp.zeros(3), 7))\n"
+    "assert len(leaves) == 2 and all(isinstance(x, jax.Array) for x in leaves), leaves\n"
+    "assert jax.tree_util.tree_unflatten(tree, leaves).n == 7\n"
+    "print('registered', F(1.0, 2.0, 3).n)\n"
+)
+_PYTREE_CASES = {
+    # decorated before JAX is imported: queued, registered by jax_backend()
+    "jax_backend() flushes the queue": (
+        "import sys\n" + _DECORATE_F + "assert 'jax' not in sys.modules\n"
+        "from wdm.backend import jax_backend\njax_backend()\n" + _CHECK_F_IS_A_PYTREE),
+    # ... or by enable_x64() alone
+    "enable_x64() flushes the queue": (
+        "import sys\n" + _DECORATE_F + "assert 'jax' not in sys.modules\n"
+        "from wdm.backend import enable_x64\nenable_x64()\n" + _CHECK_F_IS_A_PYTREE),
+    # decorated after JAX is imported: registered at once, no wdm call needed
+    "registered at decoration once jax is imported": (
+        "import jax\n" + _DECORATE_F + _CHECK_F_IS_A_PYTREE),
+}
+
+
 def test_pytree_dataclass_registers_lazily():
     if not _has_jax():
         pytest.skip("jax not installed")
-    out = _run(
-        "import sys\n"
-        "from wdm.backend import pytree_dataclass\n"
-        "@pytree_dataclass(data=('x',), meta=('n',))\n"
-        "class F:\n    x: object\n    n: int\n"
-        "assert 'jax' not in sys.modules\n"
-        "from wdm.backend import jax_backend\n"
-        "jax_backend()\n"
-        "import jax, jax.numpy as jnp\n"
-        "leaves = jax.tree_util.tree_leaves(F(jnp.ones(2), 3))\n"
-        "print(len(leaves), F(1.0, 2).n)\n"
-    )
-    assert out == "1 2"
+    for case, code in _PYTREE_CASES.items():
+        assert _run(code) == "registered 3", case
 
 
 def test_pytree_dataclass_rejects_a_bad_partition():

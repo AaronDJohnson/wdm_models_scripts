@@ -30,6 +30,7 @@ from __future__ import annotations
 import dataclasses
 import functools
 import sys
+import warnings
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from types import ModuleType
@@ -158,8 +159,9 @@ class Backend:
         ``static_fold=(k0, n)`` declares that ``idx`` is ``(:, ..., :, k)`` or
         ``(..., k)`` with ``k = (k0 + arange(len)) % n`` on the last axis and
         ``a.shape[-1] == n``; JAX then lowers the update to a pad-reshape-sum
-        and raises ``ValueError`` if the whole ``idx`` is not that fold.  NumPy
-        ignores it.
+        and raises ``ValueError`` if the whole ``idx`` is not that fold, and the
+        result keeps ``a``'s dtype under the cast rule of ``a.at[idx].add(v)``.
+        NumPy ignores it.
         """
         raise NotImplementedError
 
@@ -168,6 +170,7 @@ class Backend:
 
     # -- linear algebra -------------------------------------------------------
     def cholesky(self, A: Any, *, impl: Literal["numpy", "scipy"]) -> tuple[Any, Any]:
+        """``(L, ok)`` from the lower triangle of ``A`` only (on both backends)."""
         raise NotImplementedError
 
     def solve_triangular(self, L: Any, b: Any, *, lower: bool = True, trans: int = 0) -> Any:
@@ -328,14 +331,27 @@ class _JaxBackend(Backend):
         # with only full slices / an Ellipsis before it, and a.shape[-1] == n
         # (``_check_static_fold`` checks all of it and raises otherwise).  Then
         # pad, reshape to (..., rows, n) and sum -- no scatter, so no GPU atomics.
+        from jax import lax
+
         k0, n = static_fold
         xp = self.xp
         length = _check_static_fold(tuple(a.shape), idx, tuple(np.shape(v)), k0, n)
+        # The dtype rule of ``a.at[idx].add(v)`` (jax ``_scatter_impl``): warn
+        # when v cannot be cast to a.dtype safely, accumulate in the promoted
+        # dtype, then convert the result back to a.dtype.  Without the final
+        # convert, ``a + folded`` would silently return float64 for a float32
+        # ``a``, complex for a real ``a``, float for an integer ``a``.
+        if xp.result_type(v, a.dtype) != a.dtype:
+            warnings.warn(
+                "static_fold add_at: cannot safely cast v from "
+                f"dtype={xp.result_type(v)} to dtype={a.dtype}; the result keeps a's dtype, "
+                "as a.at[idx].add(v) does", FutureWarning, stacklevel=2)
+        v = xp.asarray(v, dtype=xp.result_type(a, v))
         lead = k0 % n
         total = -(-(lead + length) // n) * n
         pad = [(0, 0)] * (v.ndim - 1) + [(lead, total - lead - length)]
         folded = xp.pad(v, pad).reshape(*v.shape[:-1], total // n, n).sum(axis=-2)
-        return a + folded
+        return lax.convert_element_type(a + folded, a.dtype)
 
     def fft_pinned(self, op: str, x: Any, *, axis: int = -1, n: int | None = None) -> Any:
         return getattr(self.fft, op)(x, n=n, axis=axis)
@@ -344,7 +360,11 @@ class _JaxBackend(Backend):
         if impl not in ("numpy", "scipy"):
             raise ValueError(f"impl must be 'numpy' or 'scipy'; got {impl!r}")
         xp = self.xp
-        L = xp.linalg.cholesky(A)
+        # Read only the lower triangle, as LAPACK does for both NumPy impls.
+        # JAX's default (symmetrize_input=True) factors (A + A^T)/2 instead, which
+        # differs for any A that is not bitwise symmetric (e.g. assembled
+        # lower-only); for a bitwise-symmetric A the two are identical.
+        L = xp.linalg.cholesky(A, symmetrize_input=False)
         ok = xp.all(xp.isfinite(xp.diagonal(L, axis1=-2, axis2=-1)))
         return L, ok
 
