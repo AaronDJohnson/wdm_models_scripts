@@ -95,6 +95,7 @@ from __future__ import annotations
 import numpy as np
 from numpy.typing import NDArray
 
+from .backend import NUMPY, Backend, get_backend, is_tracer
 from .filter import phi_centered
 from .grid import active_mask, n_samples, validate_dt, validate_finite, validate_grid
 
@@ -155,6 +156,16 @@ def _working_dtypes(a: NDArray[np.generic]) -> tuple[np.dtype, np.dtype]:
     return np.dtype(np.float64), np.dtype(np.complex128)
 
 
+def _check_finite(values: NDArray[np.generic], context: str) -> None:
+    """:func:`wdm.validate_finite` on concrete input; skipped for JAX tracers.
+
+    Validation is host work, not arithmetic: a tracer has no values to check,
+    and a concrete JAX array is checked on the host like a NumPy one.
+    """
+    if not is_tracer(values):
+        validate_finite(values, context)
+
+
 def _parity(m: int | np.integer, n_arr: NDArray[np.integer]) -> tuple[BoolArray, Array]:
     """``((m+n) even, (-1)^{(m+1)n})`` for one band.
 
@@ -169,7 +180,8 @@ def _parity(m: int | np.integer, n_arr: NDArray[np.integer]) -> tuple[BoolArray,
 
 
 def _build_slab(
-    X_rfft: CArray, m: int, Nf: int, Nt: int, cdtype: np.dtype = _C128
+    X_rfft: CArray, m: int, Nf: int, Nt: int, cdtype: np.dtype = _C128,
+    be: Backend = NUMPY,
 ) -> CArray:
     """Linear-centred slab $u_m[k] = X[\\ell_{m,k}]$ for $k \\in [0, N_t-1]$.
 
@@ -201,20 +213,23 @@ def _build_slab(
     """
     N = n_samples(Nf, Nt)
     ell = np.arange(Nt) + (m - 1) * (Nt // 2)
-    slab = np.empty((*X_rfft.shape[:-1], Nt), dtype=cdtype)
-    neg = ell < 0
-    over = ell > N // 2
-    direct = ~(neg | over)
-    slab[..., direct] = X_rfft[..., ell[direct]]
-    if neg.any():
-        slab[..., neg] = np.conj(X_rfft[..., -ell[neg]])
-    if over.any():
-        slab[..., over] = np.conj(X_rfft[..., N - ell[over]])
+    # Every slot is written below, so zeros (not np.empty) costs nothing and is
+    # the only allocation JAX offers.  Integer positions replace the boolean
+    # masks: the same assignments, and concrete indices for JAX.
+    slab = be.xp.zeros((*X_rfft.shape[:-1], Nt), dtype=cdtype)
+    neg = np.flatnonzero(ell < 0)
+    over = np.flatnonzero(ell > N // 2)
+    direct = np.flatnonzero((ell >= 0) & (ell <= N // 2))
+    slab = be.set(slab, (..., direct), X_rfft[..., ell[direct]], copy=False)
+    if neg.size:
+        slab = be.set(slab, (..., neg), be.xp.conj(X_rfft[..., -ell[neg]]), copy=False)
+    if over.size:
+        slab = be.set(slab, (..., over), be.xp.conj(X_rfft[..., N - ell[over]]), copy=False)
     return slab
 
 
 def _prepare_edges_for_inverse(
-    wmn: Array, Nf: int, Nt: int, rdtype: np.dtype = _F64
+    wmn: Array, Nf: int, Nt: int, rdtype: np.dtype = _F64, be: Backend = NUMPY
 ) -> Array:
     """Working copy of ``wmn`` with the edge bands put into ``inverse``'s form.
 
@@ -235,11 +250,13 @@ def _prepare_edges_for_inverse(
     Shape-generic in the leading axes, so :func:`inverse` and
     :func:`inverse_many` share it.
     """
-    work = wmn.astype(rdtype, copy=True)
+    work = wmn.astype(rdtype)          # NumPy: always a fresh copy, so copy=False below is safe
     mask = active_mask(Nf, Nt)
     root2 = np.sqrt(2)
-    work[..., 0, :] *= mask[0] * root2
-    work[..., Nf, :] *= mask[Nf] * root2
+    # ``work[..., 0, :] *= mask[0] * root2`` as a functional update; on NumPy
+    # it is the same in-place multiply, so the rounding is unchanged.
+    work = be.set(work, (..., 0, slice(None)), work[..., 0, :] * (mask[0] * root2), copy=False)
+    work = be.set(work, (..., Nf, slice(None)), work[..., Nf, :] * (mask[Nf] * root2), copy=False)
     return work
 
 
@@ -250,8 +267,9 @@ def _scatter_interior_bands(
     Nt: int,
     phi_c: Array,
     lam: float,
-) -> None:
-    """Accumulate the interior bands into the rfft accumulator ``X`` in place.
+    be: Backend = NUMPY,
+) -> CArray:
+    """Accumulate the interior bands into the rfft accumulator ``X``; returns it.
 
     One batched length-$N_t$ FFT, then a contiguous slice-add per band. Within
     a band the slab indices are consecutive and duplicate-free, so ``X[a:b] +=``
@@ -272,19 +290,27 @@ def _scatter_interior_bands(
     n_par = n_arr & 1
     even_int = m_par[:, None] == n_par[None, :]
     sign_int = 1.0 - 2.0 * ((1 - m_par)[:, None] * n_par[None, :])
+    xp = be.xp
     scaled_int = wmn_work[..., 1:Nf, :] * sign_int
     # g = w' * C_mn * (-1)^{(m+1)n}: real where (m+n) even, imaginary otherwise.
-    G = np.where(even_int, scaled_int, 0.0) + 1j * np.where(even_int, 0.0, scaled_int)
-    W_int = np.fft.fft(G, axis=-1) * (lam * phi_c)
+    G = xp.where(even_int, scaled_int, 0.0) + 1j * xp.where(even_int, 0.0, scaled_int)
+    W_int = be.fft.fft(G, axis=-1) * (lam * phi_c)
+    # Sequential slice-adds in band order, exactly the oracle's ``+=`` loop.
+    # Every rfft bin receives at most two addends (adjacent interior bands
+    # overlap by Nt/2; the edge bands only touch bins also covered by band 1 or
+    # band Nf-1, plus bin N/2 alone), and a + b == b + a in IEEE arithmetic, so
+    # the order is immaterial on any backend.
     for i, m_i in enumerate(m_int):
         start = int(m_i - 1) * (Nt // 2)
-        X[..., start : start + Nt] += W_int[..., i, :]
+        X = be.add_at(X, (..., slice(start, start + Nt)), W_int[..., i, :], copy=False)
+    return X
 
 
 def _scatter_edge_bands(
-    X: CArray, wmn_work: Array, Nf: int, Nt: int, N: int, phi_c: Array, lam: float
-) -> None:
-    """Accumulate the DC and Nyquist bands into ``X`` in place.
+    X: CArray, wmn_work: Array, Nf: int, Nt: int, N: int, phi_c: Array, lam: float,
+    be: Backend = NUMPY,
+) -> CArray:
+    """Accumulate the DC and Nyquist bands into ``X``; returns it.
 
     These scatter partly outside $[0, N/2]$; those writes are redundant by
     Hermitian symmetry of the real WDM wavelets and are discarded.
@@ -294,18 +320,22 @@ def _scatter_edge_bands(
     duplicate-free and a plain ``+=`` is exact -- ``np.add.at`` was only ever
     guarding against duplicates that cannot occur here.
     """
+    xp = be.xp
     n_arr = np.arange(Nt)
     for m in (0, Nf):
         even, sign = _parity(m, n_arr)
         scaled = wmn_work[..., m, :] * sign
-        g = np.where(even, scaled, 0.0) + 1j * np.where(even, 0.0, scaled)
-        Wm = np.fft.fft(g, axis=-1)
+        g = xp.where(even, scaled, 0.0) + 1j * xp.where(even, 0.0, scaled)
+        Wm = be.fft.fft(g, axis=-1)
         ell = n_arr + (m - 1) * (Nt // 2)
-        valid = (ell >= 0) & (ell <= N // 2)
-        X[..., ell[valid]] += lam * phi_c[valid] * Wm[..., valid]
+        valid = np.flatnonzero((ell >= 0) & (ell <= N // 2))
+        # ``X[..., ell[valid]] += v``: the indices are strictly increasing, so the
+        # fancy-index add is one addition per bin either way.
+        X = be.add_at(X, (..., ell[valid]), lam * phi_c[valid] * Wm[..., valid], copy=False)
+    return X
 
 
-def _gather_bands(x_rfft: CArray, Nf: int, Nt: int, dt: float) -> Array:
+def _gather_bands(x_rfft: CArray, Nf: int, Nt: int, dt: float, be: Backend = NUMPY) -> Array:
     """Coefficient grid(s) from spectra: ``(..., N//2+1) -> (..., Nf+1, Nt)``.
 
     The whole of the forward algorithm, shape-generic in the leading axes, so
@@ -323,15 +353,16 @@ def _gather_bands(x_rfft: CArray, Nf: int, Nt: int, dt: float) -> Array:
     Edge bands $m \\in \\{0, N_f\\}$ take the Hermitian-symmetry slab path.
     Two bands, so the Python loop over them is irrelevant to the cost.
     """
+    xp = be.xp
     rdtype, cdtype = _working_dtypes(x_rfft)
-    phi_c = phi_centered(Nf, Nt, dt).astype(rdtype)
+    phi_c = phi_centered(Nf, Nt, dt).astype(rdtype)          # host constant
     kappa = 2.0 * np.sqrt(np.pi) / Nf
     n_arr = np.arange(Nt)
-    out: Array = np.zeros((*x_rfft.shape[:-1], Nf + 1, Nt), dtype=rdtype)
+    out: Array = xp.zeros((*x_rfft.shape[:-1], Nf + 1, Nt), dtype=rdtype)
 
     m_int = np.arange(1, Nf)
     ell = (m_int - 1)[:, None] * (Nt // 2) + n_arr[None, :]  # (Nf-1, Nt)
-    Y = np.fft.ifft(x_rfft[..., ell] * phi_c, axis=-1)
+    Y = be.fft.ifft(x_rfft[..., ell] * phi_c, axis=-1)
 
     # The parity patterns depend only on the parities of m and n, so build them
     # from 1D parity vectors instead of forming (m+1)*n over the whole grid.
@@ -339,19 +370,26 @@ def _gather_bands(x_rfft: CArray, Nf: int, Nt: int, dt: float) -> Array:
     n_par = n_arr & 1
     even_int = m_par[:, None] == n_par[None, :]  # (m+n) even <=> parities equal
     # Re(C_mn^* y_m[n]): even -> Re(y_m); odd -> Re(-i y_m) = Im(y_m).
-    re_or_im_int = np.where(even_int, Y.real, Y.imag)
+    re_or_im_int = xp.where(even_int, Y.real, Y.imag)
     # (-1)^{(m+1)n}; exponent parity = ((m+1) & 1) * (n & 1).
     sign_int = 1.0 - 2.0 * ((1 - m_par)[:, None] * n_par[None, :])
-    out[..., 1:Nf, :] = kappa * sign_int * re_or_im_int
+    # ``out[..., 1:Nf, :] = (kappa * sign_int) * re_or_im_int``: same grouping,
+    # computed in float64 and cast on assignment, exactly as before.
+    out = be.set(out, (..., slice(1, Nf), slice(None)), kappa * sign_int * re_or_im_int,
+                 copy=False)
 
     for m in (0, Nf):
-        y_m = np.fft.ifft(_build_slab(x_rfft, m, Nf, Nt, cdtype) * phi_c, axis=-1)
+        y_m = be.fft.ifft(_build_slab(x_rfft, m, Nf, Nt, cdtype, be) * phi_c, axis=-1)
         even, sign = _parity(m, n_arr)
-        out[..., m, :] = kappa * sign * np.where(even, y_m.real, y_m.imag)
+        out = be.set(out, (..., m, slice(None)), kappa * sign * xp.where(even, y_m.real, y_m.imag),
+                     copy=False)
 
     # Unit-norm edge basis functions. Not optional: see the module docstring.
-    out[..., 0, :] /= np.sqrt(2)
-    out[..., Nf, :] /= np.sqrt(2)
+    # ``out[..., 0, :] /= np.sqrt(2)``: the in-place divide computes in float64
+    # (np.sqrt(2) is a float64 scalar) and rounds once on store -- as here.
+    root2 = np.sqrt(2)
+    out = be.set(out, (..., 0, slice(None)), out[..., 0, :] / root2, copy=False)
+    out = be.set(out, (..., Nf, slice(None)), out[..., Nf, :] / root2, copy=False)
     return out
 
 
@@ -360,6 +398,8 @@ def forward(
     Nf: int,
     Nt: int,
     dt: float,
+    *,
+    be: Backend | None = None,
 ) -> Array:
     """Forward WDM transform: $\\text{rfft}(x) \\to w_{mn}$.
 
@@ -420,14 +460,15 @@ def forward(
     validate_grid(Nf, Nt)
     validate_dt(dt)
     N = n_samples(Nf, Nt)
-    x_rfft = np.asarray(x_rfft)
+    be = be or get_backend(x_rfft)
+    x_rfft = be.asarray(x_rfft)
     if x_rfft.shape != (N // 2 + 1,):
         raise ValueError(
             f"x_rfft must have shape ({N // 2 + 1},) for Nf={Nf}, Nt={Nt}; "
             f"got {x_rfft.shape}"
         )
-    validate_finite(x_rfft, "forward: x_rfft")
-    return _gather_bands(x_rfft, Nf, Nt, dt)
+    _check_finite(x_rfft, "forward: x_rfft")
+    return _gather_bands(x_rfft, Nf, Nt, dt, be)
 
 
 def forward_many(
@@ -435,6 +476,8 @@ def forward_many(
     Nf: int,
     Nt: int,
     dt: float,
+    *,
+    be: Backend | None = None,
 ) -> Array:
     """Forward-transform a stack of spectra: $(B, N/2+1) \\to (B, N_f+1, N_t)$.
 
@@ -478,14 +521,15 @@ def forward_many(
     validate_grid(Nf, Nt)
     validate_dt(dt)
     N = n_samples(Nf, Nt)
-    x_rfft = np.asarray(x_rfft)
+    be = be or get_backend(x_rfft)
+    x_rfft = be.asarray(x_rfft)
     if x_rfft.ndim != 2 or x_rfft.shape[1] != N // 2 + 1:
         raise ValueError(
             f"x_rfft must have shape (B, {N // 2 + 1}) for Nf={Nf}, Nt={Nt}; "
             f"got {x_rfft.shape}"
         )
-    validate_finite(x_rfft, "forward_many: x_rfft")
-    return _gather_bands(x_rfft, Nf, Nt, dt)
+    _check_finite(x_rfft, "forward_many: x_rfft")
+    return _gather_bands(x_rfft, Nf, Nt, dt, be)
 
 
 def forward_time_many(
@@ -493,6 +537,8 @@ def forward_time_many(
     Nf: int,
     Nt: int,
     dt: float,
+    *,
+    be: Backend | None = None,
 ) -> Array:
     """Convenience wrapper: a stack of time series $(B, N) \\to (B, N_f+1, N_t)$.
 
@@ -517,15 +563,16 @@ def forward_time_many(
     (4, 9, 16)
     """
     validate_grid(Nf, Nt)
-    x = np.asarray(x)
+    be = be or get_backend(x)
+    x = be.asarray(x)
     expected = n_samples(Nf, Nt)
     if x.ndim != 2 or x.shape[1] != expected:
         raise ValueError(
             f"x must have shape (B, {expected}) = (B, Nf*Nt) for Nf={Nf}, "
             f"Nt={Nt}; got {x.shape}"
         )
-    validate_finite(x, "forward_time_many: x")
-    return forward_many(np.fft.rfft(x, axis=-1), Nf, Nt, dt)
+    _check_finite(x, "forward_time_many: x")
+    return forward_many(be.fft.rfft(x, axis=-1), Nf, Nt, dt, be=be)
 
 
 def inverse(
@@ -533,6 +580,8 @@ def inverse(
     Nf: int,
     Nt: int,
     dt: float,
+    *,
+    be: Backend | None = None,
 ) -> CArray:
     """Inverse WDM transform: $w_{mn} \\to \\text{rfft}(x)$.
 
@@ -574,24 +623,25 @@ def inverse(
     validate_grid(Nf, Nt)
     validate_dt(dt)
     N = n_samples(Nf, Nt)
-    wmn = np.asarray(wmn)
-    if np.iscomplexobj(wmn):
+    be = be or get_backend(wmn)
+    wmn = be.asarray(wmn)
+    if be.xp.iscomplexobj(wmn):
         raise ValueError(
             "wmn must be real; a complex grid would have its imaginary part "
             "silently discarded"
         )
     if wmn.shape != (Nf + 1, Nt):
         raise ValueError(f"wmn must have shape ({Nf + 1}, {Nt}); got {wmn.shape}")
-    validate_finite(wmn, "inverse: wmn")
+    _check_finite(wmn, "inverse: wmn")
 
     rdtype, cdtype = _working_dtypes(wmn)
     phi_c = phi_centered(Nf, Nt, dt).astype(rdtype)
-    wmn_work = _prepare_edges_for_inverse(wmn, Nf, Nt, rdtype)
+    wmn_work = _prepare_edges_for_inverse(wmn, Nf, Nt, rdtype, be)
 
     lam = np.sqrt(np.pi) / dt
-    X = np.zeros(N // 2 + 1, dtype=cdtype)
-    _scatter_interior_bands(X, wmn_work, Nf, Nt, phi_c, lam)
-    _scatter_edge_bands(X, wmn_work, Nf, Nt, N, phi_c, lam)
+    X = be.xp.zeros(N // 2 + 1, dtype=cdtype)
+    X = _scatter_interior_bands(X, wmn_work, Nf, Nt, phi_c, lam, be)
+    X = _scatter_edge_bands(X, wmn_work, Nf, Nt, N, phi_c, lam, be)
 
     return X
 
@@ -601,6 +651,8 @@ def inverse_many(
     Nf: int,
     Nt: int,
     dt: float,
+    *,
+    be: Backend | None = None,
 ) -> CArray:
     """Inverse-transform a stack: $(B, N_f+1, N_t) \\to (B, N/2+1)$.
 
@@ -631,8 +683,9 @@ def inverse_many(
     validate_grid(Nf, Nt)
     validate_dt(dt)
     N = n_samples(Nf, Nt)
-    wmn = np.asarray(wmn)
-    if np.iscomplexobj(wmn):
+    be = be or get_backend(wmn)
+    wmn = be.asarray(wmn)
+    if be.xp.iscomplexobj(wmn):
         raise ValueError(
             "wmn must be real; a complex grid would have its imaginary part "
             "silently discarded"
@@ -642,16 +695,16 @@ def inverse_many(
             f"wmn must have shape (B, {Nf + 1}, {Nt}) for Nf={Nf}, Nt={Nt}; "
             f"got {wmn.shape}"
         )
-    validate_finite(wmn, "inverse_many: wmn")
+    _check_finite(wmn, "inverse_many: wmn")
 
     rdtype, cdtype = _working_dtypes(wmn)
     phi_c = phi_centered(Nf, Nt, dt).astype(rdtype)
-    wmn_work = _prepare_edges_for_inverse(wmn, Nf, Nt, rdtype)
+    wmn_work = _prepare_edges_for_inverse(wmn, Nf, Nt, rdtype, be)
 
     lam = np.sqrt(np.pi) / dt
-    X = np.zeros((wmn.shape[0], N // 2 + 1), dtype=cdtype)
-    _scatter_interior_bands(X, wmn_work, Nf, Nt, phi_c, lam)
-    _scatter_edge_bands(X, wmn_work, Nf, Nt, N, phi_c, lam)
+    X = be.xp.zeros((wmn.shape[0], N // 2 + 1), dtype=cdtype)
+    X = _scatter_interior_bands(X, wmn_work, Nf, Nt, phi_c, lam, be)
+    X = _scatter_edge_bands(X, wmn_work, Nf, Nt, N, phi_c, lam, be)
     return X
 
 
@@ -660,6 +713,8 @@ def inverse_time_many(
     Nf: int,
     Nt: int,
     dt: float,
+    *,
+    be: Backend | None = None,
 ) -> Array:
     """Convenience wrapper: $(B, N_f+1, N_t) \\to$ a stack of series $(B, N)$.
 
@@ -685,7 +740,8 @@ def inverse_time_many(
     True
     """
     N = n_samples(Nf, Nt)
-    return np.fft.irfft(inverse_many(wmn, Nf, Nt, dt), n=N, axis=-1)
+    be = be or get_backend(wmn)
+    return be.fft.irfft(inverse_many(wmn, Nf, Nt, dt, be=be), n=N, axis=-1)
 
 
 def forward_time(
@@ -693,6 +749,8 @@ def forward_time(
     Nf: int,
     Nt: int,
     dt: float,
+    *,
+    be: Backend | None = None,
 ) -> Array:
     """Convenience wrapper: time-domain $x_k \\to w_{mn}$.
 
@@ -730,7 +788,8 @@ def forward_time(
     ValueError: forward_time: x: 1 of 128 entries are not finite...
     """
     validate_grid(Nf, Nt)
-    x = np.asarray(x)
+    be = be or get_backend(x)
+    x = be.asarray(x)
     expected = n_samples(Nf, Nt)
     if x.shape != (expected,):
         raise ValueError(
@@ -739,8 +798,8 @@ def forward_time(
         )
     # Check here rather than only on the rfft: reporting "index 5 of x" beats
     # reporting that every bin of the transformed spectrum went non-finite.
-    validate_finite(x, "forward_time: x")
-    return forward(np.fft.rfft(x), Nf, Nt, dt)
+    _check_finite(x, "forward_time: x")
+    return forward(be.fft.rfft(x), Nf, Nt, dt, be=be)
 
 
 def inverse_time(
@@ -748,6 +807,8 @@ def inverse_time(
     Nf: int,
     Nt: int,
     dt: float,
+    *,
+    be: Backend | None = None,
 ) -> Array:
     """Convenience wrapper: $w_{mn} \\to$ time-domain $x_k$.
 
@@ -773,5 +834,6 @@ def inverse_time(
     True
     """
     N = n_samples(Nf, Nt)
-    x_rfft = inverse(wmn, Nf, Nt, dt)
-    return np.fft.irfft(x_rfft, n=N)
+    be = be or get_backend(wmn)
+    x_rfft = inverse(wmn, Nf, Nt, dt, be=be)
+    return be.fft.irfft(x_rfft, n=N)
