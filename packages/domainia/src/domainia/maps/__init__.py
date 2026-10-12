@@ -2,8 +2,8 @@
 
 from .base import (BinSelect, Compose, Identity, LinearMap, PushedCovariance, Restrict,
                    SupportsDense, SupportsMatvec, domain_size, on_backend)
-from .time import TimeToWDM, WDMToTime
+from .time import CropTime, TimeToFourier, TimeToWDM, WDMToTime, ZeroPadTime
 
-__all__ = ["BinSelect", "Compose", "Identity", "LinearMap", "PushedCovariance", "Restrict",
-           "SupportsDense", "SupportsMatvec", "TimeToWDM", "WDMToTime", "domain_size",
-           "on_backend"]
+__all__ = ["BinSelect", "Compose", "CropTime", "Identity", "LinearMap", "PushedCovariance",
+           "Restrict", "SupportsDense", "SupportsMatvec", "TimeToFourier", "TimeToWDM",
+           "WDMToTime", "ZeroPadTime", "domain_size", "on_backend"]

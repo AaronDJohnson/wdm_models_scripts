@@ -16,10 +16,10 @@ import wdm
 from wdm.backend import pytree_dataclass
 from wdm.transform import atom_spectrum, base_atom_spectra
 
-from ..domains import TimeDomain, WDMDomain
+from ..domains import FourierDomain, TimeDomain, WDMDomain
 from .base import _BUILD, LinearMap
 
-__all__ = ["TimeToWDM", "WDMToTime"]
+__all__ = ["CropTime", "TimeToFourier", "TimeToWDM", "WDMToTime", "ZeroPadTime"]
 
 
 def _check_grid(time: TimeDomain, dom: WDMDomain) -> wdm.Grid:
@@ -137,3 +137,129 @@ class WDMToTime(LinearMap):
         be = self._be(x, be)
         fwd = TimeToWDM(self.dst, self.src, m_idx=self.m_idx, n_idx=self.n_idx)
         return fwd.apply(x, be) / self.grid.dt
+
+
+def _keep_bins(N: int, dt: float, fmin: float) -> tuple[int, int]:
+    """``fmin <= f < f_Nyq``, DC and Nyquist dropped (WT ``FourierBand``, band.py:17-26, and
+    ``MatrixWhittle``, matrix.py:883-884): the contiguous kept bins ``(k0, n)``."""
+    f = np.fft.rfftfreq(N, d=dt)
+    keep = (f >= max(float(fmin), 0.0)) & (f < 0.5 / dt)
+    keep[[0, -1]] = False
+    k = np.flatnonzero(keep)
+    if k.size == 0:
+        raise ValueError(f"fmin={fmin} leaves no interior Fourier frequencies")
+    if k[-1] - k[0] + 1 != k.size:
+        raise AssertionError("the kept bins are not contiguous")
+    return int(k[0]), int(k.size)
+
+
+@pytree_dataclass(data=(), meta=("src", "dst", "fmin"))
+@dataclass(frozen=True, eq=False)
+class TimeToFourier(LinearMap):
+    """``x -> rfft(x)[keep]``: the retained complex bins, ``fmin <= f < f_Nyq`` with DC and
+    Nyquist dropped (kind ``"analysis"``).
+
+    ``apply`` returns the complex bins exactly as the oracle computes them
+    (``np.fft.rfft(r)[keep]``, WT likelihood.py:245 and matrix.py:894), because the
+    Whittle density's ``2/N |R|^2`` order is bitwise only on them.  Their real orthonormal
+    coordinates are ``sqrt(2/N) (Re R_k, -Im R_k)``, bin by bin -- the
+    ``FourierBand.discarded_spectra`` convention (band.py:30-41) -- with rows
+    :meth:`orthonormal_rows`.  ``dst`` has ``units="rfft"``.
+    """
+
+    src: TimeDomain
+    fmin: float = 0.0
+    dst: Any = field(default=_BUILD, kw_only=True)
+
+    kind = "analysis"
+
+    def __post_init__(self) -> None:
+        if self.dst is _BUILD:
+            k0, n = _keep_bins(self.src.N, self.src.dt, self.fmin)
+            object.__setattr__(self, "dst", FourierDomain(self.src.N, self.src.dt, k0, n, "rfft"))
+
+    def apply(self, x, be=None):
+        be = self._be(x, be)
+        k0, n = self.dst.k0, self.dst.n
+        return be.fft.rfft(be.asarray(x), axis=-1)[..., k0:k0 + n]
+
+    def apply_complex(self, x, be=None):
+        """``F x`` for a complex series (``fft``, the kept bins)."""
+        be = self._be(x, be)
+        k0, n = self.dst.k0, self.dst.n
+        return be.fft.fft(be.asarray(x), axis=-1)[..., k0:k0 + n]
+
+    def adjoint(self, y, be=None):
+        """``Re(F^H y)``: the real-inner-product adjoint, ``(N/2) irfft`` of the kept bins."""
+        be = self._be(y, be)
+        y = be.asarray(y)
+        N, k0, n = self.src.N, self.dst.k0, self.dst.n
+        spec = be.xp.zeros((*y.shape[:-1], N // 2 + 1), dtype=complex)
+        spec = be.set(spec, (..., slice(k0, k0 + n)), y, copy=False)
+        return (N / 2.0) * be.fft.irfft(spec, n=N, axis=-1)
+
+    def rows(self, idx):
+        idx = np.atleast_1d(np.asarray(idx, dtype=np.int64))
+        k = self.dst.k0 + idx
+        j = np.arange(self.src.N)
+        return np.exp(-2j * np.pi * np.outer(k, j) / self.src.N)
+
+    def orthonormal_rows(self) -> np.ndarray:
+        """``(2 n, N)`` real orthonormal rows, bin by bin ``sqrt(2/N) (cos, sin)``: the
+        coordinates ``sqrt(2/N) (Re R_k, -Im R_k)`` of :meth:`apply`'s bins."""
+        N, k0, n = self.src.N, self.dst.k0, self.dst.n
+        spectra = np.zeros((2 * n, N // 2 + 1), dtype=complex)
+        rows = np.arange(n)
+        spectra[2 * rows, k0 + rows] = np.sqrt(N / 2)
+        spectra[2 * rows + 1, k0 + rows] = -1j * np.sqrt(N / 2)
+        return np.fft.irfft(spectra, n=N, axis=-1)
+
+
+@pytree_dataclass(data=(), meta=("src", "start", "n"))
+@dataclass(frozen=True, eq=False)
+class CropTime(LinearMap):
+    """Samples ``[start, start + n)`` (whittle_cut: ``[6*64, 251*64)``, ``N_c = 15680``;
+    WT ``MatrixWhittle``, matrix.py:870)."""
+
+    src: TimeDomain
+    start: int
+    n: int
+
+    def __post_init__(self) -> None:
+        if not 0 <= self.start < self.start + self.n <= self.src.N:
+            raise ValueError(f"[{self.start}, {self.start + self.n}) is not inside [0, {self.src.N})")
+
+    @property
+    def dst(self) -> TimeDomain:
+        return TimeDomain(self.n, self.src.dt, self.src.t0 + self.start * self.src.dt)
+
+    def apply(self, x, be=None):
+        return x[..., self.start:self.start + self.n]
+
+    def adjoint(self, y, be=None):
+        be = self._be(y, be)
+        out = be.xp.zeros((*y.shape[:-1], self.src.N), dtype=y.dtype)
+        return be.set(out, (..., slice(self.start, self.start + self.n)), y, copy=False)
+
+
+@pytree_dataclass(data=(), meta=("src", "n_extra"))
+@dataclass(frozen=True, eq=False)
+class ZeroPadTime(LinearMap):
+    """``n_extra`` zero samples appended at the end (the sinusoid pad: 16 columns, 1024
+    samples; cyclically equivalent to 8 + 8).  WT ``Variant.extend`` (matrix.py:702-709)."""
+
+    src: TimeDomain
+    n_extra: int
+
+    @property
+    def dst(self) -> TimeDomain:
+        return TimeDomain(self.src.N + self.n_extra, self.src.dt, self.src.t0)
+
+    def apply(self, x, be=None):
+        be = self._be(x, be)
+        x = be.asarray(x)
+        out = be.xp.zeros((*x.shape[:-1], self.src.N + self.n_extra), dtype=x.dtype)
+        return be.set(out, (..., slice(0, self.src.N)), x, copy=False)
+
+    def adjoint(self, y, be=None):
+        return y[..., :self.src.N]
