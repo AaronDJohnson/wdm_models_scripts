@@ -164,6 +164,7 @@
   "galactic_binary/stress/gb_6mo/tri_raw.fast.json": "50111cde2c5a70cfb995f9866f16ccbd61fa52678048821eb32f7af9fddd30ab",
   "galactic_binary/stress/gb_6mo/whittle_cut.fast.json": "ce00b312cdbdf1761b523a2edbc79b119305903adf4aba39bde39ac3dbdb59cb",
   "galactic_binary/stress/gb_6mo/whittle_raw.fast.json": "1b95653218eb36811440e6b9adf2af1e451bbc0f2844675453a0c5dd571d570d",
+  "galactic_binary/tolerances_measured.json": "2c257eafd180274e78d77598fb40f0e84cf4bb1728bb5151538baa3ad2aa0617",
   "sinusoid/chain_rows/INDEX.json": "8216fd4aeb0a229340da0e51f9255179c5b6ad36f4a71a5eebf68e45a2ef881a",
   "sinusoid/chain_rows/manuscript_high_band_cut.npz": "67d42255e92ceecb9a0713aeef2255e9a1a7f78c06a05c1e13cc8d5837b618b3",
   "sinusoid/chain_rows/manuscript_high_band_exact.npz": "65def8c8fa510c6ae00e0a6a63c94c976ee2e0bc423e32c3eacb4683a760752d",
@@ -4204,6 +4205,9 @@
    "subcommand": "stress",
    "worker": "gb_legacy"
   },
+  "galactic_binary/tolerances_measured.json": {
+   "script": "scripts/golden/measure_tolerances_gb.py"
+  },
   "wdm/alg4_reference.json": {
    "args": [
     "--workspace",
@@ -4612,6 +4616,34 @@
   }
  },
  "tolerances": {
+  "galactic_binary": {
+   "G3_exceeds_proposal_jax": [],
+   "G3_exceeds_proposal_numpy": [
+    "gb_12mo/band_pad",
+    "gb_12mo/band_raw",
+    "gb_12mo/exact",
+    "gb_12mo/mid_pad",
+    "gb_12mo/mid_raw",
+    "gb_12mo/tri_pad",
+    "gb_12mo/whittle_raw",
+    "gb_6mo/mid_exact",
+    "gb_6mo/mid_pad",
+    "gb_6mo/mid_raw",
+    "gb_6mo/tri_exact",
+    "gb_6mo/tri_pad",
+    "gb_6mo/tri_raw",
+    "gb_6mo/whittle_raw"
+   ],
+   "G3_max_observed_jax": 8.276401786133647e-11,
+   "G3_max_observed_numpy": 7.021299097687006e-10,
+   "G3_runs": 58,
+   "G3_targets": 38,
+   "G4_files": 30,
+   "G4_gate_jax_well_conditioned": 8.321876521222293e-08,
+   "G4_mask_mismatches": 0,
+   "file": "galactic_binary/tolerances_measured.json",
+   "status": "measured; pending user approval"
+  },
   "sinusoid": {
    "file": "sinusoid/tolerances_measured.json",
    "status": "PROPOSED - pending user approval (spec \u00a77.3, \u00a79 'Still open')"
