@@ -21,8 +21,13 @@ def _spd(n, rng):
     return A @ A.T / n + np.eye(n)
 
 
-def _run(code: str) -> str:
-    env = dict(os.environ, PYTHONDONTWRITEBYTECODE="1", PYTHONPATH=str(SRC))
+def _run(code: str, **env_overrides: str) -> str:
+    # x64 is pinned ON unless a test overrides it: activate.sh exports it, but a
+    # subprocess must not depend on the caller's shell (jax_backend() now raises
+    # when it is off).
+    env = dict(os.environ, PYTHONDONTWRITEBYTECODE="1", PYTHONPATH=str(SRC),
+               JAX_ENABLE_X64="true")
+    env.update(env_overrides)
     out = subprocess.run([sys.executable, "-P", "-c", code], env=env, capture_output=True,
                          text=True)
     assert out.returncode == 0, f"subprocess failed:\n{code}\n--- stderr ---\n{out.stderr}"
@@ -234,12 +239,53 @@ def test_jax_add_at_static_fold_rejects_anything_but_the_fold(jax_be, rng):
 
 
 def test_require_x64_raises_when_off():
+    pytest.importorskip("jax", reason="jax not installed (NumPy-only lane)")
     out = _run(
         "import jax; jax.config.update('jax_enable_x64', False)\n"
         "from wdm.backend import require_x64\n"
         "try:\n    require_x64()\nexcept RuntimeError as e:\n    print('raised')\n"
-    ) if _has_jax() else "raised"
+    )
     assert out == "raised"
+
+
+# With x64 off, every JAX entry point must raise instead of computing in float32
+# (measured before the guard: forward_time returned float32 with max relative
+# error 1.7e-7 at 8x16 and 2.0e-7 at 64x256, and no warning even with -W always).
+# The NumPy path is untouched: float64 in, float64 out, jax imported or not.
+_X64_OFF = (
+    "import numpy as np, jax, jax.numpy as jnp\n"
+    "assert not jax.config.read('jax_enable_x64')\n"
+    "import wdm\n"
+    "from wdm.backend import NUMPY, get_backend, jax_backend\n"
+    "x = np.random.default_rng(0).standard_normal(128)\n"
+    "w = wdm.forward_time(x, 8, 16, 0.5)\n"
+    "assert type(w) is np.ndarray and w.dtype == np.float64, (type(w), w.dtype)\n"
+    "assert get_backend(x) is NUMPY\n"
+    "cases = {\n"
+    "    'jax_backend()': lambda: jax_backend(),\n"
+    "    'forward_time(be=jax_backend())': lambda: wdm.forward_time(x, 8, 16, 0.5, be=jax_backend()),\n"
+    "    'get_backend(jnp array)': lambda: get_backend(jnp.ones(3)),\n"
+    "    'get_backend(backend=jax)': lambda: get_backend(backend='jax'),\n"
+    "    'forward_time(jnp array)': lambda: wdm.forward_time(jnp.asarray(x), 8, 16, 0.5),\n"
+    "}\n"
+    "for name, call in cases.items():\n"
+    "    try:\n"
+    "        out = call()\n"
+    "    except RuntimeError as err:\n"
+    "        assert 'enable_x64' in str(err), (name, err)\n"
+    "        print('raised', name)\n"
+    "    else:\n"
+    "        print('RETURNED', name, getattr(out, 'dtype', out))\n"
+)
+
+
+@pytest.mark.parametrize("flag", ["0", "false"])
+def test_jax_entry_points_raise_when_x64_is_off(flag):
+    pytest.importorskip("jax", reason="jax not installed (NumPy-only lane)")
+    out = _run(_X64_OFF, JAX_ENABLE_X64=flag).splitlines()
+    assert out == ["raised jax_backend()", "raised forward_time(be=jax_backend())",
+                   "raised get_backend(jnp array)", "raised get_backend(backend=jax)",
+                   "raised forward_time(jnp array)"], out
 
 
 def _has_jax() -> bool:

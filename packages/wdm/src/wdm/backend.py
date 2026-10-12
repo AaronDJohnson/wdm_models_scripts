@@ -16,7 +16,10 @@ Rules
 * ``import wdm`` never imports JAX.  :func:`jax_backend` imports it on first
   use; :func:`pytree_dataclass` registers classes lazily (see there).
 * Nothing flips ``jax_enable_x64`` on import.  Call :func:`enable_x64`
-  explicitly (scripts do it first); :func:`require_x64` raises if it is off.
+  explicitly (scripts do it first); :func:`require_x64` raises if it is off,
+  and every route to the JAX backend (:func:`jax_backend`, so also
+  :func:`get_backend` on a ``jax.Array`` or with ``backend="jax"``) calls it:
+  with x64 off a wdm JAX path raises instead of silently computing in float32.
 * ``set`` / ``add_at`` are functional (they return the updated array).  On
   NumPy they copy first **unless** the caller passes ``copy=False``, which a
   kernel may do only for a buffer it allocated itself; then the update is the
@@ -460,8 +463,14 @@ def _make_jax_backend() -> Backend:
 
 
 def jax_backend() -> Backend:
-    """The JAX backend.  Imports JAX (never at ``import wdm`` time) and registers
-    any pending :func:`pytree_dataclass` classes."""
+    """The JAX backend.  Imports JAX (never at ``import wdm`` time), checks
+    :func:`require_x64` and registers any pending :func:`pytree_dataclass` classes.
+
+    Raises ``RuntimeError`` when ``jax_enable_x64`` is off: wdm needs float64,
+    and with x64 off JAX would silently compute every kernel in float32
+    (``forward_time``: relative error ~2e-7, no warning).
+    """
+    require_x64()
     be = _make_jax_backend()
     _flush_pytrees()
     return be
@@ -478,7 +487,11 @@ def is_tracer(x: Any) -> bool:
 
 def get_backend(*arrays: Any, backend: str | Backend | None = None) -> Backend:
     """An explicit ``backend`` wins.  Otherwise JAX iff ``"jax"`` is already in
-    ``sys.modules`` and any argument is a ``jax.Array`` (tracers included)."""
+    ``sys.modules`` and any argument is a ``jax.Array`` (tracers included).
+
+    The JAX branch goes through :func:`jax_backend`, so it raises
+    ``RuntimeError`` (:func:`require_x64`) when ``jax_enable_x64`` is off.
+    """
     if isinstance(backend, Backend):
         return backend
     if backend == "numpy":
@@ -496,7 +509,11 @@ def get_backend(*arrays: Any, backend: str | Backend | None = None) -> Backend:
 
 
 def require_x64() -> None:
-    """Raise unless ``jax_enable_x64`` is on (called whenever JAX constants are built)."""
+    """Raise ``RuntimeError`` unless ``jax_enable_x64`` is on.
+
+    Called by :func:`jax_backend` (hence by every wdm JAX path); callers that
+    build JAX constants without going through wdm should call it themselves.
+    """
     import jax
 
     if not jax.config.read("jax_enable_x64"):
