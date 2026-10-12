@@ -110,9 +110,11 @@ def test_pad_is_m_lambda_m():
     c = T.gb_case("gb_3mo")
     mask, Cm = _mask(c)
     _, b, n = c.pad_map_rows()
-    full = PadMask.build(map_rows=Cm, rho=np.asarray(c.P["rho_pad"], float)[b, n], kept_band=b, kept_n=n,
-                         R_grid=c.pad_grid, R_bands=c.R_bands, record_N=c.N, store_k0=c.store_k0,
-                         store_n=c.store_n, k0=c.k0, edge_tol=-1.0)
+    kw = dict(map_rows=Cm, rho=np.asarray(c.P["rho_pad"], float)[b, n], kept_band=b, kept_n=n,
+              R_grid=c.pad_grid, R_bands=c.R_bands, record_N=c.N, store_k0=c.store_k0,
+              store_n=c.store_n, k0=c.k0)
+    assert list(c.R_bands) == c.g6["scalars"]["pad_mask"]["R_bands"]
+    full = PadMask.build(**kw, edge_tol=-1.0)
     A = full.AE
     assert np.array_equal(full.E, np.arange(n.size)) and np.array_equal(full.Kpos, mask.Kpos)
     np.testing.assert_allclose(A[mask.E], mask.AE, rtol=0, atol=1e-13)
@@ -131,3 +133,13 @@ def test_pad_is_m_lambda_m():
                              n_columns=c.NT).dense(c.mu[ch])
             assert np.abs(got - dense).max() < 1e-5 * np.abs(dense).max(), (base, ch)
             np.linalg.cholesky(0.5 * (got + got.T))
+    # inconsistent inputs are refused before any arithmetic (each returned a wrong mask silently)
+    skip = np.r_[c.R_bands[:3], c.R_bands[4:], c.R_bands[-1] + 1]
+    for over, match in [({"chunk": 0}, "chunk"), ({"chunk": -1}, "chunk"),
+                        ({"rho": kw["rho"][:-5]}, "one entry per row"), ({"kept_n": n[:-1]}, "one entry per row"),
+                        ({"map_rows": Cm[:, :-1]}, "map_rows must be"), ({"R_bands": skip}, "contiguous"),
+                        ({"kept_n": n + (c.NTp - c.NT + 1)}, "kept_n must lie"),
+                        ({"k0": c.R_bands.size - c.bands.size + 1}, "k0 \\+ kept_band"),
+                        ({"k0": -1}, "k0 \\+ kept_band")]:
+        with pytest.raises(ValueError, match=match):
+            PadMask.build(**{**kw, **over})

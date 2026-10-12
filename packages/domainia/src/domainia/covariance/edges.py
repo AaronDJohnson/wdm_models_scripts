@@ -456,18 +456,43 @@ class PadMask:
         the store); ``k0`` the first analysis band's position among ``R_bands``.  A cell
         ``r`` of ``R`` (value 1) has padded bins ``conj(u_r) sqrt(N'/N)``; cropping them to the
         record (``maps.fourier.crop_maps``) gives its store bins.
+
+        Inconsistent inputs are refused up front (each of these otherwise returned a wrong
+        mask without an error): ``chunk < 1`` (uninitialised rows), ``rho`` / ``kept_band``
+        / ``kept_n`` not one per row of ``map_rows`` (rows silently dropped), non-contiguous
+        ``R_bands`` (``window_bins`` and the band windows assume them contiguous), columns
+        outside ``[0, Nt')`` or bands outside ``R`` (``Kpos`` wraps into the next band or
+        past ``|R|``).  ``edge_tol < 0`` is allowed: every kept row is then computed.
         """
         from ..maps.fourier import crop_maps            # local: maps may import covariance
 
-        E = np.flatnonzero(1.0 - np.asarray(rho, float) > edge_tol)
+        map_rows, rho = np.asarray(map_rows), np.asarray(rho, float)
+        kept_band, kept_n = np.asarray(kept_band, int), np.asarray(kept_n, int)
         NTp = R_grid.Nt
         R_bands = np.asarray(R_bands, int)
-        Kpos = (k0 + np.asarray(kept_band, int)) * NTp + np.asarray(kept_n, int)
+        if int(chunk) < 1:
+            raise ValueError(f"chunk must be >= 1; got {chunk}")
+        if map_rows.ndim != 2 or map_rows.shape[1] != store_n:
+            raise ValueError(f"map_rows must be (P, store_n = {store_n}); got shape {map_rows.shape}")
+        n_rows = map_rows.shape[0]
+        if not rho.shape == kept_band.shape == kept_n.shape == (n_rows,):
+            raise ValueError(f"rho, kept_band and kept_n need one entry per row of map_rows ({n_rows}); got "
+                             f"{rho.shape}, {kept_band.shape}, {kept_n.shape}")
+        if R_bands.ndim != 1 or R_bands.size == 0 or np.any(np.diff(R_bands) != 1):
+            raise ValueError(f"R_bands must be contiguous ascending bands; got {R_bands.tolist()}")
+        if n_rows and (kept_n.min() < 0 or kept_n.max() >= NTp):
+            raise ValueError(f"kept_n must lie in [0, {NTp}) (the padded grid's columns)")
+        if k0 < 0 or (n_rows and (kept_band.min() < 0 or k0 + kept_band.max() >= R_bands.size)):
+            raise ValueError(f"k0 + kept_band must lie in [0, {R_bands.size}) (positions among R_bands); "
+                             f"got k0 = {k0}")
+
+        E = np.flatnonzero(1.0 - rho > edge_tol)
+        Kpos = (k0 + kept_band) * NTp + kept_n
         g0, G = window_bins(NTp, R_bands)
         atoms = band_atoms(R_bands, R_grid.Nf, NTp, R_grid.dt)
         idx = ((NTp // 2) * (R_bands - R_bands[0]))[:, None] + np.arange(NTp)[None, :]
         k = store_k0 + np.arange(store_n)
-        CE = np.asarray(map_rows)[E]
+        CE = map_rows[E]
         X = np.empty((E.size, G), complex)
         Y = np.empty((E.size, G), complex)
         for lo in range(0, G, chunk):
