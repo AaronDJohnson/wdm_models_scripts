@@ -5,7 +5,8 @@
 Reads the private LDC2 Sangria training file once (3.1 GB, about 7 s, read-only) and records
 ``sources.external.sangria_h5 = {path, bytes, sha256, used_by}``. Every other key of the
 manifest is left alone, and A10's ``capture.write_manifest`` keeps ``sources.external``
-(it rewrites only ``sources.<family>``, ``sources.frozen_trees``, ``build`` and ``files``).
+(it rewrites only ``sources.<family>``, ``sources.frozen_trees`` and ``files``, plus ``build``
+under ``--replace``).
 """
 from __future__ import annotations
 
