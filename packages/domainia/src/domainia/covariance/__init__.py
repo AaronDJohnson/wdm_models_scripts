@@ -15,10 +15,12 @@ from .eq45 import Eq45Covariance, keep_mask, window_bins
 from .exact_fourier import ExactFourierCovariance, ghat
 from .exact_time import CovOperator, ExactTimeCovariance, OperatorFactor, bessel_coefficients
 from .hermitian import HermitianCovariance, HermitianFactor
+from .pushed import CHEB_TOL, PushedRows, cheb_order, cheb_tail, positions
 
 __all__ = [
     "BlockTriCovFactor",
     "BlockTridiagonalCovariance",
+    "CHEB_TOL",
     "CholFactor",
     "CovOperator",
     "Covariance",
@@ -33,12 +35,16 @@ __all__ = [
     "HermitianCovariance",
     "HermitianFactor",
     "OperatorFactor",
+    "PushedRows",
     "QuadForm",
     "as_evaluator",
     "bessel_coefficients",
+    "cheb_order",
+    "cheb_tail",
     "dense_factor",
     "ghat",
     "keep_mask",
+    "positions",
     "quad_form",
     "window_bins",
 ]
