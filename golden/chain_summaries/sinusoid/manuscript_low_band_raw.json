@@ -2,6 +2,7 @@
  "burn_fraction": 0.3,
  "case": "manuscript_low",
  "caveats": [],
+ "counter_log": "absent",
  "counters": null,
  "ess_rule": "min(batch means floor(sqrt n) batches, Geyer); split-R-hat over 4 segments",
  "max_rhat": 1.0002095384655891,
@@ -88,25 +89,26 @@
    "std": 0.02699531011248152
   },
   "phi_0": {
-   "circular_mean": -6.1405828629265065,
+   "circular_mean": 0.14260244425307977,
    "ess": 5025.765368305611,
    "mcse_mean": 0.001834973720837651,
-   "mean": -6.140579440150594,
+   "mean": 0.14260586702899272,
    "periodic": [
     -3.141592653589793,
     3.141592653589793
    ],
-   "q05": -6.355123647803571,
-   "q16": -6.269746540468137,
-   "q50": -6.140933575708677,
-   "q84": -6.013393904547838,
-   "q95": -5.923537341791907,
+   "q05": -0.07193834062398471,
+   "q16": 0.013438766711448573,
+   "q50": 0.14225173147090953,
+   "q84": 0.2697914026317479,
+   "q95": 0.3596479653876791,
    "rhat": 1.0002095384655891,
    "std": 0.13008611796885092
   }
  },
  "per_chain": [
   {
+   "counter_log": "absent",
    "counters": null,
    "files": {
     "chain_0.bin": {
@@ -117,6 +119,7 @@
      "bytes": 1477,
      "sha256": "4bee5a281aec3e8ef38491990100c4964966eb1d4e0fafdb2027aa0a620a0dbb"
     },
+    "noise_states.jsonl": null,
     "run_meta.json": {
      "bytes": 2434,
      "sha256": "c150b5b8ee5e68417d224a9ee7ae7994b3df013e9b1e10e48b681449f9c3b95f"
@@ -172,6 +175,7 @@
    },
    "rows": 25000,
    "run": "manuscript_low/band_raw_flow_seed301",
+   "sampler": "flow_pt",
    "stale": false,
    "stored_diagnostics": {
     "max_rhat": 1.0002095384655891,

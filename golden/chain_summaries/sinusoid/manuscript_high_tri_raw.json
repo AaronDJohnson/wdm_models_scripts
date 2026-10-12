@@ -2,6 +2,7 @@
  "burn_fraction": 0.3,
  "case": "manuscript_high",
  "caveats": [],
+ "counter_log": "present",
  "counters": {
   "counters_lower_bound": false,
   "evaluations": 6400024,
@@ -116,6 +117,7 @@
  },
  "per_chain": [
   {
+   "counter_log": "present",
    "counters": {
     "counter_sessions": 3,
     "counters_lower_bound": false,
@@ -192,6 +194,7 @@
    },
    "rows": 80000,
    "run": "manuscript_high/tri_raw_seed102",
+   "sampler": null,
    "stale": false,
    "stored_diagnostics": {
     "max_rhat": 1.0006104021416855,

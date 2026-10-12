@@ -2,6 +2,7 @@
  "burn_fraction": 0.3,
  "case": "manuscript_mid",
  "caveats": [],
+ "counter_log": "absent",
  "counters": null,
  "ess_rule": "min(batch means floor(sqrt n) batches, Geyer); split-R-hat over 4 segments",
  "max_rhat": 1.000456080780077,
@@ -92,6 +93,7 @@
  },
  "per_chain": [
   {
+   "counter_log": "absent",
    "counters": null,
    "files": {
     "chain_0.bin": {
@@ -102,6 +104,7 @@
      "bytes": 1234,
      "sha256": "b61a48a0cd4dce166b2115fee3a22d0871076a661d23b8f21b77d40953e2277b"
     },
+    "noise_states.jsonl": null,
     "run_meta.json": {
      "bytes": 2503,
      "sha256": "65d9d612f4c2330a16acf87ef80e0a73b0147f45eb96f735fd0ef007dad3cbe3"
@@ -150,6 +153,7 @@
    },
    "rows": 384000,
    "run": "manuscript_mid/whittle_raw_flow_seed311",
+   "sampler": "flow_pt",
    "stale": false,
    "stored_diagnostics": {
     "max_rhat": 1.000456080780077,

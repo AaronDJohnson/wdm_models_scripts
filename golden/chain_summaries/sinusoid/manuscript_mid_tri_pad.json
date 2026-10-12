@@ -2,6 +2,7 @@
  "burn_fraction": 0.3,
  "case": "manuscript_mid",
  "caveats": [],
+ "counter_log": "present",
  "counters": {
   "counters_lower_bound": false,
   "evaluations": 2800032,
@@ -97,25 +98,26 @@
    "std": 0.02884643225254432
   },
   "phi_0": {
-   "circular_mean": -5.699898320480372,
+   "circular_mean": 0.5832869866992141,
    "ess": 16102.539934087272,
    "mcse_mean": 0.0007420589481165416,
-   "mean": -5.699895799140352,
+   "mean": 0.5832895080392333,
    "periodic": [
     -3.141592653589793,
     3.141592653589793
    ],
-   "q05": -5.854199484453517,
-   "q16": -5.79315068783838,
-   "q50": -5.700161968194771,
-   "q84": -5.606648179767224,
-   "q95": -5.544342167147433,
+   "q05": 0.4289858227260683,
+   "q16": 0.49003461934120696,
+   "q50": 0.5830233389848156,
+   "q84": 0.676537127412363,
+   "q95": 0.738843140032153,
    "rhat": 1.0000022176262566,
    "std": 0.09416415181158799
   }
  },
  "per_chain": [
   {
+   "counter_log": "present",
    "counters": {
     "counter_sessions": 4,
     "counters_lower_bound": false,
@@ -192,6 +194,7 @@
    },
    "rows": 35000,
    "run": "manuscript_mid/tri_pad_seed101",
+   "sampler": null,
    "stale": false,
    "stored_diagnostics": {
     "max_rhat": 1.0011521130769452,
