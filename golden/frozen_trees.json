@@ -1,0 +1,62 @@
+{
+ "excluded": {
+  "dirs": [
+   "__pycache__",
+   ".pytest_cache",
+   ".mypy_cache",
+   ".ruff_cache",
+   ".ipynb_checkpoints"
+  ],
+  "files": [
+   ".DS_Store"
+  ]
+ },
+ "listing": "frozen_trees_files.tsv.gz",
+ "listing_sha256": "c08ebaa833440b04c774aac8832e56f85a1bdf4d32737074e2db489c201c6c5e",
+ "root": "/Users/aaron/Documents/GitHub/wdm_test",
+ "schema": 1,
+ "trees": {
+  "toy_models": {
+   "max_mtime_ns": 1791503410777679352,
+   "n_bytes": 22672270778,
+   "n_files": 9620,
+   "tree_sha256": "3572f1111434ad308bf0148d453e1e74424270dc09e07cf4316170a7aa41aaf2"
+  },
+  "wdm": {
+   "max_mtime_ns": 1781852120773055458,
+   "n_bytes": 331852,
+   "n_files": 20,
+   "tree_sha256": "f392943986af81b3f7632cd1fdeff25724a802394702450eb35efe0725921591"
+  },
+  "wdm_paper_1": {
+   "max_mtime_ns": 1786496161149749682,
+   "n_bytes": 5218875395,
+   "n_files": 1836,
+   "tree_sha256": "a46c7c477fbc2c3c358e33a5d4afc14be08f646a9c6af4afc787227d7aefce5a"
+  },
+  "wdm_paper_2/final_chains": {
+   "max_mtime_ns": 1791503445358931619,
+   "n_bytes": 43230815418,
+   "n_files": 3670,
+   "tree_sha256": "5cfe60544c9e20ffa518f3397d405f1c166ae43e9b77978df323f264e27136e2"
+  },
+  "wdm_paper_2/gbonfly": {
+   "max_mtime_ns": 1787018008130422224,
+   "n_bytes": 145741,
+   "n_files": 27,
+   "tree_sha256": "676d44275c87a27df0bd0fa57488bd43ff03f501c60560c0d835e9c73a2713d3"
+  },
+  "wdm_paper_2/sinusoid_final": {
+   "max_mtime_ns": 1791381450230761568,
+   "n_bytes": 1411240819,
+   "n_files": 717,
+   "tree_sha256": "9bfcf57aabb335ff46f732542b596dcb8efebf14a45a268a608743343aa5cf69"
+  },
+  "wdm_paper_2/toy_models": {
+   "max_mtime_ns": 1791160758119214602,
+   "n_bytes": 26687920159,
+   "n_files": 3038,
+   "tree_sha256": "3326c2b5382c47eec72ac31fdf9febc421f4008d2e95d2c57b5b78934fa51004"
+  }
+ }
+}
