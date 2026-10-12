@@ -11,6 +11,9 @@ Modules
   ``ChannelAxis`` (frozen, hashable: static under ``jax.jit``)
 * :mod:`domainia.data`: ``TimeSeries``, ``FourierBins``, ``WDMCells`` (pytrees; the
   domain and channels are static metadata)
+* :mod:`domainia.linalg`: block-tridiagonal (ragged / padded), Hermitian block, dense,
+  Schur and padded-marginal factors, preconditioned CG
+* :mod:`domainia.testing`: dense oracles for tests (not imported here)
 """
 
 from __future__ import annotations
@@ -20,7 +23,7 @@ import wdm as _wdm
 if getattr(_wdm, "__release__", None) != "wdm-paper-1" or not hasattr(_wdm, "forward_time_many"):
     raise ImportError(f"wdm resolved to {getattr(_wdm, '__file__', None)}: not the paper release")
 
-from . import data, domains  # noqa: E402
+from . import data, domains, linalg  # noqa: E402
 from .data import FourierBins, TimeSeries, WDMCells  # noqa: E402
 from .domains import CellSet, ChannelAxis, FourierDomain, TimeDomain, WDMDomain  # noqa: E402
 
@@ -38,4 +41,5 @@ __all__ = [
     "__version__",
     "data",
     "domains",
+    "linalg",
 ]
