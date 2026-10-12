@@ -344,7 +344,25 @@ def colored_noise(
        :func:`empirical_variance` low at the two edge bands -- exactly
        where an analytic cross-check is hardest.  See
        ``src/wdm/summary.md``.
+
+    Raises
+    ------
+    ValueError
+        If ``N`` is not a positive even integer, or ``dt`` is not positive and
+        finite.  Both are checked before the PSD is evaluated or ``rng`` is
+        drawn from.  An odd ``N`` has no Nyquist bin, yet bin ``N//2`` would
+        be drawn real-only as if it were one, and the noise would not be
+        stationary (per-sample variance 0.79--1.22 of its mean at ``N = 9``).
     """
+    # Public entry point: same checks as validate_grid/validate_dt, on N itself.
+    # They only raise, so valid input takes the oracle's path bit for bit.
+    if isinstance(N, bool) or not isinstance(N, (int, np.integer)):
+        raise ValueError(f"N must be an integer, got {type(N).__name__}")
+    if N <= 0:
+        raise ValueError(f"N must be positive, got {N}")
+    if N % 2 != 0:
+        raise ValueError(f"N must be even, got {N}")
+    validate_dt(dt)
     freqs = np.fft.rfftfreq(N, d=dt)
     Sn = sanitize_psd(Sn_func(freqs), "colored_noise")
     sigma_full = np.sqrt(N * Sn / (2.0 * dt))

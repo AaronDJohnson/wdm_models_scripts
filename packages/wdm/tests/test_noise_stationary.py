@@ -60,6 +60,49 @@ def test_colored_noise_and_empirical_variance_are_bitwise_the_oracle():
                           onoise.empirical_variance(Nf, Nt, dt, _psd, 20, seed=3))
 
 
+@pytest.mark.parametrize(("N", "dt", "match"), [
+    (9, 1.0, "N must be even, got 9"),
+    (7, 0.5, "N must be even, got 7"),
+    (1, 1.0, "N must be even, got 1"),
+    (0, 1.0, "N must be positive, got 0"),
+    (-8, 1.0, "N must be positive, got -8"),
+    (True, 1.0, "N must be an integer, got bool"),
+    (8.0, 1.0, "N must be an integer, got float"),
+    (8, 0.0, "dt must be a positive finite number"),
+    (8, -1.0, "dt must be a positive finite number"),
+    (8, np.inf, "dt must be a positive finite number"),
+    (8, np.nan, "dt must be a positive finite number"),
+])
+def test_colored_noise_rejects_bad_N_and_dt(N, dt, match):
+    """``colored_noise`` is public since C4, so it validates like every entry point.
+
+    Unvalidated, an odd N has no Nyquist bin yet bin N//2 was drawn real-only,
+    so the noise was not stationary (per-sample variance 0.79--1.22 of its mean
+    at N=9, flat PSD, 40k draws); dt < 0 returned NaN with only a warning; dt=0
+    and N=0 raised ZeroDivisionError; N=1 raised "negative dimensions".  The
+    checks run before the PSD is evaluated or the generator is touched.
+    """
+    def psd(f):
+        raise AssertionError("PSD evaluated before the input checks")
+
+    rng = np.random.default_rng(0)
+    state = rng.bit_generator.state
+    with pytest.raises(ValueError, match=match):
+        noise.colored_noise(N, dt, psd, rng)
+    assert rng.bit_generator.state == state
+
+
+def test_colored_noise_valid_edge_inputs_are_bitwise_the_oracle():
+    """The checks only raise: N=2 (DC + Nyquist, no interior) and a NumPy-int N
+    still give the oracle's draws bit for bit."""
+    a = noise.colored_noise(2, 1.0, _psd, np.random.default_rng(5))
+    b = onoise._generate_colored_noise(2, 1.0, _psd, np.random.default_rng(5))
+    assert a.shape == (2,) and np.array_equal(a, b)
+    c = noise.colored_noise(np.int64(16), 0.5, _psd, np.random.default_rng(5))
+    d = onoise._generate_colored_noise(16, 0.5, _psd, np.random.default_rng(5))
+    assert np.array_equal(c, d)
+
+
 @pytest.mark.parametrize("grid", GRIDS)
 def test_stationary_builders_are_bitwise_the_oracle(grid, rng):
     Nf, Nt, dt = grid
