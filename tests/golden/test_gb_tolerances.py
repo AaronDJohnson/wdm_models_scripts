@@ -49,7 +49,9 @@ def test_g4_masks_and_gates(measured):
     g4 = measured["G4"]
     assert g4["mask_mismatches"] == [] and measured["summary"]["G4_mask_mismatches"] == 0
     assert g4["cache_within_numpy_gate"]
-    assert g4["gate_jax_well_conditioned"] <= 1e-6
+    assert g4["gate_jax_well_conditioned"] <= 1e-6                     # spec 7.3 ceiling
+    assert g4["gate_jax_well_conditioned"] >= max(10 * g4["observed_jax_well_conditioned"], 1e-10)
+    assert measured["summary"]["G4_gate_jax_well_conditioned"] == g4["gate_jax_well_conditioned"]
     assert len(g4["per_target"]) >= 30
 
 
@@ -134,6 +136,26 @@ def test_synthetic_clean_inputs_measure(tmp_path):
     m = mt.measure(tmp_path)
     assert m["G3"]["gb_3mo/exact"]["observed_numpy"] == 1e-12
     assert m["G4"]["mask_mismatches"] == [] and m["G4"]["observed_jax_well_conditioned"] == pytest.approx(1e-9)
+    assert m["G4"]["gate_jax_well_conditioned"] == 10 * m["G4"]["observed_jax_well_conditioned"]
+
+
+@pytest.mark.parametrize("delta", [1e-6, 5e-7, 3e-6])
+def test_synthetic_jax_gate_above_ceiling_raises(tmp_path, delta):
+    """10 x observed > 1e-6 at a well-conditioned point: S0 fails, the gate is never capped below it."""
+    _row_file(tmp_path)
+    _stress_file(tmp_path, pd_margin=1e-3, lnl_jax=-100.0 + delta)
+    with pytest.raises(ValueError, match=r"fails its own data.*gb_3mo/exact/fast: observed"):
+        mt.measure(tmp_path)
+
+
+def test_synthetic_jax_gate_at_ceiling_and_ill_conditioned(tmp_path):
+    _row_file(tmp_path)
+    _stress_file(tmp_path, lnl_ref=0.0, lnl_cache=0.0, lnl_jax=-1e-7)    # 10 x observed == 1e-6
+    g4 = mt.measure(tmp_path)["G4"]
+    assert g4["observed_jax_well_conditioned"] == 1e-7 and g4["gate_jax_well_conditioned"] == 1e-6
+    _stress_file(tmp_path, pd_margin=1e-8, lnl_jax=-100.0 + 1e-6)      # condition-scaled, not gated
+    g4 = mt.measure(tmp_path)["G4"]
+    assert g4["observed_jax_well_conditioned"] == 0.0 and g4["condition_scaled_jax_max"] > 0.0
 
 
 @pytest.mark.parametrize("ref,jax", [(-100.0, -math.inf), (-math.inf, -100.0)])

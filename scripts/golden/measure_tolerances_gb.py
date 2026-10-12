@@ -12,9 +12,11 @@ Rules (each gate = max(10 x observed, floor), floors from spec 7.3):
 
 * G3 rows, NumPy: observed |lineage-C NumPy - stored| per target; floor 1e-9 (the proposal).
 * G3 rows, JAX (CPU): observed |lineage-C JAX - stored| per target; floor 1e-8.
-* G4 stress, well-conditioned finite points (PD margin >= 1e-6): |JAX - NumPy reference| with the
-  1e-6 ceiling, tightened to max(10 x observed, 1e-10); |NumPy cache (expanded) - reference|
-  against 1e-10 + 1e-12 |lnL|.
+* G4 stress, well-conditioned finite points (PD margin >= 1e-6): |JAX - NumPy reference|, gate
+  max(10 x observed, 1e-10). The 1e-6 ceiling (spec 7.3, today's ``test_jax``) is a spec limit,
+  not a clamp: if 10 x observed exceeds it, the gate cannot be both >= 10 x observed and <= 1e-6,
+  so ``measure`` raises ``ValueError`` (S0 fails, nothing written) instead of capping the gate
+  below its own data. |NumPy cache (expanded) - reference| against 1e-10 + 1e-12 |lnL|.
 * G4 stress, ill-conditioned non-marginal points (1e-10 <= margin < 1e-6): reported in units of
   ``eps |lnL| / margin`` (condition-scaled), a proposal for the user, not a gate yet.
 * -inf masks on non-marginal points must agree (count reported; any mismatch fails S0). A NaN or
@@ -167,10 +169,18 @@ def measure_stress(gb: Path) -> dict:
         per[key] = t
     _fail("G4 stress", problems)
     jax_well = max((t["jax_well"] for t in per.values()), default=0.0)
+    # The ceiling is a spec limit, not a clamp: min(ceiling, 10 x observed) would put the gate
+    # below 10 x observed (observed 5e-7 -> gate 1e-6) or even below the observation itself
+    # (observed 3e-6 -> gate 1e-6) without any error.
+    _fail("G4 stress: a proposed JAX well-conditioned gate fails its own data (10 x observed > "
+          f"the spec 7.3 ceiling {FLOOR['G4_jax_ceiling']:g}; S0 fails, report to the user)",
+          [f"{k}: observed {t['jax_well']:.3e}, 10 x observed {10.0 * t['jax_well']:.3e}"
+           for k, t in per.items() if 10.0 * t["jax_well"] > FLOOR["G4_jax_ceiling"]])
+    gate_jax = _gate(jax_well, FLOOR["G4_jax_floor"])
+    assert gate_jax <= FLOOR["G4_jax_ceiling"]
     return {"per_target": per, "mask_mismatches": mismatches,
             "observed_jax_well_conditioned": jax_well,
-            "gate_jax_well_conditioned": min(FLOOR["G4_jax_ceiling"],
-                                             _gate(jax_well, FLOOR["G4_jax_floor"])),
+            "gate_jax_well_conditioned": gate_jax,
             "observed_cache_well_conditioned": max((t["cache_well"] for t in per.values()), default=0.0),
             "cache_within_numpy_gate": all(t["cache_within_numpy_gate"] for t in per.values()),
             "condition_scaled_jax_max": max((t["jax_cond"] for t in per.values()), default=0.0),
