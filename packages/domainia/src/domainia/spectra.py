@@ -56,15 +56,20 @@ class LogLinearPSD:
 
 @dataclass(frozen=True, eq=False)
 class TabulatedSpectrum:
-    """``values[c, j]`` at absolute rfft bin ``domain.k0 + j`` of ``domain``'s record."""
+    """``values[c, j]`` at absolute rfft bin ``domain.k0 + j`` of ``domain``'s record.
+
+    ``values`` is a read-only float64 copy (the caller's array is never aliased), as
+    D-A's ``CellSet`` keeps its indices.
+    """
 
     domain: FourierDomain
     values: np.ndarray
 
     def __post_init__(self) -> None:
-        v = np.asarray(self.values, dtype=float)
+        v = np.array(self.values, dtype=float)                 # a copy, values unchanged
         if v.ndim != 2 or v.shape[1] != self.domain.n:
             raise ValueError(f"values must be (channels, {self.domain.n}); got {v.shape}")
+        v.setflags(write=False)
         object.__setattr__(self, "values", v)
 
     @property
@@ -85,9 +90,18 @@ class TabulatedSpectrum:
         return self.values[:, lo:lo + window.n]
 
     def at(self, bins: Any) -> np.ndarray:
-        """``(C, *bins.shape)``: the values at absolute bins; raises outside the table."""
-        bins = np.asarray(bins, dtype=np.int64)
-        self._check(self.domain.N, self.domain.dt, int(bins.min()), int(bins.max()) + 1)
+        """``(C, *bins.shape)``: the values at absolute bins; raises outside the table.
+
+        Integer bins only: a non-integral float (``99.9999``) raises instead of being
+        truncated by the int64 cast.
+        """
+        b = np.asarray(bins)
+        if b.dtype.kind not in "iu" and not (b.dtype.kind == "f" and np.all(np.isfinite(b))
+                                             and np.array_equal(b, np.rint(b))):
+            raise ValueError(f"bins must be integers; got {b.dtype} values")
+        bins = b.astype(np.int64)
+        if bins.size:
+            self._check(self.domain.N, self.domain.dt, int(bins.min()), int(bins.max()) + 1)
         return self.values[:, bins - self.domain.k0]
 
 
