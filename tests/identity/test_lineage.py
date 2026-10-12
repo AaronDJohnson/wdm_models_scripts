@@ -39,7 +39,13 @@ def test_worker_env_replaces_rather_than_inherits(monkeypatch):
     monkeypatch.setenv("PYTHONPATH", "/must/not/leak")
     monkeypatch.setenv("JAX_PLATFORMS", "cuda")
     monkeypatch.setenv("WDM_GOLDEN_EXPECT_WDM", "/stale")
+    # Inherited variables that worker_env does NOT set again: only the prefix filter removes them.
+    leaked = {"XLA_FLAGS": "--xla_cpu_enable_fast_math=true", "JAX_DISABLE_JIT": "1",
+              "PYTHONWARNINGS": "ignore", "PYTHONHASHSEED": "0", "WDM_GOLDEN_STALE": "1"}
+    for key, value in leaked.items():
+        monkeypatch.setenv(key, value)
     env = L.worker_env("A")
+    assert not set(leaked) & set(env)
     assert env["PYTHONPATH"].split(os.pathsep) == L.LINEAGES["A"]
     assert (env["JAX_PLATFORMS"], env["JAX_ENABLE_X64"]) == ("cpu", "true")
     assert (env["PYTHONDONTWRITEBYTECODE"], env["PYTHONSAFEPATH"], env["PYTHONNOUSERSITE"]) == ("1", "1", "1")
