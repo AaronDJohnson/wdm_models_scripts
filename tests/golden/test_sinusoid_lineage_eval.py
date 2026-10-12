@@ -73,3 +73,43 @@ def test_A_reproduces_the_verified_models_bitwise():
     models = _report("A")["models"]
     for model in VERIFIED_BITWISE:
         assert (models[model]["near_max_abs"], models[model]["stress_max_abs"]) == (0.0, 0.0), model
+
+
+#: toy_models/sinusoid/gpu/run.py::main: validate_reference(atol=1e-4 exact / 1e-5 matrix, stress_rtol=1e-8)
+RUNNER_ATOL = {"exact": 1e-4}
+
+
+def test_B_fast_report_covers_every_target_on_cpu_x64():
+    rep = _report("B")
+    assert (rep["lineage"], rep["tier"], rep["kind"]) == ("B", "fast", "references")
+    assert set(rep["points"]) == TAGS
+    for m in rep["models"].values():
+        assert (m["n_points"], m["inf_mismatch"]) == (12, 0)
+    assert (rep["worker"]["jax"]["backend"], rep["worker"]["jax"]["x64"], rep["worker"]["jax"]["version"]) == (
+        "cpu", True, "0.9.0.1")
+    assert rep["worker"]["wdm_file"] == VENDORED_WDM_REL   # committed reports are ROOT-relative (A6 review)
+    assert rep["worker"]["cache_sha256"] == CACHE_SHA
+
+
+def test_B_meets_the_runner_validation_gate():
+    for tag, p in _report("B")["points"].items():
+        atol = RUNNER_ATOL.get(p["model"], 1e-5)
+        for d, ref, near in zip(p["abs_delta"], p["reference"], p["near"]):
+            r = to_float(ref)
+            if math.isfinite(r):
+                assert d <= (atol if near else atol + 1e-8 * abs(r)), tag
+
+
+def test_B_flags_exactly_the_minus_inf_rows():
+    for tag, p in _report("B")["points"].items():
+        assert p["failed"] == [to_float(v) == -math.inf for v in p["value"]], tag
+
+
+@requires_legacy
+@pytest.mark.legacy
+def test_lineage_B_worker_reproduces_an_edge_exact_mask():
+    from scripts.golden.legacy_eval import evaluate
+    ref = read_npz(SG.REFS / "manuscript_mid_band_exact_reference.npz")
+    got = evaluate("B", "sinusoid", "manuscript_mid", "band_exact", ref["theta"][[0, 4]])
+    # pins the -inf mask; the near-point level is the runner's gate (S0 measures the real one)
+    assert got[1] == -np.inf and abs(got[0] - ref["loglike"][0]) <= 1e-5
