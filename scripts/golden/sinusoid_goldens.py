@@ -346,6 +346,24 @@ def eval_chains_cmd(argv: list[str]) -> dict:
     return run_chain_eval(a.lineage, a.tier)
 
 
+# --- G6: per-module intermediates at the manuscript_mid truth (Task A9) --------------------
+
+@command("g6")
+def g6(argv: list[str]) -> dict:
+    argparse.ArgumentParser(prog="sinusoid_goldens g6").parse_args(argv)
+    from scripts.golden.lineage import run_worker
+    out = run_worker("A", "sinusoid_wt", "intermediates", "--data-root", str(DATA / "sinusoid"),
+                     "--cache-src", str(DATA / "sinusoid" / "cache"), timeout=3600.0)
+    # wdm_file relative to ROOT, as in every committed lineage report (_portable_worker)
+    report = _portable_worker(read_json(out / "intermediates.json"))
+    arrays = read_npz(out / "intermediates.npz")
+    INTERMEDIATES.mkdir(parents=True, exist_ok=True)
+    write_json(INTERMEDIATES / "manuscript_mid_truth.json", report)
+    write_npz(INTERMEDIATES / "manuscript_mid_truth.npz", arrays)
+    print(f"G6: {len(report['parts'])} models split into their terms; arrays {sorted(arrays)} -> {INTERMEDIATES}")
+    return report
+
+
 def main(argv: list[str] | None = None) -> int:
     if not sys.flags.safe_path:          # spec §1 guard 5: no cwd injection
         raise SystemExit("run with python -P or PYTHONSAFEPATH=1 (source env/activate.sh)")
