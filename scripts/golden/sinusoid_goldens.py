@@ -151,19 +151,26 @@ def g1(argv: list[str]) -> dict:
 
 def compare(values, reference, near) -> dict:
     """|value - reference| split like gpu/run.py::validate_reference: near points (atol) and
-    stress points (atol + rtol |ref|); -inf must agree exactly (counted, not differenced)."""
+    stress points (atol + rtol |ref|); -inf must agree exactly. Where both are -inf the delta is
+    0; a -inf mask mismatch is counted (``inf_mismatch``) and recorded as an infinite abs and rel
+    delta, so neither the per-point deltas nor the maxima can read as agreement."""
     values = np.asarray(values, dtype=float)
     reference = np.asarray(reference, dtype=float)
     near = np.asarray(near, dtype=bool)
     if not np.all(np.isfinite(values) | (values == -np.inf)):
         raise FloatingPointError("a lineage returned NaN or +inf")
+    if not np.all(np.isfinite(reference) | (reference == -np.inf)):
+        raise FloatingPointError("a reference holds NaN or +inf")
     v_inf, r_inf = values == -np.inf, reference == -np.inf
     both = ~v_inf & ~r_inf
+    mismatch = v_inf != r_inf
     delta = np.zeros(values.shape)
     delta[both] = np.abs(values[both] - reference[both])
+    delta[mismatch] = np.inf
     rel = np.zeros(values.shape)
     rel[both] = delta[both] / np.maximum(np.abs(reference[both]), np.finfo(float).tiny)
-    return {"abs_delta": delta, "rel_delta": rel, "inf_mismatch": int(np.sum(v_inf != r_inf)),
+    rel[mismatch] = np.inf
+    return {"abs_delta": delta, "rel_delta": rel, "inf_mismatch": int(np.sum(mismatch)),
             "near_max_abs": float(delta[near].max(initial=0.0)),
             "stress_max_abs": float(delta[~near].max(initial=0.0)),
             "stress_max_rel": float(rel[~near].max(initial=0.0))}

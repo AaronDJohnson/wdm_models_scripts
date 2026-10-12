@@ -42,18 +42,29 @@ def propose(observed: dict, floor: dict) -> dict:
 
 
 def violations(points: dict, gates: dict) -> list[str]:
-    """Points whose |delta| exceeds their gate (near: atol; stress: atol + rtol |ref|)."""
+    """Every gate failure of ``points`` (``{tag: {"model", "value", "reference", "abs_delta"[, "near"]}}``):
+    a -inf mask mismatch (``isneginf(value) != isneginf(reference)``) at any gate; NaN or +inf in a
+    value or reference; |delta| above its gate (near: atol; stress: atol + rtol |ref|), NaN
+    included; and value/reference/abs_delta/near lists of different lengths. Points where both
+    are -inf agree."""
     out = []
     for tag, p in points.items():
         gate = gates[p["model"]]
-        near = p.get("near", [True] * len(p["abs_delta"]))
-        for d, ref, is_near in zip(p["abs_delta"], p["reference"], near):
-            r = to_float(ref)
-            if not math.isfinite(r):
-                continue
-            allowed = gate["atol"] if is_near else gate["atol"] + gate["rtol"] * abs(r)
-            if d > allowed:
-                out.append(f"{tag}: |delta| {d:.3e} > allowed {allowed:.3e}")
+        n = len(p["reference"])
+        near = p.get("near", [True] * n)
+        if not len(p["value"]) == len(p["abs_delta"]) == len(near) == n:
+            out.append(f"{tag}: value/reference/abs_delta/near lengths differ")
+            continue
+        for i, (val, ref, delta, is_near) in enumerate(zip(p["value"], p["reference"], p["abs_delta"], near)):
+            v, r, d = to_float(val), to_float(ref), to_float(delta)
+            if math.isnan(v) or math.isnan(r) or math.inf in (v, r):
+                out.append(f"{tag}[{i}]: NaN or +inf (value {v}, reference {r})")
+            elif (v == -math.inf) != (r == -math.inf):
+                out.append(f"{tag}[{i}]: -inf mask mismatch (value {v}, reference {r})")
+            elif r != -math.inf:
+                allowed = gate["atol"] if is_near else gate["atol"] + gate["rtol"] * abs(r)
+                if not d <= allowed:
+                    out.append(f"{tag}[{i}]: |delta| {d:.3e} > allowed {allowed:.3e}")
     return out
 
 
@@ -76,7 +87,7 @@ def measure_sinusoid() -> dict:
             for model, s in rep["models"].items():
                 o = obs[model]
                 for key in ("near_max_abs", "stress_max_abs", "stress_max_rel"):
-                    o[key] = max(o[key], s[key])
+                    o[key] = max(o[key], to_float(s[key]))      # "inf" after a -inf mismatch
                 o["inf_mismatch"] += s["inf_mismatch"]
                 o["n_points"] += s["n_points"]
         cobs = {m: {"max_abs": 0.0, "max_rel": 0.0, "inf_mismatch": 0, "n_rows": 0} for m in MODELS}
@@ -84,9 +95,14 @@ def measure_sinusoid() -> dict:
             out["reports"].append(f"{lineage}_chain_rows_{rep['tier']}")
             for model, s in rep["models"].items():
                 c = cobs[model]
-                c["max_abs"], c["max_rel"] = max(c["max_abs"], s["max_abs"]), max(c["max_rel"], s["max_rel"])
+                c["max_abs"] = max(c["max_abs"], to_float(s["max_abs"]))
+                c["max_rel"] = max(c["max_rel"], to_float(s["max_rel"]))
                 c["inf_mismatch"] += s["inf_mismatch"]
                 c["n_rows"] += s["n_rows"]
+        empty = [m for m in MODELS if obs[m]["n_points"] <= 0 or cobs[m]["n_rows"] <= 0]
+        if empty:
+            raise ValueError(f"lineage {lineage}: no reference points or no chain rows for {empty}: "
+                             "gate S0 cannot be measured")
         bad = [m for m in MODELS if obs[m]["inf_mismatch"] or cobs[m]["inf_mismatch"]]
         if bad:
             raise ValueError(f"lineage {lineage} disagrees with a stored -inf mask for {bad}: gate S0 fails")

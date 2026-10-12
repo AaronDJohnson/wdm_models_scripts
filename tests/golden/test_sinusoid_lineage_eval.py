@@ -15,8 +15,9 @@ requires_legacy = pytest.mark.skipif(not legacy_available(), reason="frozen lega
 #: committed reports record wdm_file relative to ROOT (portable); live worker meta is absolute.
 VENDORED_WDM_REL = "toy_models/vendor/wdm/src/wdm/__init__.py"
 VENDORED_WDM = str(ROOT / VENDORED_WDM_REL)
-#: spec §3.6: bitwise reproduction verified (max|delta| = 0.0) for these models.
-VERIFIED_BITWISE = ("whittle_raw", "whittle_cut", "band_raw", "mid_raw", "band_cut", "tri_raw")
+#: Lineage A re-evaluates its own G1 references: measured bitwise (max|delta| = 0.0) for all 15
+#: models x 12 fast-tier points in A_references_fast.json (spec §3.6 claimed only 6).
+VERIFIED_BITWISE = SG.MODELS
 CACHE_SHA = {
     "bandcov_v1_4bfb466c191c79f9879a.npz": "752b3ea46cf14feaf5b8845ad39999a0b596a956d6af9e58072f691a8cd6c2c2",
     "cN_N16384_dt0.0009765625_fmin4_fref1.npy": "d263bf25960ab6f4e371fd597da0e28123cba569ca085e2af5e6c3599257213f",
@@ -29,12 +30,23 @@ def _report(lineage: str) -> dict:
 
 
 def test_compare_splits_near_and_stress_and_counts_inf_mismatch():
-    cmp = SG.compare([1.0, -np.inf, 2.5, -np.inf], [1.0 + 1e-12, -np.inf, 2.0, 5.0], [True, False, False, False])
-    assert cmp["inf_mismatch"] == 1
+    cmp = SG.compare([1.0, -np.inf, 2.5], [1.0 + 1e-12, -np.inf, 2.0], [True, False, False])
+    assert cmp["inf_mismatch"] == 0
     assert cmp["near_max_abs"] == pytest.approx(1e-12, rel=1e-3)
     assert (cmp["stress_max_abs"], cmp["stress_max_rel"]) == (0.5, 0.25)
     with pytest.raises(FloatingPointError):
         SG.compare([np.nan], [1.0], [True])
+
+
+@pytest.mark.parametrize("values, reference", [([-np.inf], [5.0]), ([5.0], [-np.inf])])
+def test_compare_records_a_minus_inf_mismatch_as_an_infinite_delta(values, reference):
+    """Never abs_delta = 0: the mismatch shows in the per-point delta and in the maxima."""
+    cmp = SG.compare([1.0, *values], [1.0, *reference], [True, False])
+    assert cmp["inf_mismatch"] == 1
+    assert cmp["abs_delta"][1] == np.inf and cmp["rel_delta"][1] == np.inf
+    assert (cmp["stress_max_abs"], cmp["stress_max_rel"]) == (np.inf, np.inf)
+    with pytest.raises(FloatingPointError):            # a NaN or +inf reference is refused too
+        SG.compare([1.0], [np.nan], [True])
 
 
 @requires_legacy
@@ -70,9 +82,13 @@ def test_A_fast_report_covers_every_target():
 
 
 def test_A_reproduces_the_verified_models_bitwise():
-    models = _report("A")["models"]
+    rep = _report("A")
+    assert len(VERIFIED_BITWISE) == 15
     for model in VERIFIED_BITWISE:
-        assert (models[model]["near_max_abs"], models[model]["stress_max_abs"]) == (0.0, 0.0), model
+        m = rep["models"][model]
+        assert (m["near_max_abs"], m["stress_max_abs"], m["stress_max_rel"]) == (0.0, 0.0, 0.0), model
+    for tag, p in rep["points"].items():                # value == reference, -inf included
+        assert p["value"] == p["reference"], tag
 
 
 #: toy_models/sinusoid/gpu/run.py::main: validate_reference(atol=1e-4 exact / 1e-5 matrix, stress_rtol=1e-8)
