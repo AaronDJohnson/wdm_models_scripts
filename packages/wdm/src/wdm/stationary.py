@@ -796,9 +796,14 @@ def apply_lambda_from_psd(
         0.0).  This was not always so; see ``src/wdm/summary.md``.
     Sn_rfft : ndarray, float, shape (N//2 + 1,)
         One-sided PSD evaluated on the ``rfftfreq(N, dt)`` grid.  Last, like
-        every other PSD argument in the package.
+        every other PSD argument in the package.  ``inf`` samples are zero
+        power on every path (:func:`wdm.grid.sanitize_psd`).  Under
+        ``jax.jit`` the PSD is a tracer and negative or ``nan`` samples are not
+        checked: they are accepted silently instead of raising.
     Nf, Nt : int
     dt : float
+    be : Backend, optional
+        Array backend; inferred from ``x_wmn`` and ``Sn_rfft`` when omitted.
 
     Returns
     -------
@@ -835,9 +840,12 @@ def apply_lambda_from_psd(
     validate_grid(Nf, Nt)
     validate_dt(dt)
     be = be or get_backend(x_wmn, Sn_rfft)
-    # Host validation on concrete input only (a tracer has no values to check).
+    # Concrete input goes through sanitize_psd on the host.  A tracer cannot be
+    # checked (negative/nan pass through), but it still gets the same inf -> 0.0
+    # policy, so every path gives the same answer for the same PSD.
     if is_tracer(Sn_rfft):
         Sn_rfft = be.asarray(Sn_rfft)
+        Sn_rfft = be.xp.where(be.xp.isinf(Sn_rfft), 0.0, Sn_rfft)
     else:
         Sn_rfft = be.asarray(sanitize_psd(Sn_rfft, "apply_lambda_from_psd"))
     n_rfft = n_samples(Nf, Nt) // 2 + 1
