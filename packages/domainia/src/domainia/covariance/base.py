@@ -130,13 +130,15 @@ def as_evaluator(obj: Any, **kwargs: Any) -> Evaluator:
     """``obj`` itself when it has ``host_constants``/``evaluate``; a ``domainia.variance``-style
     pytree callable (callable with an ``on(be)`` method: evaluated as ``obj(nu, be=be,
     **kwargs)``, itself the constants); a callable ``fn(nu, be)``; or a fixed array.
-    ``kwargs`` (``channel``) apply to the pytree callables only."""
-    if hasattr(obj, "evaluate") and hasattr(obj, "host_constants"):
-        return obj
-    if callable(obj) and hasattr(obj, "on"):
+    ``kwargs`` (``channel``) apply to the pytree callables only: anything else given
+    ``kwargs`` raises ``ValueError`` (an ``Evaluator`` too -- it would drop them silently)."""
+    is_evaluator = hasattr(obj, "evaluate") and hasattr(obj, "host_constants")
+    if not is_evaluator and callable(obj) and hasattr(obj, "on"):
         return _PytreeCallableEvaluator(obj, tuple(sorted(kwargs.items())))
     if kwargs:
         raise ValueError(f"{sorted(kwargs)} apply to pytree callables (domainia.variance) only")
+    if is_evaluator:
+        return obj
     if callable(obj):
         return _CallableEvaluator(obj)
     return _FixedEvaluator(obj)

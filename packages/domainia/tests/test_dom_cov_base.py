@@ -112,8 +112,9 @@ def test_variances_from_callables_and_evaluators(backend, rng):
     assert cov.constants() is var
     F = cov.factor(backend.asarray(nu), backend)
     assert np.allclose(np.asarray(F.v), var(nu), rtol=1e-14, atol=0)
-    with pytest.raises(ValueError, match="pytree callables"):
-        DiagonalCovariance(base, 6, channel=1)
+    for variance in (base, Scaled(), lambda nu, be: be.asarray(base)):
+        with pytest.raises(ValueError, match="pytree callables"):
+            DiagonalCovariance(variance, 6, channel=1)
 
 
 @pytest.mark.jax
