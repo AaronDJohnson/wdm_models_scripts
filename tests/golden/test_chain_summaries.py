@@ -72,6 +72,27 @@ def test_summariser_is_read_only():
 
 
 @requires_legacy
+def test_refusal_comes_before_any_write(tmp_path, monkeypatch):
+    """Without --replace a changed summary is refused before golden/ is touched (scratch copy)."""
+    rel = "chain_summaries/sinusoid/manuscript_low_band_raw.json"
+    golden = tmp_path / "golden"
+    (golden / rel).parent.mkdir(parents=True)
+    for r in ("MANIFEST.json", rel):
+        (golden / r).write_bytes((GOLDEN / r).read_bytes())
+    monkeypatch.setattr(sc, "GOLDEN", golden)
+    snapshot = lambda: {p.relative_to(golden).as_posix(): p.read_bytes()   # noqa: E731
+                        for p in golden.rglob("*") if p.is_file()}
+    before = snapshot()
+    argv = ["--toy", "sinusoid", "--targets", "manuscript_low/band_raw"]
+    with pytest.raises(SystemExit, match="--replace"):    # --no-hash drops `files`: other bytes
+        sc.main(argv + ["--no-hash"])
+    assert snapshot() == before
+    assert sc.main(argv) == 0                               # same bytes: written, manifest merged
+    assert snapshot()[rel] == before[rel] == (GOLDEN / rel).read_bytes()
+    assert json.loads(snapshot()["MANIFEST.json"])["files"] == json.loads(before["MANIFEST.json"])["files"]
+
+
+@requires_legacy
 def test_45_sinusoid_summaries_in_manifest():
     files = json.loads((GOLDEN / "MANIFEST.json").read_text())["files"]
     runs = json.loads((SIN_ROOT / "manifest.json").read_text())["runs"]

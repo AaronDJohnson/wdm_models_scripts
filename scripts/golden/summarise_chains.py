@@ -8,7 +8,10 @@ Reads ``wdm_paper_2/sinusoid_final/manifest.json`` (45 runs) or
 directories; pooled targets list their ``runs``). Only ``run_meta.json``, ``chain_0.bin`` (the
 cold chain), ``diagnostics.json`` and ``noise_states.jsonl`` are opened, all read-only; nothing
 is ever written under the chains root. Writes ``golden/chain_summaries/<toy>/<case>_<model>.json``
-and merges them into ``golden/MANIFEST.json``.
+and merges them into ``golden/MANIFEST.json``. All summaries are built and hashed in memory
+first; if any would change a sha256 already in the manifest and ``--replace`` is not given, the
+run stops before writing anything (``--no-hash`` drops the ``files`` records, so it always
+differs from the committed summaries).
 
 Statistics (cold chain, first 30% of each chain dropped; periodic parameters unwrapped about
 their circular mean; numbers identical to ``chain_stats.diagnostics`` for one chain):
@@ -510,16 +513,26 @@ def main(argv=None) -> int:
         todo = {k: v for k, v in todo.items() if k in keep}
         if len(todo) != len(keep):
             raise SystemExit(f"unknown targets: {sorted(keep - set(todo))}")
-    out_dir.mkdir(parents=True, exist_ok=True)
-    files = {}
+    # Everything is computed and hashed in memory first; nothing is written until the manifest
+    # check has passed (as in capture_payload.capture), so a refused run leaves golden/ untouched.
+    files, payloads = {}, {}
     for (case, model), runs in sorted(todo.items()):
         s = summarise_target(a.toy, root, case, model, runs, hash_files=not a.no_hash)
         rel = f"chain_summaries/{a.toy}/{case}_{model}.json"
-        text = json.dumps(s, indent=1, sort_keys=True) + "\n"
-        (GOLDEN / rel).write_text(text)
-        files[rel] = manifest_merge.sha256_file(GOLDEN / rel)
+        payloads[rel] = (json.dumps(s, indent=1, sort_keys=True) + "\n").encode("utf-8")
+        files[rel] = hashlib.sha256(payloads[rel]).hexdigest()
         print(f"[summary] {a.toy} {case}/{model}: samples {s['samples']}, min ESS {s['min_ess']:.1f}, "
               f"max R-hat {s['max_rhat']:.4f}", flush=True)
+    bad = manifest_merge.conflicts(manifest_merge.load(GOLDEN / "MANIFEST.json"), files)
+    if bad and not a.replace:
+        raise SystemExit(f"golden/MANIFEST.json holds other bytes for {bad[:5]} "
+                         f"(+{max(0, len(bad) - 5)} more); nothing written; rerun with --replace "
+                         "only if the change is intended")
+    out_dir.mkdir(parents=True, exist_ok=True)
+    for rel, data in payloads.items():
+        (GOLDEN / rel).write_bytes(data)
+        if manifest_merge.sha256_file(GOLDEN / rel) != files[rel]:
+            raise RuntimeError(f"{rel}: written bytes differ from the summary")
     manifest_merge.merge_entries(GOLDEN / "MANIFEST.json", files,
                                  provenance={rel: {"script": "scripts/golden/summarise_chains.py",
                                                    "root": ROOTS[a.toy]} for rel in files},
