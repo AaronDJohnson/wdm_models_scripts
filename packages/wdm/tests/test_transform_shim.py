@@ -113,3 +113,66 @@ def test_jax_rejects_nonfinite_concrete_input(jax_be):
     x[5] = np.nan
     with pytest.raises(ValueError, match="not finite"):
         T.forward_time(jax_be.asarray(x), 8, 16, 1.0)
+
+
+# Single precision on JAX: every transform keeps float32 / complex64 end to end
+# and emits no FutureWarning ("scatter inputs have incompatible types: cannot
+# safely cast value from dtype=float64 to dtype=float32", an error in a future
+# JAX).  Run in a fresh interpreter: JAX warns at trace time, and a scatter of
+# the same shapes and dtypes cached earlier in this session would hide it.
+_F32_NO_WARNINGS = """
+import warnings
+import numpy as np, jax, jax.numpy as jnp
+from wdm.backend import enable_x64
+enable_x64()
+import wdm.transform as T
+warnings.simplefilter("error", FutureWarning)
+for Nf, Nt, dt in GRIDS:
+    rng = np.random.default_rng(Nf * Nt)
+    X = rng.standard_normal((3, Nf * Nt))
+    X32 = jnp.asarray(X.astype(np.float32))
+    W32 = jnp.asarray(T.forward_time_many(X, Nf, Nt, dt).astype(np.float32))
+    calls = {
+        "forward_time": (lambda: T.forward_time(X32[0], Nf, Nt, dt), np.float32),
+        "forward_time_many": (lambda: T.forward_time_many(X32, Nf, Nt, dt), np.float32),
+        "forward": (lambda: T.forward(jnp.fft.rfft(X32[0]), Nf, Nt, dt), np.float32),
+        "forward_many": (lambda: T.forward_many(jnp.fft.rfft(X32, axis=-1), Nf, Nt, dt),
+                         np.float32),
+        "inverse": (lambda: T.inverse(W32[0], Nf, Nt, dt), np.complex64),
+        "inverse_many": (lambda: T.inverse_many(W32, Nf, Nt, dt), np.complex64),
+        "inverse_time": (lambda: T.inverse_time(W32[0], Nf, Nt, dt), np.float32),
+        "inverse_time_many": (lambda: T.inverse_time_many(W32, Nf, Nt, dt), np.float32),
+        "jit forward_time": (lambda: jax.jit(lambda x: T.forward_time(x, Nf, Nt, dt))(X32[0]),
+                             np.float32),
+        "jit inverse_time": (lambda: jax.jit(lambda w: T.inverse_time(w, Nf, Nt, dt))(W32[0]),
+                             np.float32),
+    }
+    for name, (call, dtype) in calls.items():
+        try:
+            out = call()
+        except FutureWarning as warn:
+            print("WARNED", (Nf, Nt, dt), name, str(warn)[:120])
+            continue
+        if not isinstance(out, jax.Array) or out.dtype != dtype:
+            print("DTYPE", (Nf, Nt, dt), name, type(out).__name__, out.dtype)
+print("done")
+"""
+
+
+def test_jax_float32_keeps_single_precision_without_future_warnings(jax_be):
+    import os
+    import subprocess
+    import sys
+    from pathlib import Path
+
+    src = Path(__file__).resolve().parents[1] / "src"
+    env = dict(os.environ, PYTHONDONTWRITEBYTECODE="1", PYTHONPATH=str(src),
+               JAX_ENABLE_X64="true")
+    # the smallest grid, a non-power-of-two one and the sinusoid grid: the warning
+    # depends on dtypes, not shapes, and each grid costs ~2 s of eager JAX compiles
+    grids = [(2, 2, 1.0), (6, 10, 0.3), (64, 256, 2.0**-10)]
+    code = f"GRIDS = {grids!r}\n" + _F32_NO_WARNINGS
+    out = subprocess.run([sys.executable, "-P", "-c", code], env=env, capture_output=True,
+                         text=True)
+    assert out.returncode == 0, out.stderr
+    assert out.stdout.splitlines() == ["done"], out.stdout

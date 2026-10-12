@@ -178,6 +178,31 @@ def _check_finite(values: NDArray[np.generic], context: str) -> None:
         validate_finite(values, context)
 
 
+def _set_rounded(a: Array, idx: object, v: Array, be: Backend) -> Array:
+    """``a[idx] = v`` with ``v`` first rounded to ``a.dtype`` (``copy=False``).
+
+    NumPy rounds a float64 ``v`` once on store into a float32 ``a``; casting
+    first is that same rounding, so the result is bit-identical.  On JAX it
+    keeps the scatter dtype-safe: a float32 transform would otherwise store
+    float64 values, which jax 0.9 warns about (``FutureWarning``: "scatter
+    inputs have incompatible types") and a later JAX will reject.
+    """
+    return be.set(a, idx, be.asarray(v, dtype=a.dtype), copy=False)
+
+
+def _add_rounded(a: Array, idx: object, v: Array, be: Backend) -> Array:
+    """``a[idx] += v`` for a duplicate-free ``idx``, rounded once into ``a.dtype``.
+
+    NumPy's in-place ``+=`` adds in the promoted dtype and rounds once on
+    store; this spells it out -- gather, add, round, set -- so it is
+    bit-identical on NumPy for float32 and float64 alike, and dtype-safe on
+    JAX (see :func:`_set_rounded`).  Rounding ``v`` to ``a.dtype`` *before* the
+    add would round twice and change the float32 bits (120 of 160 random
+    float32 inverse cases differed from the oracle).
+    """
+    return be.set(a, idx, be.asarray(a[idx] + v, dtype=a.dtype), copy=False)
+
+
 def _parity(m: int | np.integer, n_arr: NDArray[np.integer]) -> tuple[BoolArray, Array]:
     """``((m+n) even, (-1)^{(m+1)n})`` for one band.
 
@@ -266,9 +291,10 @@ def _prepare_edges_for_inverse(
     mask = active_mask(Nf, Nt)
     root2 = np.sqrt(2)
     # ``work[..., 0, :] *= mask[0] * root2`` as a functional update; on NumPy
-    # it is the same in-place multiply, so the rounding is unchanged.
-    work = be.set(work, (..., 0, slice(None)), work[..., 0, :] * (mask[0] * root2), copy=False)
-    work = be.set(work, (..., Nf, slice(None)), work[..., Nf, :] * (mask[Nf] * root2), copy=False)
+    # it is the same in-place multiply (float64 product, rounded once into the
+    # working dtype), so the rounding is unchanged.
+    work = _set_rounded(work, (..., 0, slice(None)), work[..., 0, :] * (mask[0] * root2), be)
+    work = _set_rounded(work, (..., Nf, slice(None)), work[..., Nf, :] * (mask[Nf] * root2), be)
     return work
 
 
@@ -311,10 +337,10 @@ def _scatter_interior_bands(
     # Every rfft bin receives at most two addends (adjacent interior bands
     # overlap by Nt/2; the edge bands only touch bins also covered by band 1 or
     # band Nf-1, plus bin N/2 alone), and a + b == b + a in IEEE arithmetic, so
-    # the order is immaterial on any backend.
+    # the order is immaterial on any backend.  Each slice is duplicate-free.
     for i, m_i in enumerate(m_int):
         start = int(m_i - 1) * (Nt // 2)
-        X = be.add_at(X, (..., slice(start, start + Nt)), W_int[..., i, :], copy=False)
+        X = _add_rounded(X, (..., slice(start, start + Nt)), W_int[..., i, :], be)
     return X
 
 
@@ -343,7 +369,7 @@ def _scatter_edge_bands(
         valid = np.flatnonzero((ell >= 0) & (ell <= N // 2))
         # ``X[..., ell[valid]] += v``: the indices are strictly increasing, so the
         # fancy-index add is one addition per bin either way.
-        X = be.add_at(X, (..., ell[valid]), lam * phi_c[valid] * Wm[..., valid], copy=False)
+        X = _add_rounded(X, (..., ell[valid]), lam * phi_c[valid] * Wm[..., valid], be)
     return X
 
 
@@ -386,22 +412,21 @@ def _gather_bands(x_rfft: CArray, Nf: int, Nt: int, dt: float, be: Backend = NUM
     # (-1)^{(m+1)n}; exponent parity = ((m+1) & 1) * (n & 1).
     sign_int = 1.0 - 2.0 * ((1 - m_par)[:, None] * n_par[None, :])
     # ``out[..., 1:Nf, :] = (kappa * sign_int) * re_or_im_int``: same grouping,
-    # computed in float64 and cast on assignment, exactly as before.
-    out = be.set(out, (..., slice(1, Nf), slice(None)), kappa * sign_int * re_or_im_int,
-                 copy=False)
+    # computed in float64 and rounded once into the working dtype, exactly as before.
+    out = _set_rounded(out, (..., slice(1, Nf), slice(None)), kappa * sign_int * re_or_im_int, be)
 
     for m in (0, Nf):
         y_m = be.fft.ifft(_build_slab(x_rfft, m, Nf, Nt, cdtype, be) * phi_c, axis=-1)
         even, sign = _parity(m, n_arr)
-        out = be.set(out, (..., m, slice(None)), kappa * sign * xp.where(even, y_m.real, y_m.imag),
-                     copy=False)
+        out = _set_rounded(out, (..., m, slice(None)),
+                           kappa * sign * xp.where(even, y_m.real, y_m.imag), be)
 
     # Unit-norm edge basis functions. Not optional: see the module docstring.
     # ``out[..., 0, :] /= np.sqrt(2)``: the in-place divide computes in float64
     # (np.sqrt(2) is a float64 scalar) and rounds once on store -- as here.
     root2 = np.sqrt(2)
-    out = be.set(out, (..., 0, slice(None)), out[..., 0, :] / root2, copy=False)
-    out = be.set(out, (..., Nf, slice(None)), out[..., Nf, :] / root2, copy=False)
+    out = _set_rounded(out, (..., 0, slice(None)), out[..., 0, :] / root2, be)
+    out = _set_rounded(out, (..., Nf, slice(None)), out[..., Nf, :] / root2, be)
     return out
 
 
