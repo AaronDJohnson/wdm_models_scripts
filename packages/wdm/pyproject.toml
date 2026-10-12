@@ -1,0 +1,35 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "wdm-paper"
+version = "1.0.0"
+description = "WDM transform, the Paper I algorithms and the stateless WDM II kernels (paper release)."
+readme = "README.md"
+requires-python = ">=3.12"
+license = "MIT"
+license-files = ["LICENSE"]
+authors = [{ name = "Aaron Johnson" }]
+dependencies = [
+    "numpy>=2.1,<3",
+    "scipy>=1.14.1,<2",
+]
+
+[project.optional-dependencies]
+jax = ["jax>=0.9", "jaxlib>=0.9"]
+test = ["pytest>=8,<9"]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/wdm"]
+
+[tool.pytest.ini_options]
+# Any pytest invocation whose arguments lie inside packages/wdm (from here or from
+# the release root) picks THIS file as its config, not the root pytest.ini; so it
+# carries its own import path and never writes .pytest_cache.
+testpaths = ["src/wdm", "tests"]
+pythonpath = ["src"]
+addopts = "-ra --doctest-modules -p no:cacheprovider"
+norecursedirs = [".*", "__pycache__", "oracle"]
+xfail_strict = true
+markers = ["jax: needs jax; skipped when jax is not importable"]
