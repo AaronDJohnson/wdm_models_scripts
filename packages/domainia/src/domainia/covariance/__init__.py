@@ -26,11 +26,13 @@ from .exact_fourier import ExactFourierCovariance, ghat
 from .exact_time import CovOperator, ExactTimeCovariance, OperatorFactor, bessel_coefficients
 from .hermitian import HermitianCovariance, HermitianFactor
 from .pushed import CHEB_TOL, PushedRows, cheb_order, cheb_tail, positions
+from .stack import ChannelStack, StackFactor
 
 __all__ = [
     "BlockTriCovFactor",
     "BlockTridiagonalCovariance",
     "CHEB_TOL",
+    "ChannelStack",
     "CholFactor",
     "CovOperator",
     "Covariance",
@@ -51,6 +53,7 @@ __all__ = [
     "QuadForm",
     "SchurEdge",
     "SchurFactor",
+    "StackFactor",
     "ZeroPadded",
     "as_evaluator",
     "assemble_edge_rows",

@@ -11,10 +11,14 @@ r"""Flat marginals over nuisance directions (spec §4.6): the analysis cut below
   ``H = U^T C^-1 U``; ``n_u = U.shape[1]`` directions removed.  ``form="solve"`` is the
   WT order (NumPy golden); ``form="whiten"`` the WG forward-only order
   (``H = Z_u^T Z_u``, ``Z_u = L^-1 U``; the JAX tri raw/cut golden).
+* :class:`ProjectedOperatorMarginal` -- WT ``bandcov.BandCovariance`` evaluation path
+  (the sinusoid ``exact`` model): projected PCG with a true-residual check, and
+  ``log|Sigma~| + correction(nu)``.
 """
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any, Literal
 
@@ -26,7 +30,8 @@ from wdm.grid import active_mask
 from .covariance.base import CholFactor, Covariance, QuadForm, concrete_failure
 from .covariance.eq45 import keep_mask
 
-__all__ = ["FlatMarginal", "FourierBandNuisance", "MarginalFactor", "nuisance_basis"]
+__all__ = ["FlatMarginal", "FourierBandNuisance", "MarginalFactor", "ProjectedFactor", "ProjectedOperatorMarginal",
+           "nuisance_basis"]
 
 
 class FourierBandNuisance:
@@ -185,3 +190,101 @@ class FlatMarginal(Covariance):
             H = Zu.T @ Zu
         Hf = CholFactor.build(0.5 * (H + H.T), impl="scipy", be=be)
         return MarginalFactor(F, U, Hf, Zu, F.logdet + Hf.logdet, F.ok & Hf.ok, self.form)
+
+
+@pytree_dataclass(data=("A", "M", "keep", "logdet", "ok"), meta=("N", "tol", "maxit", "on_fail", "n_drop"))
+@dataclass(frozen=True, eq=False)
+class ProjectedFactor:
+    """WT ``BandCovariance``: ``quad`` by projected PCG with a true-residual check.
+
+    ``quad`` raises (``on_fail="raise"``, WT) or returns NaN (``"nan"``, jit-able; the
+    likelihood maps a non-finite value to ``-inf``) when PCG fails.
+    """
+
+    A: Any
+    M: Any
+    keep: Any
+    logdet: Any
+    ok: Any
+    N: int
+    tol: float
+    maxit: int
+    on_fail: str
+    n_drop: int
+
+    @property
+    def n_u(self) -> int:
+        return self.n_drop
+
+    def project(self, x: Any, be: Backend) -> Any:
+        return be.fft.irfft(be.fft.rfft(x, axis=-1) * self.keep, n=self.N, axis=-1)
+
+    def quad(self, r: Any, *, form: QuadForm | None = None, be: Backend | None = None) -> Any:
+        """WT ``BandCovariance.quad`` after its domain check (the model layer owns the box)."""
+        from .linalg import pcg
+
+        be = be or get_backend(r, self.A.E)
+        xp = be.xp
+        if form not in (None, "solve"):
+            raise ValueError("the projected operator marginal has only form='solve'")
+        r = self.project(r, be)
+        if r.shape != (self.N,) or (not is_tracer(r) and not np.all(np.isfinite(be.to_host(r)))):
+            raise ValueError("residual must be a finite length-N vector")
+
+        def A(v: Any) -> Any:
+            return self.project(self.A(self.project(v, be), be), be)
+
+        def M(v: Any) -> Any:
+            return self.project(self.M(self.project(v, be), be), be)
+
+        # One row: WT's 1-D pcg.  linalg.pcg also runs WT's true-residual check
+        # (|r - A x| <= max(5 tol, 1e-12) |r|, bandcov.py:198-201): with on_fail="raise" it
+        # raises RuntimeError, with "nan" the row is NaN (-inf downstream).
+        res = pcg(lambda V: be.map(A, V), lambda V: be.map(M, V), r[None, :], tol=self.tol,
+                  maxit=self.maxit, on_fail=self.on_fail, be=be)
+        return xp.where(res.converged[0], r @ res.x[0], xp.nan)
+
+    def solve(self, b: Any, *, be: Backend | None = None) -> Any:
+        raise NotImplementedError("the projected marginal exposes quad and logdet only")
+
+    def whiten(self, b: Any, *, be: Backend | None = None) -> Any:
+        raise NotImplementedError("the projected marginal exposes quad and logdet only")
+
+
+class ProjectedOperatorMarginal(Covariance):
+    """The sinusoid ``exact`` model: ``ExactTimeCovariance(form="operator")`` restricted to
+    the retained Fourier coordinates of ``nuisance`` (WT ``bandcov.BandCovariance``
+    evaluation path; the offline ``prepare`` stays in ``scripts/``).
+
+    ``logdet = op_cov.logdet_model(nu) + correction(nu, be)``: ``correction`` is the
+    validated log-det correction of the discarded block (the model layer's bandcov
+    ``Artifact`` interpolant; identity ``log|Q C Q^T| = log|C| + log|B C^-1 B^T|``).
+    ``n_u = n_drop`` (the data are the ``N`` samples; ``n_eff = n_keep``).
+    """
+
+    def __init__(self, op_cov: Any, nuisance: FourierBandNuisance,
+                 correction: Callable[[Any, Backend], Any]) -> None:
+        if getattr(op_cov, "form", None) != "operator":
+            raise ValueError("ProjectedOperatorMarginal needs ExactTimeCovariance(form='operator')")
+        if nuisance.N != op_cov.N or nuisance.dt != op_cov.dt:
+            raise ValueError("the nuisance and the operator differ in N or dt")
+        self.op, self.nuisance, self.correction = op_cov, nuisance, correction
+        self.n = op_cov.N
+        self.n_u = nuisance.n_drop
+        self.jittable = op_cov.jittable
+
+    def host_constants(self) -> dict[str, Any]:
+        return {"keep": self.nuisance.keep_rfft}
+
+    def children(self) -> dict[str, Covariance]:
+        return {"op": self.op}
+
+    def _factor(self, C: Any, nu: Any, be: Backend) -> ProjectedFactor:
+        """WT ``FastCovariance._operators`` (A and its Weyl-inverse preconditioner) +
+        ``BandCovariance.logdet``."""
+        op = self.op
+        A = op.operator(C["op"], nu[0], nu[1], be)
+        M = op.operator(C["op"], -nu[0], -nu[1], be, scale=4.0 * op.dt ** 2)
+        logdet = op.logdet_model(nu) + self.correction(nu, be)
+        return ProjectedFactor(A, M, C["keep"], logdet, be.xp.isfinite(logdet), op.N, op.tol,
+                               op.maxit, op.on_fail, self.nuisance.n_drop)
