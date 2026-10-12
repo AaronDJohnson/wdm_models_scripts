@@ -34,7 +34,8 @@ from .diagonal import DiagonalCovariance
 from .eq45 import window_bins
 from .pushed import PushedRows, positions
 
-__all__ = ["PaddedFactor", "SchurEdge", "SchurFactor", "ZeroPadded", "assemble_edge_rows", "cut", "schur_factor"]
+__all__ = ["PadMask", "PaddedFactor", "SchurEdge", "SchurFactor", "ZeroPadded", "assemble_edge_rows", "cut",
+           "schur_factor"]
 
 
 def cut(make_cov: Callable[[Any], Any], cells: Any, lead: int, trail: int) -> Any:
@@ -426,3 +427,57 @@ class ZeroPadded(Covariance):
         R = self._edge_rows(C, Y, be)
         T = self._interior_factor(C, lamKK, blocks, be)
         return schur_factor(T, R, C["E"], C["I"], chol_impl=self.chol_impl, be=be)
+
+
+@dataclass(frozen=True, eq=False)
+class PadMask:
+    """GB ``PadMask``: ``A = W_K Z P Z^T W_R^-1`` in cell units, stored only on the rows ``E``
+    (positions among the kept cells, ``1 - rho > edge_tol``); every other row is the
+    identity at ``Kpos`` (the kept cells' positions among ``R``: band-major, ``NT_ext``
+    columns per band, the first analysis band at band position ``k0``)."""
+
+    E: np.ndarray
+    Kpos: np.ndarray
+    AE: np.ndarray
+    k0: int
+    NT_ext: int
+
+    @classmethod
+    def build(cls, *, map_rows: np.ndarray, rho: np.ndarray, kept_band: np.ndarray, kept_n: np.ndarray,
+              R_grid: Any, R_bands: np.ndarray, record_N: int, store_k0: int, store_n: int, k0: int,
+              edge_tol: float = 1e-8, chunk: int = 512) -> PadMask:
+        """GB ``pad_mask`` + ``mask_rows`` (host NumPy, once per case).
+
+        ``map_rows`` ``(P, n_store)`` complex: the kept cells are ``Re(map_rows @ z)`` of the
+        store bins ``[store_k0, store_k0 + store_n)`` (they carry ``sqrt(N/N')``);
+        ``rho`` ``(P,)`` each kept atom's energy on the data; ``kept_band`` (position among
+        the analysis bands) and ``kept_n`` (column) of each kept cell; ``R_grid`` the padded
+        grid (``wdm.Grid(Nf, Nt', dt)``) and ``R_bands`` its bands (every band overlapping
+        the store); ``k0`` the first analysis band's position among ``R_bands``.  A cell
+        ``r`` of ``R`` (value 1) has padded bins ``conj(u_r) sqrt(N'/N)``; cropping them to the
+        record (``maps.fourier.crop_maps``) gives its store bins.
+        """
+        from ..maps.fourier import crop_maps            # local: maps may import covariance
+
+        E = np.flatnonzero(1.0 - np.asarray(rho, float) > edge_tol)
+        NTp = R_grid.Nt
+        R_bands = np.asarray(R_bands, int)
+        Kpos = (k0 + np.asarray(kept_band, int)) * NTp + np.asarray(kept_n, int)
+        g0, G = window_bins(NTp, R_bands)
+        atoms = band_atoms(R_bands, R_grid.Nf, NTp, R_grid.dt)
+        idx = ((NTp // 2) * (R_bands - R_bands[0]))[:, None] + np.arange(NTp)[None, :]
+        k = store_k0 + np.arange(store_n)
+        CE = np.asarray(map_rows)[E]
+        X = np.empty((E.size, G), complex)
+        Y = np.empty((E.size, G), complex)
+        for lo in range(0, G, chunk):
+            j = g0 + np.arange(lo, min(lo + chunk, G))
+            Ac, Bc = crop_maps(R_grid.N, 0, record_N, k, j)
+            X[:, lo:lo + j.size] = CE @ Ac
+            Y[:, lo:lo + j.size] = CE @ Bc
+        scale = np.sqrt(R_grid.N / record_N)
+        out = np.empty((E.size, R_bands.size, NTp))
+        for b in range(R_bands.size):
+            i = idx[b]
+            out[:, b] = scale * np.real(X[:, i] @ np.conj(atoms[b]).T + Y[:, i] @ atoms[b].T)
+        return cls(E, Kpos, out.reshape(E.size, -1), int(k0), int(NTp))
