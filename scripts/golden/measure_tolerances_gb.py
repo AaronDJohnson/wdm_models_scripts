@@ -19,14 +19,19 @@ Rules (each gate = max(10 x observed, floor), floors from spec 7.3):
   below its own data. |NumPy cache (expanded) - reference| against 1e-10 + 1e-12 |lnL|.
 * G4 stress, ill-conditioned non-marginal points (1e-10 <= margin < 1e-6): reported in units of
   ``eps |lnL| / margin`` (condition-scaled), a proposal for the user, not a gate yet.
-* -inf masks on non-marginal points must agree (count reported; any mismatch fails S0). A NaN or
-  +inf lnL at a non-marginal point (JAX Cholesky returns NaN rather than raising) is recorded
-  as a mismatch too, never folded into a maximum.
+* -inf masks on non-marginal points (``|margin| >= 1e-10``) must match the worker's
+  ``expected_neg_inf = source_out or margin < 0``: -inf when the covariance is not PD
+  (margin <= -1e-10) or the source is outside the GLASS box, finite otherwise. Every evaluator
+  is checked, the NumPy reference included; each wrong one is one mismatch (count reported; any
+  mismatch fails S0). A finite lnL at a non-PD point is therefore a mismatch, never a delta. A NaN
+  or +inf lnL at a non-marginal point (JAX Cholesky returns NaN rather than raising) is recorded
+  as a mismatch too, never folded into a maximum. Deltas are taken only where the mask is finite.
 
 Inputs are validated, never defaulted: every row file and stress file must have been captured
 with both backends (``numpy`` and ``jax``), every row must carry both deltas, every G3 delta must
 be finite, and every non-marginal stress point must carry ``lnl_jax`` (and ``lnl_cache`` when the
-target has a cache class) and a finite PD margin; otherwise ``measure`` raises ``ValueError``.
+target has a cache class), ``source_out`` and a finite PD margin with ``|margin| >= 1e-10`` (the
+worker's ``marginal`` flag); otherwise ``measure`` raises ``ValueError``.
 ``main`` builds and hashes the output in memory and refuses (``SystemExit``, nothing written) when
 ``golden/MANIFEST.json`` records other bytes for it, unless ``--replace``.
 """
@@ -52,6 +57,8 @@ EPS = 2.220446049250313e-16
 FLOOR = {"G3_numpy": 1e-9, "G3_jax": 1e-8, "G4_jax_floor": 1e-10, "G4_jax_ceiling": 1e-6,
          "G4_numpy_abs": 1e-10, "G4_numpy_rel": 1e-12}
 WELL_CONDITIONED = 1e-6
+#: The worker's ``MARGINAL`` (gbw_stress): ``marginal`` == ``|pd_margin| < 1e-10``.
+MARGINAL = 1e-10
 #: Every G3/G4 gate is per backend, so a capture that skipped one cannot be measured.
 BACKENDS = ("numpy", "jax")
 #: The only valid lnL values; NaN or +inf at a compared point is a mismatch.
@@ -133,37 +140,55 @@ def measure_stress(gb: Path) -> dict:
             if p["marginal"]:
                 t["marginal"] += 1
                 continue
-            if absent := [name for name in needed if name not in p]:
+            if absent := [name for name in needed + ("source_out",) if name not in p]:
                 problems.append(f"{where}: point {p['name']} has no {absent}")
-            if not math.isfinite(p["pd_margin"]):
-                problems.append(f"{where}: point {p['name']} pd_margin = {p['pd_margin']}")
+            margin = p["pd_margin"]
+            if not math.isfinite(margin):
+                problems.append(f"{where}: point {p['name']} pd_margin = {margin}")
                 continue
+            if abs(margin) < MARGINAL:
+                problems.append(f"{where}: point {p['name']} marginal=False but |pd_margin| = "
+                                f"{abs(margin):.3e} < {MARGINAL:g}")
+                continue
+            if "source_out" not in p:
+                continue
+            # The worker's mask (gbw_stress: expected_neg_inf = source_out or margin < 0). Every
+            # evaluator is checked against it, the NumPy reference included.
+            expected = "-inf" if (p["source_out"] or margin < 0) else "finite"
+            why = f"expected {expected} (pd_margin {margin:.3e}, source_out {p['source_out']})"
             ref = p["lnl_ref"]
             k_ref = _kind(ref)
             if k_ref not in VALID:
                 mismatches.append(f"{key}:{p['name']}:lnl_ref is {k_ref}")
+            elif k_ref != expected:
+                mismatches.append(f"{key}:{p['name']}:lnl_ref is {k_ref}, {why}")
             for name in ("lnl_cache", "lnl_jax"):
                 if name not in p:
                     continue
                 k = _kind(p[name])
                 if k not in VALID:
                     mismatches.append(f"{key}:{p['name']}:{name} is {k} (ref {k_ref})")
-                elif k != k_ref:
+                elif k != expected and k != k_ref:     # disagrees with a correct reference
                     mismatches.append(f"{key}:{p['name']}:{name}")
-            if k_ref != "finite":
+                elif k != expected:                    # agrees with a wrong reference
+                    mismatches.append(f"{key}:{p['name']}:{name} is {k}, {why}")
+            # Deltas only where every evaluator must be finite: PD (margin >= MARGINAL) and in the box.
+            if expected != "finite" or k_ref != "finite":
                 continue
             for name, tag in (("lnl_jax", "jax"), ("lnl_cache", "cache")):
                 if name not in p or _kind(p[name]) != "finite":
                     continue
                 d = abs(p[name] - ref)
-                if p["pd_margin"] >= WELL_CONDITIONED:
+                if margin >= WELL_CONDITIONED:
                     t[f"{tag}_well"] = max(t[f"{tag}_well"], d)
                     if tag == "cache":
                         t["cache_well_rel"] = max(t["cache_well_rel"], d / max(1.0, abs(ref)))
                         t["cache_within_numpy_gate"] &= (
                             d <= FLOOR["G4_numpy_abs"] + FLOOR["G4_numpy_rel"] * abs(ref))
-                else:
-                    t[f"{tag}_cond"] = max(t[f"{tag}_cond"], d / (EPS * abs(ref) / p["pd_margin"]))
+                elif MARGINAL <= margin < WELL_CONDITIONED:
+                    t[f"{tag}_cond"] = max(t[f"{tag}_cond"], d / (EPS * abs(ref) / margin))
+                else:                                  # unreachable: expected finite => margin >= MARGINAL
+                    raise AssertionError(f"{key}:{p['name']}: pd_margin {margin} reached the delta branch")
         if r["counters_cache"] is not None and r["counters_jax"] is not None:
             t["counters_equal"] = r["counters_cache"] == r["counters_jax"]
         per[key] = t

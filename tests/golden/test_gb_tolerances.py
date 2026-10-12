@@ -119,7 +119,7 @@ def _row_file(golden, *, backends=("numpy", "jax"), **row):
 
 
 def _stress_file(golden, *, backends=("numpy", "jax"), cache_class="FullCache", **point):
-    p = {"name": "anchor", "marginal": False, "pd_margin": 1e-3, "lnl_ref": -100.0,
+    p = {"name": "anchor", "marginal": False, "pd_margin": 1e-3, "source_out": False, "lnl_ref": -100.0,
          "lnl_cache": -100.0, "lnl_jax": -100.0}
     p.update(point)
     p = {k: v for k, v in p.items() if v is not None}
@@ -158,13 +158,73 @@ def test_synthetic_jax_gate_at_ceiling_and_ill_conditioned(tmp_path):
     assert g4["observed_jax_well_conditioned"] == 0.0 and g4["condition_scaled_jax_max"] > 0.0
 
 
-@pytest.mark.parametrize("ref,jax", [(-100.0, -math.inf), (-math.inf, -100.0)])
-def test_synthetic_mask_mismatch_is_recorded(tmp_path, ref, jax):
+@pytest.mark.parametrize("ref,jax,margin", [(-100.0, -math.inf, 1e-3), (-math.inf, -100.0, -1e-3)])
+def test_synthetic_mask_mismatch_is_recorded(tmp_path, ref, jax, margin):
+    """A backend that disagrees with a correct reference (finite at PD, -inf at non-PD)."""
     _row_file(tmp_path)
-    _stress_file(tmp_path, lnl_ref=ref, lnl_cache=ref, lnl_jax=jax)
+    _stress_file(tmp_path, pd_margin=margin, lnl_ref=ref, lnl_cache=ref, lnl_jax=jax)
     m = mt.measure(tmp_path)
     assert m["G4"]["mask_mismatches"] == ["gb_3mo/exact/fast:anchor:lnl_jax"]
     assert m["summary"]["G4_mask_mismatches"] == 1
+
+
+# The expected mask is the worker's ``expected_neg_inf = source_out or pd_margin < 0`` (gbw_stress):
+# every evaluator, the NumPy reference included, is checked against it at non-marginal points.
+
+@pytest.mark.parametrize("margin", [-1e-3, -1e-10])        # -1e-10 is non-marginal (|m| < 1e-10 is not)
+def test_synthetic_negative_margin_finite_is_mismatch(tmp_path, margin):
+    """Not PD (margin <= -1e-10): finite lnL anywhere fails S0, never a condition-scaled zero."""
+    _row_file(tmp_path)
+    _stress_file(tmp_path, pd_margin=margin, lnl_ref=-100.0, lnl_jax=-50.0, lnl_cache=-99.0)
+    m = mt.measure(tmp_path)
+    g4 = m["G4"]
+    assert g4["mask_mismatches"] == [
+        f"gb_3mo/exact/fast:anchor:{name} is finite, expected -inf (pd_margin {margin:.3e}, source_out False)"
+        for name in ("lnl_ref", "lnl_cache", "lnl_jax")]
+    assert m["summary"]["G4_mask_mismatches"] == 3
+    assert g4["observed_jax_well_conditioned"] == 0.0 and g4["observed_cache_well_conditioned"] == 0.0
+    assert g4["condition_scaled_jax_max"] == 0.0 and g4["condition_scaled_cache_max"] == 0.0
+
+
+@pytest.mark.parametrize("name", ["lnl_jax", "lnl_cache"])
+def test_synthetic_negative_margin_finite_backend_only(tmp_path, name):
+    """Reference correctly -inf, one backend finite: exactly that backend is flagged."""
+    _row_file(tmp_path)
+    vals = {"lnl_ref": -math.inf, "lnl_cache": -math.inf, "lnl_jax": -math.inf, name: -100.0}
+    _stress_file(tmp_path, pd_margin=-1e-3, **vals)
+    assert mt.measure(tmp_path)["G4"]["mask_mismatches"] == [f"gb_3mo/exact/fast:anchor:{name}"]
+
+
+def test_synthetic_source_out_finite_is_mismatch(tmp_path):
+    """Source outside the GLASS box: -inf expected even when the covariance is PD."""
+    _row_file(tmp_path)
+    _stress_file(tmp_path, source_out=True)
+    assert mt.measure(tmp_path)["G4"]["mask_mismatches"] == [
+        f"gb_3mo/exact/fast:anchor:{name} is finite, expected -inf (pd_margin 1.000e-03, source_out True)"
+        for name in ("lnl_ref", "lnl_cache", "lnl_jax")]
+
+
+def test_synthetic_neg_inf_reference_at_pd_point_is_mismatch(tmp_path):
+    """PD and in the box: a -inf lnL is a mismatch even when reference and cache agree on it; the
+    backend that is right (finite) is not flagged for disagreeing with the wrong reference."""
+    _row_file(tmp_path)
+    _stress_file(tmp_path, lnl_ref=-math.inf, lnl_cache=-math.inf, lnl_jax=-100.0)
+    m = mt.measure(tmp_path)
+    assert m["G4"]["mask_mismatches"] == [
+        "gb_3mo/exact/fast:anchor:lnl_ref is -inf, expected finite (pd_margin 1.000e-03, source_out False)",
+        "gb_3mo/exact/fast:anchor:lnl_cache is -inf, expected finite (pd_margin 1.000e-03, source_out False)"]
+    assert m["G4"]["observed_jax_well_conditioned"] == 0.0
+
+
+@pytest.mark.parametrize("point,match", [
+    ({"pd_margin": 0.0}, r"marginal=False but \|pd_margin\| = 0.000e\+00 < 1e-10"),
+    ({"pd_margin": -1e-12}, r"marginal=False but \|pd_margin\| = 1.000e-12 < 1e-10"),
+    ({"source_out": None}, r"has no \['source_out'\]")])
+def test_synthetic_stress_inconsistent_point_raises(tmp_path, point, match):
+    _row_file(tmp_path)
+    _stress_file(tmp_path, **point)
+    with pytest.raises(ValueError, match=match):
+        mt.measure(tmp_path)
 
 
 @pytest.mark.parametrize("margin", [1e-3, 1e-8])          # well-conditioned and condition-scaled
