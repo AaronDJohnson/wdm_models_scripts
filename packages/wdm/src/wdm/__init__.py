@@ -86,7 +86,7 @@ Filter (in :mod:`wdm.filter`):
 
 from __future__ import annotations
 
-from . import backend, evolutionary, filter, inner_product, matrix, noise, stationary
+from . import backend, evolutionary, filter, inner_product, matrix, noise, paper, stationary
 from .filter import phi_centered, phi_fft_order
 from .grid import (
     Grid,
@@ -161,6 +161,7 @@ __all__ = [
     # Grid
     "n_samples",
     "noise",
+    "paper",
     # Filter
     "phi_centered",
     "phi_fft_order",
