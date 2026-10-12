@@ -1,6 +1,6 @@
 """Release-level import identity (spec section 1, guard 6).
 
-S1 covers ``wdm`` only; S2 adds ``domainia``, S5 ``wdm_models`` and the
+S1 covers ``wdm``; S2 adds ``domainia`` (task D-A1); S5 adds ``wdm_models`` and the
 binary_galactica version/normalisation probe.  Every probe runs in a fresh
 ``python -P`` subprocess so nothing this pytest session imported can mask the
 answer.
@@ -20,6 +20,7 @@ import pytest
 
 REL = Path(__file__).resolve().parents[2]             # wdm_models_scripts/ (scripts.golden.paths.REL)
 WDM_SRC = REL / "packages" / "wdm" / "src"
+DOMAINIA_SRC = REL / "packages" / "domainia" / "src"
 WORKSPACE = REL.parent                                # holds the June wdm/ tree (paths.ROOT)
 
 
@@ -95,3 +96,27 @@ def test_root_pytest_ini_collects_the_wdm_package_tests():
     cfg.read(ini)
     assert "packages/wdm/tests" in cfg["pytest"]["testpaths"].split()
     assert "packages/wdm/src" in cfg["pytest"]["pythonpath"].split()
+
+
+_DOMAINIA = ("import json, sys, domainia, wdm\n"
+             "print(json.dumps({'file': domainia.__file__, 'wdm': wdm.__file__,"
+             " 'version': domainia.__version__, 'jax': 'jax' in sys.modules}))")
+
+
+def test_domainia_is_the_release_on_the_release_wdm():
+    info = _probe(_DOMAINIA, pythonpath=os.pathsep.join([str(DOMAINIA_SRC), str(WDM_SRC)]))
+    assert Path(info["file"]).resolve().is_relative_to(DOMAINIA_SRC.resolve())
+    assert Path(info["wdm"]).resolve().is_relative_to(WDM_SRC.resolve())
+    assert info["version"] == "1.0.0"
+    assert info["jax"] is False                       # `import domainia` never imports jax
+
+
+def test_root_pytest_ini_collects_the_domainia_package_tests():
+    """S2 appends packages/domainia/tests to the root testpaths (its tests/ has no
+    __init__.py, so packages/wdm/tests keeps the top-level name ``tests``)."""
+    cfg = configparser.ConfigParser(interpolation=None)
+    cfg.read(REL / "pytest.ini")
+    assert cfg["pytest"]["testpaths"].split() == ["tests", "packages/wdm/tests",
+                                                  "packages/domainia/tests"]
+    assert "packages/domainia/src" in cfg["pytest"]["pythonpath"].split()
+    assert not (REL / "packages" / "domainia" / "tests" / "__init__.py").exists()
