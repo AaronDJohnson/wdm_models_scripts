@@ -1,0 +1,251 @@
+{
+  "months": 6,
+  "T": 15768000.0,
+  "snr_threshold": 7.0,
+  "fg_model": "GLASS (Digman & Cornish 2022): 1.5 A f^(5/3) exp(-(f/f1)^alpha) [1 + tanh((fk - f)/f2)]",
+  "fg_params": {
+    "ln A": -84.5474847228991,
+    "ln f1": -6.0365441173548176,
+    "alpha": 1.7131549511879651,
+    "ln fk": -5.5545527377075565,
+    "ln f2": -7.737562792598559
+  },
+  "fg_sd": {
+    "ln A": 0.010914969923652505,
+    "ln f1": 0.007731733160393052,
+    "alpha": 0.03414783077008204,
+    "ln fk": 0.003214052992495524,
+    "ln f2": 0.038599237133706804
+  },
+  "fg_prior": {
+    "ln A": [
+      -86.0,
+      -82.0
+    ],
+    "ln f1": [
+      -9.210340371976182,
+      -4.605170185988091
+    ],
+    "alpha": [
+      0.0,
+      3.0
+    ],
+    "ln fk": [
+      -9.210340371976182,
+      -2.3025850929940455
+    ],
+    "ln f2": [
+      -11.512925464970229,
+      -4.605170185988091
+    ]
+  },
+  "n_resolved": 5784,
+  "n_catalogue": 29000036,
+  "n_candidates": 63898,
+  "proxy_check_max": 3.9614157225511124,
+  "iterations": [
+    {
+      "iteration": 1,
+      "n_resolved": 17063,
+      "n_dropped": 8273,
+      "confusion_over_instrument": {
+        "1 mHz": 6.6546215666837645,
+        "2 mHz": 5.532905749176933,
+        "3 mHz": 1.9798239365953627,
+        "4 mHz": 0.5181869978817388
+      }
+    },
+    {
+      "iteration": 2,
+      "n_resolved": 8790,
+      "n_dropped": 1728,
+      "confusion_over_instrument": {
+        "1 mHz": 9.05019699708693,
+        "2 mHz": 12.245858913212878,
+        "3 mHz": 5.784611909657512,
+        "4 mHz": 0.8601082498805093
+      }
+    },
+    {
+      "iteration": 3,
+      "n_resolved": 7062,
+      "n_dropped": 619,
+      "confusion_over_instrument": {
+        "1 mHz": 9.13545349213483,
+        "2 mHz": 15.082333691782294,
+        "3 mHz": 9.368631819163847,
+        "4 mHz": 1.1394544671775095
+      }
+    },
+    {
+      "iteration": 4,
+      "n_resolved": 6443,
+      "n_dropped": 287,
+      "confusion_over_instrument": {
+        "1 mHz": 9.13545349213483,
+        "2 mHz": 16.501264822153985,
+        "3 mHz": 11.53382614303152,
+        "4 mHz": 1.371814784112874
+      }
+    },
+    {
+      "iteration": 5,
+      "n_resolved": 6156,
+      "n_dropped": 152,
+      "confusion_over_instrument": {
+        "1 mHz": 9.13545349213483,
+        "2 mHz": 16.620716114343587,
+        "3 mHz": 12.031446812675178,
+        "4 mHz": 1.5982227584915227
+      }
+    },
+    {
+      "iteration": 6,
+      "n_resolved": 6004,
+      "n_dropped": 90,
+      "confusion_over_instrument": {
+        "1 mHz": 9.13545349213483,
+        "2 mHz": 16.620716114343587,
+        "3 mHz": 12.393558695330816,
+        "4 mHz": 1.7863102222885903
+      }
+    },
+    {
+      "iteration": 7,
+      "n_resolved": 5914,
+      "n_dropped": 41,
+      "confusion_over_instrument": {
+        "1 mHz": 9.13545349213483,
+        "2 mHz": 16.620716114343587,
+        "3 mHz": 12.694407307712423,
+        "4 mHz": 1.9328983626869214
+      }
+    },
+    {
+      "iteration": 8,
+      "n_resolved": 5873,
+      "n_dropped": 19,
+      "confusion_over_instrument": {
+        "1 mHz": 9.13545349213483,
+        "2 mHz": 16.620716114343587,
+        "3 mHz": 12.694407307712423,
+        "4 mHz": 2.0058436004648166
+      }
+    },
+    {
+      "iteration": 9,
+      "n_resolved": 5854,
+      "n_dropped": 11,
+      "confusion_over_instrument": {
+        "1 mHz": 9.13545349213483,
+        "2 mHz": 16.620716114343587,
+        "3 mHz": 12.694407307712423,
+        "4 mHz": 2.0738952097963668
+      }
+    },
+    {
+      "iteration": 10,
+      "n_resolved": 5843,
+      "n_dropped": 11,
+      "confusion_over_instrument": {
+        "1 mHz": 9.13545349213483,
+        "2 mHz": 16.620716114343587,
+        "3 mHz": 12.694407307712423,
+        "4 mHz": 2.1190008878318354
+      }
+    },
+    {
+      "iteration": 11,
+      "n_resolved": 5832,
+      "n_dropped": 16,
+      "confusion_over_instrument": {
+        "1 mHz": 9.13545349213483,
+        "2 mHz": 16.620716114343587,
+        "3 mHz": 12.694407307712423,
+        "4 mHz": 2.1640663836100704
+      }
+    },
+    {
+      "iteration": 12,
+      "n_resolved": 5816,
+      "n_dropped": 13,
+      "confusion_over_instrument": {
+        "1 mHz": 9.13545349213483,
+        "2 mHz": 16.620716114343587,
+        "3 mHz": 12.694407307712423,
+        "4 mHz": 2.2597160190008014
+      }
+    },
+    {
+      "iteration": 13,
+      "n_resolved": 5803,
+      "n_dropped": 10,
+      "confusion_over_instrument": {
+        "1 mHz": 9.13545349213483,
+        "2 mHz": 16.620716114343587,
+        "3 mHz": 12.694407307712423,
+        "4 mHz": 2.3234468538311925
+      }
+    },
+    {
+      "iteration": 14,
+      "n_resolved": 5793,
+      "n_dropped": 4,
+      "confusion_over_instrument": {
+        "1 mHz": 9.13545349213483,
+        "2 mHz": 16.620716114343587,
+        "3 mHz": 12.694407307712423,
+        "4 mHz": 2.350069993375029
+      }
+    },
+    {
+      "iteration": 15,
+      "n_resolved": 5789,
+      "n_dropped": 2,
+      "confusion_over_instrument": {
+        "1 mHz": 9.13545349213483,
+        "2 mHz": 16.620716114343587,
+        "3 mHz": 12.694407307712423,
+        "4 mHz": 2.370509567142645
+      }
+    },
+    {
+      "iteration": 16,
+      "n_resolved": 5787,
+      "n_dropped": 2,
+      "confusion_over_instrument": {
+        "1 mHz": 9.13545349213483,
+        "2 mHz": 16.620716114343587,
+        "3 mHz": 12.694407307712423,
+        "4 mHz": 2.38385796414467
+      }
+    },
+    {
+      "iteration": 17,
+      "n_resolved": 5785,
+      "n_dropped": 1,
+      "confusion_over_instrument": {
+        "1 mHz": 9.13545349213483,
+        "2 mHz": 16.620716114343587,
+        "3 mHz": 12.694407307712423,
+        "4 mHz": 2.395251092162019
+      }
+    },
+    {
+      "iteration": 18,
+      "n_resolved": 5784,
+      "n_dropped": 0,
+      "confusion_over_instrument": {
+        "1 mHz": 9.13545349213483,
+        "2 mHz": 16.620716114343587,
+        "3 mHz": 12.694407307712423,
+        "4 mHz": 2.407521936516014
+      }
+    }
+  ],
+  "fit_band_hz": [
+    0.0003,
+    0.004
+  ],
+  "seconds": 48.6
+}

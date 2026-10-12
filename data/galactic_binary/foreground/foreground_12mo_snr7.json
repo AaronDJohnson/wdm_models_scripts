@@ -1,0 +1,383 @@
+{
+  "months": 12,
+  "T": 31536000.0,
+  "snr_threshold": 7.0,
+  "fg_model": "GLASS (Digman & Cornish 2022): 1.5 A f^(5/3) exp(-(f/f1)^alpha) [1 + tanh((fk - f)/f2)]",
+  "fg_params": {
+    "ln A": -84.26490392331951,
+    "ln f1": -6.337733967470251,
+    "alpha": 0.9227082722322004,
+    "ln fk": -5.865318581036917,
+    "ln f2": -7.645427803406387
+  },
+  "fg_sd": {
+    "ln A": 0.019470363708196336,
+    "ln f1": 0.022857247701877827,
+    "alpha": 0.02445702307974336,
+    "ln fk": 0.0015027252641510315,
+    "ln f2": 0.003183676180178616
+  },
+  "fg_prior": {
+    "ln A": [
+      -86.0,
+      -82.0
+    ],
+    "ln f1": [
+      -9.210340371976182,
+      -4.605170185988091
+    ],
+    "alpha": [
+      0.0,
+      3.0
+    ],
+    "ln fk": [
+      -9.210340371976182,
+      -2.3025850929940455
+    ],
+    "ln f2": [
+      -11.512925464970229,
+      -4.605170185988091
+    ]
+  },
+  "n_resolved": 10126,
+  "n_catalogue": 29000036,
+  "n_candidates": 89366,
+  "proxy_check_max": 3.426364933906491,
+  "iterations": [
+    {
+      "iteration": 1,
+      "n_resolved": 26134,
+      "n_dropped": 11104,
+      "confusion_over_instrument": {
+        "1 mHz": 5.817685086112266,
+        "2 mHz": 3.899889105662507,
+        "3 mHz": 0.6338141136741396,
+        "4 mHz": 0.11173107152925071
+      }
+    },
+    {
+      "iteration": 2,
+      "n_resolved": 15030,
+      "n_dropped": 2583,
+      "confusion_over_instrument": {
+        "1 mHz": 8.466284233461417,
+        "2 mHz": 8.973278175806607,
+        "3 mHz": 1.3585025588231017,
+        "4 mHz": 0.1279054004919584
+      }
+    },
+    {
+      "iteration": 3,
+      "n_resolved": 12447,
+      "n_dropped": 987,
+      "confusion_over_instrument": {
+        "1 mHz": 8.921313118926658,
+        "2 mHz": 12.073271669628939,
+        "3 mHz": 2.3143777891779855,
+        "4 mHz": 0.13212035055883858
+      }
+    },
+    {
+      "iteration": 4,
+      "n_resolved": 11460,
+      "n_dropped": 505,
+      "confusion_over_instrument": {
+        "1 mHz": 9.022991538213137,
+        "2 mHz": 13.557535454142528,
+        "3 mHz": 3.3441983978430367,
+        "4 mHz": 0.13212035055883858
+      }
+    },
+    {
+      "iteration": 5,
+      "n_resolved": 10955,
+      "n_dropped": 270,
+      "confusion_over_instrument": {
+        "1 mHz": 9.022991538213137,
+        "2 mHz": 13.785028693362795,
+        "3 mHz": 4.5259698225315805,
+        "4 mHz": 0.13212035055883858
+      }
+    },
+    {
+      "iteration": 6,
+      "n_resolved": 10685,
+      "n_dropped": 157,
+      "confusion_over_instrument": {
+        "1 mHz": 9.022991538213137,
+        "2 mHz": 13.819432854253831,
+        "3 mHz": 5.417304098342287,
+        "4 mHz": 0.13212035055883858
+      }
+    },
+    {
+      "iteration": 7,
+      "n_resolved": 10528,
+      "n_dropped": 90,
+      "confusion_over_instrument": {
+        "1 mHz": 9.022991538213137,
+        "2 mHz": 13.868013834711249,
+        "3 mHz": 5.961110871536904,
+        "4 mHz": 0.13212035055883858
+      }
+    },
+    {
+      "iteration": 8,
+      "n_resolved": 10438,
+      "n_dropped": 75,
+      "confusion_over_instrument": {
+        "1 mHz": 9.022991538213137,
+        "2 mHz": 13.868013834711249,
+        "3 mHz": 6.201297698118275,
+        "4 mHz": 0.13212035055883858
+      }
+    },
+    {
+      "iteration": 9,
+      "n_resolved": 10363,
+      "n_dropped": 53,
+      "confusion_over_instrument": {
+        "1 mHz": 9.022991538213137,
+        "2 mHz": 13.868013834711249,
+        "3 mHz": 6.4020567633462475,
+        "4 mHz": 0.13212035055883858
+      }
+    },
+    {
+      "iteration": 10,
+      "n_resolved": 10310,
+      "n_dropped": 39,
+      "confusion_over_instrument": {
+        "1 mHz": 9.022991538213137,
+        "2 mHz": 13.868013834711249,
+        "3 mHz": 6.486195781423555,
+        "4 mHz": 0.13212035055883858
+      }
+    },
+    {
+      "iteration": 11,
+      "n_resolved": 10271,
+      "n_dropped": 29,
+      "confusion_over_instrument": {
+        "1 mHz": 9.022991538213137,
+        "2 mHz": 13.868013834711249,
+        "3 mHz": 6.543739894390838,
+        "4 mHz": 0.13212035055883858
+      }
+    },
+    {
+      "iteration": 12,
+      "n_resolved": 10242,
+      "n_dropped": 23,
+      "confusion_over_instrument": {
+        "1 mHz": 9.022991538213137,
+        "2 mHz": 13.868013834711249,
+        "3 mHz": 6.584254111896202,
+        "4 mHz": 0.13212035055883858
+      }
+    },
+    {
+      "iteration": 13,
+      "n_resolved": 10219,
+      "n_dropped": 12,
+      "confusion_over_instrument": {
+        "1 mHz": 9.022991538213137,
+        "2 mHz": 13.868013834711249,
+        "3 mHz": 6.625958034408765,
+        "4 mHz": 0.13212035055883858
+      }
+    },
+    {
+      "iteration": 14,
+      "n_resolved": 10207,
+      "n_dropped": 9,
+      "confusion_over_instrument": {
+        "1 mHz": 9.022991538213137,
+        "2 mHz": 13.868013834711249,
+        "3 mHz": 6.654514966871138,
+        "4 mHz": 0.13212035055883858
+      }
+    },
+    {
+      "iteration": 15,
+      "n_resolved": 10198,
+      "n_dropped": 9,
+      "confusion_over_instrument": {
+        "1 mHz": 9.022991538213137,
+        "2 mHz": 13.868013834711249,
+        "3 mHz": 6.670486339438086,
+        "4 mHz": 0.13212035055883858
+      }
+    },
+    {
+      "iteration": 16,
+      "n_resolved": 10189,
+      "n_dropped": 12,
+      "confusion_over_instrument": {
+        "1 mHz": 9.022991538213137,
+        "2 mHz": 13.868013834711249,
+        "3 mHz": 6.670486339438086,
+        "4 mHz": 0.13212035055883858
+      }
+    },
+    {
+      "iteration": 17,
+      "n_resolved": 10177,
+      "n_dropped": 8,
+      "confusion_over_instrument": {
+        "1 mHz": 9.022991538213137,
+        "2 mHz": 13.868013834711249,
+        "3 mHz": 6.670486339438086,
+        "4 mHz": 0.13212035055883858
+      }
+    },
+    {
+      "iteration": 18,
+      "n_resolved": 10169,
+      "n_dropped": 8,
+      "confusion_over_instrument": {
+        "1 mHz": 9.022991538213137,
+        "2 mHz": 13.868013834711249,
+        "3 mHz": 6.670486339438086,
+        "4 mHz": 0.13212035055883858
+      }
+    },
+    {
+      "iteration": 19,
+      "n_resolved": 10161,
+      "n_dropped": 8,
+      "confusion_over_instrument": {
+        "1 mHz": 9.022991538213137,
+        "2 mHz": 13.868013834711249,
+        "3 mHz": 6.670486339438086,
+        "4 mHz": 0.13212035055883858
+      }
+    },
+    {
+      "iteration": 20,
+      "n_resolved": 10153,
+      "n_dropped": 6,
+      "confusion_over_instrument": {
+        "1 mHz": 9.022991538213137,
+        "2 mHz": 13.868013834711249,
+        "3 mHz": 6.670486339438086,
+        "4 mHz": 0.13212035055883858
+      }
+    },
+    {
+      "iteration": 21,
+      "n_resolved": 10147,
+      "n_dropped": 3,
+      "confusion_over_instrument": {
+        "1 mHz": 9.022991538213137,
+        "2 mHz": 13.868013834711249,
+        "3 mHz": 6.670486339438086,
+        "4 mHz": 0.13212035055883858
+      }
+    },
+    {
+      "iteration": 22,
+      "n_resolved": 10144,
+      "n_dropped": 3,
+      "confusion_over_instrument": {
+        "1 mHz": 9.022991538213137,
+        "2 mHz": 13.868013834711249,
+        "3 mHz": 6.670486339438086,
+        "4 mHz": 0.13212035055883858
+      }
+    },
+    {
+      "iteration": 23,
+      "n_resolved": 10141,
+      "n_dropped": 2,
+      "confusion_over_instrument": {
+        "1 mHz": 9.022991538213137,
+        "2 mHz": 13.868013834711249,
+        "3 mHz": 6.670486339438086,
+        "4 mHz": 0.13212035055883858
+      }
+    },
+    {
+      "iteration": 24,
+      "n_resolved": 10139,
+      "n_dropped": 5,
+      "confusion_over_instrument": {
+        "1 mHz": 9.022991538213137,
+        "2 mHz": 13.868013834711249,
+        "3 mHz": 6.682650097965514,
+        "4 mHz": 0.13212035055883858
+      }
+    },
+    {
+      "iteration": 25,
+      "n_resolved": 10134,
+      "n_dropped": 2,
+      "confusion_over_instrument": {
+        "1 mHz": 9.022991538213137,
+        "2 mHz": 13.868013834711249,
+        "3 mHz": 6.682650097965514,
+        "4 mHz": 0.13212035055883858
+      }
+    },
+    {
+      "iteration": 26,
+      "n_resolved": 10132,
+      "n_dropped": 1,
+      "confusion_over_instrument": {
+        "1 mHz": 9.022991538213137,
+        "2 mHz": 13.868013834711249,
+        "3 mHz": 6.689824356883394,
+        "4 mHz": 0.13212035055883858
+      }
+    },
+    {
+      "iteration": 27,
+      "n_resolved": 10131,
+      "n_dropped": 3,
+      "confusion_over_instrument": {
+        "1 mHz": 9.022991538213137,
+        "2 mHz": 13.868013834711249,
+        "3 mHz": 6.689824356883394,
+        "4 mHz": 0.13212035055883858
+      }
+    },
+    {
+      "iteration": 28,
+      "n_resolved": 10128,
+      "n_dropped": 1,
+      "confusion_over_instrument": {
+        "1 mHz": 9.022991538213137,
+        "2 mHz": 13.868013834711249,
+        "3 mHz": 6.698947201883357,
+        "4 mHz": 0.13212035055883858
+      }
+    },
+    {
+      "iteration": 29,
+      "n_resolved": 10127,
+      "n_dropped": 1,
+      "confusion_over_instrument": {
+        "1 mHz": 9.022991538213137,
+        "2 mHz": 13.868013834711249,
+        "3 mHz": 6.698947201883357,
+        "4 mHz": 0.13212035055883858
+      }
+    },
+    {
+      "iteration": 30,
+      "n_resolved": 10126,
+      "n_dropped": 0,
+      "confusion_over_instrument": {
+        "1 mHz": 9.022991538213137,
+        "2 mHz": 13.868013834711249,
+        "3 mHz": 6.698947201883357,
+        "4 mHz": 0.13212035055883858
+      }
+    }
+  ],
+  "fit_band_hz": [
+    0.0003,
+    0.004
+  ],
+  "seconds": 53.1
+}
