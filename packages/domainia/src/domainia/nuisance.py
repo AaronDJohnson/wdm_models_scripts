@@ -71,6 +71,7 @@ class FourierBandNuisance:
     def project(self, x: Any, be: Backend | None = None) -> Any:
         """Remove the discarded coordinates: ``irfft(rfft(x) * keep)`` (WT ``project``)."""
         be = be or get_backend(x)
+        x = be.asarray(x)                   # WT: np.asarray(x)
         if x.shape[-1] != self.N:
             raise ValueError(f"last axis must have length {self.N}")
         spectrum = be.fft.rfft(x, axis=-1)
@@ -156,6 +157,8 @@ class FlatMarginal(Covariance):
         U = np.asarray(U, float)
         if U.ndim != 2 or U.shape[0] != cov.n:
             raise ValueError(f"U must be ({cov.n}, n_u); got {U.shape}")
+        if U.shape[1] == 0:                 # nuisance_basis needs a column (WT skipped u.shape[1] == 0)
+            raise ValueError(f"U must have at least one column; got {U.shape}: use the covariance itself")
         self.cov, self.form = cov, form
         self.U = nuisance_basis(U, rtol)
         self.n = cov.n

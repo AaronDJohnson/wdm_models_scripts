@@ -50,6 +50,7 @@ def test_counts_on_the_sinusoid_grid():
     assert np.allclose(B @ B.T, np.eye(128), atol=1e-12)
     x = np.random.default_rng(0).standard_normal(T.SIN_N)
     assert np.max(np.abs(B @ nb.project(x))) < 1e-10
+    assert np.array_equal(nb.project(x.tolist()), nb.project(x))   # array-likes, as WT's np.asarray
     with pytest.raises(ValueError, match="positive"):
         FourierBandNuisance(T.SIN_N, T.SIN_DT, 0.0)
 
@@ -103,6 +104,8 @@ def test_ok_is_the_conjunction(backend):
         F.quad(backend.asarray(np.ones(4)))
     with pytest.raises(ValueError, match="U must be"):
         FlatMarginal(DiagonalCovariance(np.ones(4), 4), np.ones((3, 1)))
+    with pytest.raises(ValueError, match="at least one column"):
+        FlatMarginal(DiagonalCovariance(np.ones(4), 4), np.ones((4, 0)))
 
 
 def test_g6_pushed_nuisance():
