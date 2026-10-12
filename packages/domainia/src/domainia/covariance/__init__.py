@@ -12,6 +12,8 @@ from .blocktri import BlockTriCovFactor, BlockTridiagonalCovariance
 from .dense import DenseCovariance, dense_factor
 from .diagonal import DiagonalCovariance
 from .eq45 import Eq45Covariance, keep_mask, window_bins
+from .exact_fourier import ExactFourierCovariance, ghat
+from .hermitian import HermitianCovariance, HermitianFactor
 
 __all__ = [
     "BlockTriCovFactor",
@@ -23,10 +25,14 @@ __all__ = [
     "DiagonalCovariance",
     "Eq45Covariance",
     "Evaluator",
+    "ExactFourierCovariance",
     "Factor",
+    "HermitianCovariance",
+    "HermitianFactor",
     "QuadForm",
     "as_evaluator",
     "dense_factor",
+    "ghat",
     "keep_mask",
     "quad_form",
     "window_bins",
