@@ -61,6 +61,57 @@ def _is_basic_index(idx: Any) -> bool:
     )
 
 
+def _is_full_slice(p: Any) -> bool:
+    return isinstance(p, slice) and p == slice(None)
+
+
+def _check_static_fold(a_shape: tuple[int, ...], idx: Any, v_shape: tuple[int, ...],
+                       k0: int, n: int) -> int:
+    """Validate ``add_at(a, idx, v, static_fold=(k0, n))``; return the fold length.
+
+    The pad-reshape-sum lowering equals ``a[idx] += v`` only when ``idx`` selects
+    the whole of ``a`` except the last axis and puts the fold
+    ``(k0 + arange(len)) % n`` on that last axis, which has length ``n``.  So
+    every leading component of ``idx`` must be ``:`` or ``...`` (and, without
+    ``...``, there must be exactly ``a.ndim - 1`` of them), ``a.shape[-1]`` must
+    be ``n``, ``v.shape[-1]`` must be the fold length and the result must keep
+    ``a``'s shape.  Anything else raises ``ValueError``: the lowering would
+    otherwise broadcast over the wrong axes and return wrong numbers silently.
+    """
+    parts = idx if isinstance(idx, tuple) else (idx,)
+    if not parts:
+        raise ValueError("static_fold needs a non-empty idx ending in the fold")
+    lead, last = parts[:-1], parts[-1]
+    if not all(p is Ellipsis or _is_full_slice(p) for p in lead):
+        raise ValueError(
+            "static_fold=(k0, n) requires every leading component of idx to be ':' or "
+            f"'...'; got {lead!r}")
+    n_ellipsis = sum(p is Ellipsis for p in lead)
+    n_slices = len(lead) - n_ellipsis
+    ndim = len(a_shape)
+    if n_ellipsis > 1 or ndim == 0 or n_slices > ndim - 1 or (
+            n_ellipsis == 0 and n_slices != ndim - 1):
+        raise ValueError(
+            "static_fold=(k0, n) requires idx to put the fold on the last axis of a; "
+            f"got {len(parts)} index components for a.ndim={ndim}")
+    if a_shape[-1] != n:
+        raise ValueError(f"static_fold=(k0, n={n}) requires a.shape[-1] == n; got {a_shape}")
+    fold = np.asarray(last)
+    length = fold.shape[0] if fold.ndim == 1 else -1
+    if length < 0 or not np.array_equal(fold, (k0 + np.arange(length)) % n):
+        raise ValueError("static_fold=(k0, n) requires idx[-1] == (k0 + arange(len)) % n")
+    if len(v_shape) == 0 or v_shape[-1] != length:
+        raise ValueError(
+            f"static_fold requires v.shape[-1] == len(idx[-1]) == {length}; got v.shape={v_shape}")
+    try:
+        out_shape = np.broadcast_shapes(tuple(a_shape), (*v_shape[:-1], n))
+    except ValueError as err:
+        raise ValueError(f"static_fold: v.shape={v_shape} does not fit a.shape={a_shape}") from err
+    if out_shape != tuple(a_shape):
+        raise ValueError(f"static_fold: v.shape={v_shape} would change a.shape={a_shape}")
+    return length
+
+
 def _tree_index(xs: Any, i: int) -> Any:
     if isinstance(xs, (tuple, list)):
         return type(xs)(_tree_index(x, i) for x in xs)
@@ -102,6 +153,14 @@ class Backend:
 
     def add_at(self, a: Any, idx: Any, v: Any, *, static_fold: tuple[int, int] | None = None,
                copy: bool = True) -> Any:
+        """Functional ``a[idx] += v`` (repeated indices accumulate).
+
+        ``static_fold=(k0, n)`` declares that ``idx`` is ``(:, ..., :, k)`` or
+        ``(..., k)`` with ``k = (k0 + arange(len)) % n`` on the last axis and
+        ``a.shape[-1] == n``; JAX then lowers the update to a pad-reshape-sum
+        and raises ``ValueError`` if the whole ``idx`` is not that fold.  NumPy
+        ignores it.
+        """
         raise NotImplementedError
 
     def fft_pinned(self, op: str, x: Any, *, axis: int = -1, n: int | None = None) -> Any:
@@ -265,14 +324,13 @@ class _JaxBackend(Backend):
                copy: bool = True) -> Any:
         if static_fold is None:
             return a.at[idx].add(v)
-        # ``idx`` is the static fold (k0 + arange(len)) % n along the last axis:
+        # ``idx`` must be the fold (k0 + arange(len)) % n on the last axis of ``a``
+        # with only full slices / an Ellipsis before it, and a.shape[-1] == n
+        # (``_check_static_fold`` checks all of it and raises otherwise).  Then
         # pad, reshape to (..., rows, n) and sum -- no scatter, so no GPU atomics.
         k0, n = static_fold
         xp = self.xp
-        length = v.shape[-1]
-        last = idx[-1] if isinstance(idx, tuple) else idx
-        if not np.array_equal(np.asarray(last), (k0 + np.arange(length)) % n):
-            raise ValueError("static_fold=(k0, n) requires idx[-1] == (k0 + arange(len)) % n")
+        length = _check_static_fold(tuple(a.shape), idx, tuple(np.shape(v)), k0, n)
         lead = k0 % n
         total = -(-(lead + length) // n) * n
         pad = [(0, 0)] * (v.ndim - 1) + [(lead, total - lead - length)]

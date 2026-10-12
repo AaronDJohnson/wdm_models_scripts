@@ -160,6 +160,44 @@ def test_jax_add_at_static_fold_matches_numpy(jax_be, rng):
     assert np.allclose(np.asarray(got), ref, rtol=0, atol=1e-14)
 
 
+def test_jax_add_at_static_fold_accepts_ellipsis_and_1d(jax_be, rng):
+    k = (5 + np.arange(37)) % 16
+    for shape, idx in [((2, 3, 16), (..., k)), ((2, 3, 16), (slice(None), ..., k)),
+                       ((16,), k), ((16,), (k,))]:
+        a = rng.standard_normal(shape)
+        v = rng.standard_normal((*shape[:-1], 37))
+        ref = NUMPY.add_at(a, idx, v)
+        got = jax_be.add_at(jax_be.asarray(a), idx, jax_be.asarray(v), static_fold=(5, 16))
+        assert got.shape == a.shape
+        assert np.allclose(np.asarray(got), ref, rtol=0, atol=1e-14), (shape, idx)
+
+
+def test_jax_add_at_static_fold_rejects_anything_but_the_fold(jax_be, rng):
+    # Each case would otherwise broadcast the folded sum over the wrong axes (or
+    # change a's shape) and differ from NUMPY.add_at without raising.
+    k = (5 + np.arange(37)) % 16
+    xp = jax_be.xp
+    v1, v3 = jax_be.asarray(rng.standard_normal(37)), jax_be.asarray(rng.standard_normal((3, 37)))
+    cases = [
+        ("leading component", xp.zeros((3, 16)), (1, k), v1, (5, 16)),  # NumPy: row 1 only
+        ("leading component", xp.zeros((3, 16)), (slice(0, 2), k), v3[:2], (5, 16)),
+        ("leading component", xp.zeros((3, 16)), (None, k), v1, (5, 16)),
+        ("last axis of a", xp.zeros((16, 16)), k, v1, (5, 16)),  # NumPy: axis 0
+        ("last axis of a", xp.zeros((2, 3, 16)), (slice(None), k), v3, (5, 16)),
+        ("last axis of a", xp.zeros((3, 16)), (..., ..., k), v3, (5, 16)),
+        ("a.shape\\[-1\\] == n", xp.zeros((3, 1)), (slice(None), k), v3, (5, 16)),
+        ("a.shape\\[-1\\] == n", xp.zeros((3, 32)), (slice(None), k), v3, (5, 16)),
+        ("idx\\[-1\\] ==", xp.zeros((3, 16)), (slice(None), k), v3, (4, 16)),
+        ("idx\\[-1\\] ==", xp.zeros((3, 16)), (slice(None), k[::-1]), v3, (5, 16)),
+        ("v.shape\\[-1\\]", xp.zeros((3, 16)), (slice(None), k), v3[:, :36], (5, 16)),
+        ("change a.shape", xp.zeros((3, 16)), (slice(None), k), xp.stack([v3, v3]), (5, 16)),
+        ("does not fit", xp.zeros((3, 16)), (slice(None), k), v3[:2], (5, 16)),
+    ]
+    for match, a, idx, v, fold in cases:
+        with pytest.raises(ValueError, match=match):
+            jax_be.add_at(a, idx, v, static_fold=fold)
+
+
 def test_require_x64_raises_when_off():
     out = _run(
         "import jax; jax.config.update('jax_enable_x64', False)\n"
