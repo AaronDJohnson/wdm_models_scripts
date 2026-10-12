@@ -93,23 +93,56 @@ def test_active_cells_reject_a_psd_that_vanishes_at_dc():
         whittle(w, w, var, NF, cells="edges")
 
 
-def test_float32_strain_scale_does_not_underflow():
+def _lisa_finite_dc(f):
+    """The LISA curve floored at 0.1 mHz, so S(0) is finite and positive.
+
+    Only DC moves on the float32 grid below (Delta F = 1.5625 mHz).
+    """
+    return _lisa(np.maximum(np.asarray(f, dtype=float), 1e-4))
+
+
+def _flat_strain(f):
+    return 1e-40 * np.ones_like(np.asarray(f, dtype=float))
+
+
+@pytest.mark.parametrize(
+    ("cells", "psd"),
+    [
+        pytest.param("interior", _lisa, id="interior-lisa"),
+        # The default path: the active mask includes DC and Nyquist, so the PSD
+        # must be finite and positive there (_lisa is infinite at f = 0).
+        pytest.param("active", _lisa_finite_dc, id="active-lisa-finite-dc"),
+        pytest.param("active", _flat_strain, id="active-flat-1e-40"),
+    ],
+)
+def test_float32_strain_scale_does_not_underflow(cells, psd):
     """lisa/wdm b5973b7: w_a * w_b underflowed float32 at amplitude 1e-24."""
     Nf, Nt, dt = 32, 64, 10.0
+    var64 = whittle_variance(Nf, Nt, dt, psd)
+    if cells == "active":                   # DC and Nyquist cells are summed too
+        assert np.all(var64[active_mask(Nf, Nt)] > 0.0)
     for amplitude in (1e-22, 1e-23, 1e-24):
         rng = np.random.default_rng(0)
         w = forward_time(amplitude * rng.standard_normal(Nf * Nt), Nf, Nt, dt)
         w32 = w.astype(np.float32)
         stack32 = np.stack([(c * w32).astype(np.float32) for c in (1.0, 0.5, 0.25)])
-        var64 = whittle_variance(Nf, Nt, dt, _lisa)
-        truth = loglike_whittle_many(w32.astype(np.float64), stack32.astype(np.float64), var64,
-                                     Nf, include_logdet=False, cells="interior")
+        # The multiply-first product really does underflow here (the regression
+        # this guards would return exact zeros, silently).
+        if amplitude == 1e-24:
+            assert not np.any(stack32[0] * stack32[0])
+        stack64 = stack32.astype(np.float64)
+        truth = loglike_whittle_many(w32.astype(np.float64), stack64, var64,
+                                     Nf, include_logdet=False, cells=cells)
+        quad_truth = whittle_many(stack64, stack64, var64, Nf, cells=cells)
         with warnings.catch_warnings():
             warnings.simplefilter("error")
             got = loglike_whittle_many(w32, stack32, var64, Nf, include_logdet=False,
-                                       cells="interior")
-            quad_many = whittle_many(stack32, stack32, var64, Nf, cells="interior")
+                                       cells=cells)
+            quad_many = whittle_many(stack32, stack32, var64, Nf, cells=cells)
+            quad_one = whittle(w32, w32, var64, Nf, cells=cells)
         assert np.allclose(got, truth, rtol=1e-6, atol=0.0)
+        assert np.allclose(quad_many, quad_truth, rtol=1e-6, atol=0.0)
+        assert np.isclose(quad_one, quad_truth[0], rtol=1e-6, atol=0.0)
         assert np.all(quad_many > 0.0) and len(np.unique(quad_many)) == 3
         assert got[0] == 0.0 and got[1] < 0.0 and got[2] < got[1]
 
