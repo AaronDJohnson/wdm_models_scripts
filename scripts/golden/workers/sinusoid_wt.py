@@ -57,6 +57,57 @@ def cmd_wd_check(out_dir: Path, argv: list[str]) -> None:
     C.write_json(out_dir / "wd_check.json", report)
 
 
+# --- evaluate (Task A6) --------------------------------------------------------------------
+ANALYSIS_FMIN = 4.0     # gpu/run.py::_ANALYSIS_FMIN == make_bundle.ANALYSIS_FMIN
+
+
+@command("evaluate")
+def cmd_evaluate(out_dir: Path, argv: list[str]) -> None:
+    """lnlike at the given points, built as make_matrix_bundle.cpu_references does:
+    wdm_toys.matrix.build(model, CONFIGS[case](), load(path, cfg)["d"], analysis_fmin=4.0,
+    cache_dir=<private copy> for exact only), then lik.lnlike(point) one point at a time."""
+    ap = argparse.ArgumentParser(prog="sinusoid_wt evaluate")
+    ap.add_argument("--jobs", type=Path, required=True)
+    ap.add_argument("--data-root", type=Path, required=True)
+    ap.add_argument("--cache-src", type=Path, required=True)
+    a = ap.parse_args(argv)
+    from wdm_toys import matrix as M
+    from wdm_toys.config import CONFIGS
+    from wdm_toys.data import load
+    C.check_wdm(required=True)
+    cache = out_dir / "cache"
+    cache_sha = C.copy_cache(a.cache_src, cache)
+    current, lik, build_seconds = None, None, 0.0
+    jobs_out = {}
+    for job in C.read_json(a.jobs):
+        case, model, tag = job["case"], job["model"], job["tag"]
+        if (case, model) != current:
+            lik = None                                   # release the previous model first
+            cfg = CONFIGS[case]()
+            data = np.asarray(load(str(a.data_root / case / "toy_data.npz"), cfg)["d"], dtype=float)
+            kw = {"cache_dir": str(cache)} if model == "exact" else {}
+            t0 = time.perf_counter()
+            lik = M.build(model, cfg, data, analysis_fmin=ANALYSIS_FMIN, **kw)
+            build_seconds, current = time.perf_counter() - t0, (case, model)
+        with np.load(job["points"], allow_pickle=False) as z:
+            theta = np.asarray(z["theta"], dtype=float)
+        if job.get("wrap_phase", False):
+            theta = C.wrap_phase_runner(theta)
+        values = np.empty(len(theta))
+        seconds = np.empty(len(theta))
+        for i, point in enumerate(theta):
+            t0 = time.perf_counter()
+            values[i] = lik.lnlike(point)
+            seconds[i] = time.perf_counter() - t0
+        np.savez(out_dir / f"{tag}.npz", lnlike=values, seconds=seconds, theta=theta)
+        jobs_out[tag] = {"case": case, "model": model, "n": int(len(theta)), "build_seconds": build_seconds,
+                         "class": type(lik).__name__, "pd_failed_rows": int(getattr(lik, "pd_failed_rows", 0))}
+    C.assert_cache_unchanged(cache, cache_sha)
+    C.write_json(out_dir / "evaluate.json", {"wdm_file": C.check_wdm(required=True),
+                                             "runtime": C.runtime_fingerprint(),
+                                             "cache_sha256": cache_sha, "jobs": jobs_out})
+
+
 def main() -> None:
     out_dir, argv = C.start(("A",))
     if not argv or argv[0] not in COMMANDS:

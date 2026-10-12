@@ -146,6 +146,87 @@ def g1(argv: list[str]) -> dict:
     return files
 
 
+# --- re-evaluation of the references by a lineage (Tasks A6, A7) ---------------------------
+
+def compare(values, reference, near) -> dict:
+    """|value - reference| split like gpu/run.py::validate_reference: near points (atol) and
+    stress points (atol + rtol |ref|); -inf must agree exactly (counted, not differenced)."""
+    values = np.asarray(values, dtype=float)
+    reference = np.asarray(reference, dtype=float)
+    near = np.asarray(near, dtype=bool)
+    if not np.all(np.isfinite(values) | (values == -np.inf)):
+        raise FloatingPointError("a lineage returned NaN or +inf")
+    v_inf, r_inf = values == -np.inf, reference == -np.inf
+    both = ~v_inf & ~r_inf
+    delta = np.zeros(values.shape)
+    delta[both] = np.abs(values[both] - reference[both])
+    rel = np.zeros(values.shape)
+    rel[both] = delta[both] / np.maximum(np.abs(reference[both]), np.finfo(float).tiny)
+    return {"abs_delta": delta, "rel_delta": rel, "inf_mismatch": int(np.sum(v_inf != r_inf)),
+            "near_max_abs": float(delta[near].max(initial=0.0)),
+            "stress_max_abs": float(delta[~near].max(initial=0.0)),
+            "stress_max_rel": float(rel[~near].max(initial=0.0))}
+
+
+def _merge(models: dict, model: str, cmp: dict, n: int) -> None:
+    m = models.setdefault(model, {"near_max_abs": 0.0, "stress_max_abs": 0.0, "stress_max_rel": 0.0,
+                                  "inf_mismatch": 0, "n_points": 0})
+    for key in ("near_max_abs", "stress_max_abs", "stress_max_rel"):
+        m[key] = max(m[key], cmp[key])
+    m["inf_mismatch"] += cmp["inf_mismatch"]
+    m["n_points"] += n
+
+
+def _print_models(title: str, models: dict) -> None:
+    print(title)
+    for model, m in models.items():
+        print(f"  {model:12s} " + " ".join(
+            f"{k}={v:.3e}" if isinstance(v, float) else f"{k}={v}" for k, v in m.items()))
+
+
+def run_reference_eval(lineage: str, tier: str = "fast") -> dict:
+    from scripts.golden.legacy_eval import Job, evaluate_jobs
+    files = read_json(REFS / "INDEX.json")["files"]
+    jobs, expected = [], {}
+    for case in CASES:
+        for model in MODELS:
+            name = f"{case}_{model}_reference.npz"
+            ref = read_npz(REFS / name)
+            idx = np.asarray(files[name]["fast_index"] if tier == "fast" else np.arange(len(ref["loglike"])),
+                             dtype=int)
+            tag = f"{case}__{model}"
+            jobs.append(Job(tag, case, model, ref["theta"][idx]))
+            expected[tag] = (case, model, idx, ref["loglike"][idx], ref["near"][idx])
+    results, meta = evaluate_jobs(lineage, "sinusoid", jobs, timeout=7200.0)
+    report = {"schema": 1, "family": "sinusoid", "kind": "references", "lineage": lineage, "tier": tier,
+              "worker": meta, "models": {}, "points": {}}
+    for tag, (case, model, idx, ref_ll, near) in expected.items():
+        r = results[tag]
+        cmp = compare(r["lnlike"], ref_ll, near)
+        point = {"case": case, "model": model, "index": idx, "near": near, "reference": ref_ll,
+                 "value": r["lnlike"], "abs_delta": cmp["abs_delta"], "seconds": r["seconds"],
+                 "inf_mismatch": cmp["inf_mismatch"], "info": r["info"]}
+        if "failed" in r:
+            if not np.array_equal(r["failed"], r["lnlike"] == -np.inf):
+                raise AssertionError(f"{tag}: last_failed disagrees with the -inf values")
+            point["failed"] = r["failed"]
+        report["points"][tag] = point
+        _merge(report["models"], model, cmp, len(idx))
+    EVAL.mkdir(parents=True, exist_ok=True)
+    write_json(EVAL / f"{lineage}_references_{tier}.json", report)
+    _print_models(f"lineage {lineage}, references, {tier} tier:", report["models"])
+    return report
+
+
+@command("eval")
+def eval_cmd(argv: list[str]) -> dict:
+    ap = argparse.ArgumentParser(prog="sinusoid_goldens eval")
+    ap.add_argument("--lineage", choices=("A", "B"), required=True)
+    ap.add_argument("--tier", choices=("fast", "full"), default="fast")
+    a = ap.parse_args(argv)
+    return run_reference_eval(a.lineage, a.tier)
+
+
 def main(argv: list[str] | None = None) -> int:
     if not sys.flags.safe_path:          # spec §1 guard 5: no cwd injection
         raise SystemExit("run with python -P or PYTHONSAFEPATH=1 (source env/activate.sh)")
