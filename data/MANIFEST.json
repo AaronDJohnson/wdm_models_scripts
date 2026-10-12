@@ -1,0 +1,47 @@
+{
+ "files": {
+  "sinusoid/cache/bandcov_v1_4bfb466c191c79f9879a.npz": "752b3ea46cf14feaf5b8845ad39999a0b596a956d6af9e58072f691a8cd6c2c2",
+  "sinusoid/cache/cN_N16384_dt0.0009765625_fmin4_fref1.npy": "d263bf25960ab6f4e371fd597da0e28123cba569ca085e2af5e6c3599257213f",
+  "sinusoid/manuscript_high/toy_data.npz": "a6db39e500be548d2d6453d04f1f01d3b891d815ba8c90ce2de2958d972bc05a",
+  "sinusoid/manuscript_low/toy_data.npz": "650cf032a6e30fc1ad3bd40248ea943e21a70f8243a27ff1ef40703f86d530e8",
+  "sinusoid/manuscript_mid/toy_data.npz": "02cdb2595ce1058a063b131abbd1588070892bb0f18260f4cf545936785d222d"
+ },
+ "provenance": {
+  "sinusoid/cache/bandcov_v1_4bfb466c191c79f9879a.npz": {
+   "bundle": "toy_models/sinusoid/gpu/bundles/sinusoid_matrix_colab.zip",
+   "bundle_member": "sinusoid_matrix_colab/cache/bandcov_v1_4bfb466c191c79f9879a.npz",
+   "bytes": 25528,
+   "from": "wdm_paper_2/final_chains/frequency_cut_4hz/cache/bandcov_v1_4bfb466c191c79f9879a.npz",
+   "sha256": "752b3ea46cf14feaf5b8845ad39999a0b596a956d6af9e58072f691a8cd6c2c2"
+  },
+  "sinusoid/cache/cN_N16384_dt0.0009765625_fmin4_fref1.npy": {
+   "bundle": "toy_models/sinusoid/gpu/bundles/sinusoid_matrix_colab.zip",
+   "bundle_member": "sinusoid_matrix_colab/cache/cN_N16384_dt0.0009765625_fmin4_fref1.npy",
+   "bytes": 136,
+   "from": "wdm_paper_2/final_chains/frequency_cut_4hz/cache/cN_N16384_dt0.0009765625_fmin4_fref1.npy",
+   "sha256": "d263bf25960ab6f4e371fd597da0e28123cba569ca085e2af5e6c3599257213f"
+  },
+  "sinusoid/manuscript_high/toy_data.npz": {
+   "bundle": "toy_models/sinusoid/gpu/bundles/sinusoid_matrix_colab.zip",
+   "bundle_member": "sinusoid_matrix_colab/data/manuscript_high/toy_data.npz",
+   "bytes": 451307,
+   "from": "wdm_paper_2/final_chains/frequency_chirp_study/manuscript_high/toy_data.npz",
+   "sha256": "a6db39e500be548d2d6453d04f1f01d3b891d815ba8c90ce2de2958d972bc05a"
+  },
+  "sinusoid/manuscript_low/toy_data.npz": {
+   "bundle": "toy_models/sinusoid/gpu/bundles/sinusoid_matrix_colab.zip",
+   "bundle_member": "sinusoid_matrix_colab/data/manuscript_low/toy_data.npz",
+   "bytes": 442806,
+   "from": "wdm_paper_2/final_chains/frequency_chirp_study/manuscript_low/toy_data.npz",
+   "sha256": "650cf032a6e30fc1ad3bd40248ea943e21a70f8243a27ff1ef40703f86d530e8"
+  },
+  "sinusoid/manuscript_mid/toy_data.npz": {
+   "bundle": "toy_models/sinusoid/gpu/bundles/sinusoid_matrix_colab.zip",
+   "bundle_member": "sinusoid_matrix_colab/data/manuscript_mid/toy_data.npz",
+   "bytes": 444577,
+   "from": "wdm_paper_2/final_chains/frequency_chirp_study/manuscript_mid/toy_data.npz",
+   "sha256": "02cdb2595ce1058a063b131abbd1588070892bb0f18260f4cf545936785d222d"
+  }
+ },
+ "schema": 1
+}

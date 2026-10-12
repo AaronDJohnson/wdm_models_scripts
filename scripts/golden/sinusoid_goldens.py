@@ -1,0 +1,115 @@
+"""Sinusoid goldens and shipped data (spec §1 'Shipped data', §7.2 G1/G2/G5/G6; Tasks A4-A10).
+
+From the release root, after ``source env/activate.sh``:
+
+    $PY -m scripts.golden.sinusoid_goldens ship-data              # A4: the only writer under data/
+    $PY -m scripts.golden.sinusoid_goldens g1                     # A5
+    $PY -m scripts.golden.sinusoid_goldens eval --lineage A       # A6 (lineage B: A7)
+    $PY -m scripts.golden.sinusoid_goldens g2                     # A8
+    $PY -m scripts.golden.sinusoid_goldens eval-chains --lineage A
+    $PY -m scripts.golden.sinusoid_goldens g6                     # A9
+
+Apart from ship-data, every command writes only below golden/sinusoid/. Legacy code runs
+only inside lineage subprocesses (scripts.golden.legacy_eval); this process reads the
+frozen trees as bytes.
+"""
+from __future__ import annotations
+
+import argparse
+import io
+import sys
+import zipfile
+from collections.abc import Callable
+
+import numpy as np
+
+from scripts.golden.goldens_io import (read_json, read_npz, sha256_bytes, sha256_file,
+                                       update_data_manifest, write_json, write_npz)
+from scripts.golden.paths import DATA, GOLDEN, ROOT
+
+CASES = ("manuscript_low", "manuscript_mid", "manuscript_high")
+#: The 15 WDM II models (spec §0 rule 7; §5.3 order).
+MODELS = ("whittle_raw", "whittle_cut", "band_raw", "band_cut", "band_pad", "band_exact",
+          "mid_raw", "mid_cut", "mid_pad", "mid_exact", "tri_raw", "tri_cut", "tri_pad",
+          "tri_exact", "exact")
+N_REF = 24                                  # toy_models/sinusoid/gpu/make_matrix_bundle.py::N_REF
+BUNDLE_REL = "toy_models/sinusoid/gpu/bundles/sinusoid_matrix_colab.zip"
+BUNDLE = ROOT / BUNDLE_REL
+BUNDLE_ROOT = "sinusoid_matrix_colab"
+SINUSOID_FINAL = ROOT / "wdm_paper_2" / "sinusoid_final"
+GS = GOLDEN / "sinusoid"
+REFS = GS / "references"
+EVAL = GS / "legacy_eval"
+CHAIN_ROWS = GS / "chain_rows"
+INTERMEDIATES = GS / "intermediates"
+
+_CHIRP = "wdm_paper_2/final_chains/frequency_chirp_study"      # make_bundle.DATA_ROOT
+_CACHE = "wdm_paper_2/final_chains/frequency_cut_4hz/cache"     # make_bundle.CACHE_ROOT
+#: data/<rel> -> (canonical source under ROOT, member under the bundle root, sha256)
+DATA_FILES: dict[str, tuple[str, str, str]] = {
+    "sinusoid/manuscript_low/toy_data.npz": (
+        f"{_CHIRP}/manuscript_low/toy_data.npz", "data/manuscript_low/toy_data.npz",
+        "650cf032a6e30fc1ad3bd40248ea943e21a70f8243a27ff1ef40703f86d530e8"),
+    "sinusoid/manuscript_mid/toy_data.npz": (
+        f"{_CHIRP}/manuscript_mid/toy_data.npz", "data/manuscript_mid/toy_data.npz",
+        "02cdb2595ce1058a063b131abbd1588070892bb0f18260f4cf545936785d222d"),
+    "sinusoid/manuscript_high/toy_data.npz": (
+        f"{_CHIRP}/manuscript_high/toy_data.npz", "data/manuscript_high/toy_data.npz",
+        "a6db39e500be548d2d6453d04f1f01d3b891d815ba8c90ce2de2958d972bc05a"),
+    "sinusoid/cache/cN_N16384_dt0.0009765625_fmin4_fref1.npy": (
+        f"{_CACHE}/cN_N16384_dt0.0009765625_fmin4_fref1.npy",
+        "cache/cN_N16384_dt0.0009765625_fmin4_fref1.npy",
+        "d263bf25960ab6f4e371fd597da0e28123cba569ca085e2af5e6c3599257213f"),
+    "sinusoid/cache/bandcov_v1_4bfb466c191c79f9879a.npz": (
+        f"{_CACHE}/bandcov_v1_4bfb466c191c79f9879a.npz",
+        "cache/bandcov_v1_4bfb466c191c79f9879a.npz",
+        "752b3ea46cf14feaf5b8845ad39999a0b596a956d6af9e58072f691a8cd6c2c2"),
+}
+
+COMMANDS: dict[str, Callable[[list[str]], object]] = {}
+
+
+def command(name: str):
+    def register(fn):
+        COMMANDS[name] = fn
+        return fn
+    return register
+
+
+@command("ship-data")
+def ship_data(argv: list[str]) -> dict:
+    """Copy the canonical sinusoid inputs into data/sinusoid; record them in data/MANIFEST.json."""
+    argparse.ArgumentParser(prog="sinusoid_goldens ship-data").parse_args(argv)
+    files, provenance = {}, {}
+    with zipfile.ZipFile(BUNDLE) as bundle:
+        for rel, (source, member, sha) in DATA_FILES.items():
+            body = (ROOT / source).read_bytes()
+            if sha256_bytes(body) != sha:
+                raise ValueError(f"{source}: sha256 {sha256_bytes(body)} differs from the pinned {sha}")
+            if sha256_bytes(bundle.read(f"{BUNDLE_ROOT}/{member}")) != sha:
+                raise ValueError(f"bundle member {member} differs from {source}")
+            target = DATA / rel
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_bytes(body)
+            files[rel] = sha
+            provenance[rel] = {"sha256": sha, "bytes": len(body), "from": source,
+                               "bundle": BUNDLE_REL, "bundle_member": f"{BUNDLE_ROOT}/{member}"}
+    update_data_manifest(files, provenance)
+    print(f"shipped {len(files)} sinusoid files into {DATA / 'sinusoid'}")
+    return provenance
+
+
+def main(argv: list[str] | None = None) -> int:
+    if not sys.flags.safe_path:          # spec §1 guard 5: no cwd injection
+        raise SystemExit("run with python -P or PYTHONSAFEPATH=1 (source env/activate.sh)")
+    argv = list(sys.argv[1:] if argv is None else argv)
+    if not argv or argv[0] not in COMMANDS:
+        print("usage: python -m scripts.golden.sinusoid_goldens {" + ",".join(sorted(COMMANDS)) + "} [options]",
+              file=sys.stderr)
+        return 2
+    COMMANDS[argv[0]](argv[1:])
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
