@@ -13,14 +13,26 @@ and merges them into ``golden/MANIFEST.json``.
 Statistics (cold chain, first 30% of each chain dropped; periodic parameters unwrapped about
 their circular mean; numbers identical to ``chain_stats.diagnostics`` for one chain):
 
-* mean, std (ddof 1), 5/16/50/84/95% quantiles of the pooled kept samples, circular mean;
+* mean, std (ddof 1), 5/16/50/84/95% quantiles of the pooled kept samples, circular mean. For a
+  periodic parameter with box [low, high) the reported ``circular_mean`` is reduced into the box
+  and the location statistics are those of the samples unwrapped about it, so they lie in
+  [circular_mean - period/2, circular_mean + period/2). (``chain_stats.unwrap`` takes the angle
+  of the mean phasor, so its centre lies in (low - period/2, low + period/2], off the box for
+  half the circle; that centre is kept wherever only shift-invariant statistics use it: each
+  chain's ESS and split-R-hat, and the pooled R-hat segments of ``collect.pooled_diagnostics``.)
 * ESS = min(batch means with floor(sqrt n) batches, Geyer initial sequence), per chain; a
   pooled target's ESS is the sum over its chains (the GB manifest's ``ess_rule``);
 * MCSE of the mean = std / sqrt(ESS);
 * split-R-hat: 4 segments of one chain; for a pooled target, two segments per chain (the
   first ``h`` samples and ``h`` samples from its midpoint, ``h`` = half the shortest chain), every
   chain unwrapped about the pooled circular mean (``collect.pooled_diagnostics``);
-* counter totals from ``noise_states.jsonl`` and the -inf fractions per noise state and per row;
+* counter totals from ``noise_states.jsonl`` and the -inf fractions per noise state and per row.
+  A run without that log is recorded explicitly: its ``counter_log`` is ``"absent"`` and its
+  ``files["noise_states.jsonl"]`` is null (every one of the four files is listed, null when
+  absent), so "no counter log" cannot be mistaken for "a model without counters". In the
+  sinusoid set the 26 ``flow_pt`` runs (``toy_models/sinusoid/gpu/run_flow_matrix.py``, which
+  never constructs ``chain_stats.CounterLog``) have no log, the dense ``exact`` ones included,
+  so their -inf fractions are unknown; ``sampler`` records the run_meta sampler for that reason;
 * GB only: ``P(primary)`` / ``P(reflection)`` = share of kept samples whose ``cos_colat`` has the
   same / opposite sign as the injection's (``primary_rule``).
 
@@ -276,6 +288,14 @@ def circular_mean(x, low: float, high: float) -> float:
     return float(low + period * np.angle(np.mean(np.exp(1j * angle))) / (2 * np.pi))
 
 
+def into_box(c: float, low: float, high: float) -> float:
+    """``c`` reduced into [low, high) by whole periods; returned unchanged if already there."""
+    if low <= c < high:
+        return float(c)
+    c = low + (c - low) % (high - low)
+    return float(low) if c >= high else float(c)   # the % can round up to a whole period
+
+
 def unwrap(x, low: float, high: float, centre: float | None = None) -> np.ndarray:
     period = high - low
     if centre is None:
@@ -358,6 +378,11 @@ def target_of(toy: str, meta: dict) -> tuple[str, str]:
     return t["case"], t["model"]
 
 
+def sampler_of(toy: str, meta: dict) -> str | None:
+    """run_meta's ``sampler`` (sinusoid: ``target.sampler``, set by the flow runner only)."""
+    return (meta if toy == "galactic_binary" else meta["target"]).get("sampler")
+
+
 def summarise_target(toy: str, root: Path, case: str, model: str, run_rels: list[str], *,
                      hash_files: bool = True) -> dict:
     chains, per_chain = [], []
@@ -382,6 +407,7 @@ def summarise_target(toy: str, root: Path, case: str, model: str, run_rels: list
             if name in periodic and len(x):
                 x = unwrap(x, *periodic[name])
             params[name] = parameter_stats(x)
+        chain_counters = counter_totals(run_dir)
         stored = None
         if (run_dir / "diagnostics.json").is_file():
             d = json.loads((run_dir / "diagnostics.json").read_text())
@@ -395,24 +421,29 @@ def summarise_target(toy: str, root: Path, case: str, model: str, run_rels: list
                "max_rhat": nan_max(v["rhat"] for v in params.values()),
                "stored_diagnostics": stored,
                "stale": stored is None or stored["samples"] != len(kept),
-               "counters": counter_totals(run_dir)}
-        if hash_files:
-            rec["files"] = {f: {"bytes": (run_dir / f).stat().st_size, "sha256": _sha256(run_dir / f)}
-                            for f in ("chain_0.bin", "run_meta.json", "diagnostics.json", COUNTER_LOG)
-                            if (run_dir / f).is_file()}
+               "sampler": sampler_of(toy, meta),
+               "counter_log": ("absent" if not (run_dir / COUNTER_LOG).is_file()
+                               else "present" if chain_counters is not None else "empty"),
+               "counters": chain_counters}
+        if hash_files:      # all four listed; null = the file is not in the run directory
+            rec["files"] = {f: ({"bytes": (run_dir / f).stat().st_size, "sha256": _sha256(run_dir / f)}
+                                if (run_dir / f).is_file() else None)
+                            for f in ("chain_0.bin", "run_meta.json", "diagnostics.json", COUNTER_LOG)}
         per_chain.append(rec)
         chains.append(kept)
     pooled = len(chains) > 1
     summary = {}
     for j, name in enumerate(names):
-        cols = [c[:, j] for c in chains]
-        allx = np.concatenate(cols)
+        raw = [c[:, j] for c in chains]
+        cols = raw
+        allx = np.concatenate(raw)
         circ = None
         if name in periodic:
             lo, hi = periodic[name]
-            circ = circular_mean(allx, lo, hi)
-            cols = [unwrap(c, lo, hi, centre=circ) for c in cols]
-            allx = np.concatenate(cols)
+            centre = circular_mean(allx, lo, hi)        # collect's centre: may lie off the box
+            cols = [unwrap(c, lo, hi, centre=centre) for c in raw]      # pooled R-hat segments
+            circ = into_box(centre, lo, hi)             # reported centre, in [lo, hi)
+            allx = np.concatenate([unwrap(c, lo, hi, centre=circ) for c in raw])
         ess = float(sum(pc["parameters"][name]["ess"] for pc in per_chain))
         if pooled:      # gb_likelihood_matrix/collect.py pooled_diagnostics, verbatim segments
             half = min(len(c) for c in cols) // 2
@@ -449,6 +480,8 @@ def summarise_target(toy: str, root: Path, case: str, model: str, run_rels: list
            "min_ess": nan_min(v["ess"] for v in summary.values()),
            "max_rhat": nan_max(v["rhat"] for v in summary.values()),
            "per_chain": per_chain, "counters": counters, "neg_inf_fraction": neg_inf,
+           "counter_log": (per_chain[0]["counter_log"]
+                           if len({pc["counter_log"] for pc in per_chain}) == 1 else "mixed"),
            "caveats": [CAVEATS[(toy, case, model)]] if (toy, case, model) in CAVEATS else []}
     if toy == "galactic_binary":
         cc = np.concatenate([c[:, names.index("cos_colat")] for c in chains])

@@ -63,9 +63,12 @@ def test_geyer_is_impulse_verbatim(tmp_path):
 def test_summariser_is_read_only():
     run = SIN_ROOT / "manuscript_low" / "band_raw_flow_seed301"
     before = {p.name: (p.stat().st_size, p.stat().st_mtime_ns) for p in run.iterdir()}
-    sc.summarise_target("sinusoid", SIN_ROOT, "manuscript_low", "band_raw",
-                        ["manuscript_low/band_raw_flow_seed301"], hash_files=True)
+    result = sc.summarise_target("sinusoid", SIN_ROOT, "manuscript_low", "band_raw",
+                                 ["manuscript_low/band_raw_flow_seed301"], hash_files=True)
     assert {p.name: (p.stat().st_size, p.stat().st_mtime_ns) for p in run.iterdir()} == before
+    # the recomputed summary is the committed golden, byte for byte (pins every field)
+    assert (json.dumps(result, indent=1, sort_keys=True) + "\n"
+            == (GOLDEN / "chain_summaries/sinusoid/manuscript_low_band_raw.json").read_text())
 
 
 @requires_legacy
@@ -90,7 +93,16 @@ def test_sinusoid_summaries_reproduce_stored_diagnostics(case):
         for name, p in s["parameters"].items():
             assert p["q05"] <= p["q16"] <= p["q50"] <= p["q84"] <= p["q95"]
             assert p["mcse_mean"] == pytest.approx(p["std"] / np.sqrt(p["ess"]))
+            if p["periodic"]:       # the reported centre is in the box (quantiles may straddle it)
+                lo, hi = p["periodic"]
+                assert lo <= p["circular_mean"] < hi, (model, name, p["circular_mean"])
         assert (s["parameters"]["phi_0"]["periodic"] == [-np.pi, np.pi])
+        # the counter log is recorded explicitly, also when absent
+        assert sorted(pc["files"]) == ["chain_0.bin", "diagnostics.json", "noise_states.jsonl",
+                                       "run_meta.json"]
+        absent = pc["counter_log"] == "absent"
+        assert absent == (pc["files"]["noise_states.jsonl"] is None) == (pc["counters"] is None)
+        assert s["counter_log"] == pc["counter_log"] in ("absent", "present")
         if pc["stale"]:
             continue
         n_fresh += 1
@@ -110,3 +122,11 @@ def test_known_caveats_and_stale_runs():
         json.loads(p.read_text()) for p in (GOLDEN / "chain_summaries/sinusoid").glob("*.json"))
         if s["per_chain"][0]["stale"])
     assert stale == ["manuscript_mid/band_raw", "manuscript_mid/exact", "manuscript_mid/tri_cut"]
+    # no noise_states.jsonl in exactly the 26 flow_pt runs (run_flow_matrix.py writes no CounterLog)
+    summaries = [json.loads(p.read_text()) for p in (GOLDEN / "chain_summaries/sinusoid").glob("*.json")]
+    by_log = {}
+    for s in summaries:
+        pc = s["per_chain"][0]
+        by_log.setdefault(pc["counter_log"], set()).add(pc["sampler"])
+    assert len(summaries) == 45 and by_log == {"absent": {"flow_pt"}, "present": {None}}
+    assert sum(s["counter_log"] == "absent" for s in summaries) == 26
