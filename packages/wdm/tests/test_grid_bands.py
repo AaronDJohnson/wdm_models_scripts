@@ -101,6 +101,55 @@ def test_hz_identity(grid):
         <= 1e-15 * np.max(phi_centered(Nf, Nt, dt))
 
 
+#: grids whose window arithmetic is not "nice": dt with long mantissas, odd Nf, GB 5 s.
+WINDOW_GRIDS = [(8, 16, 1.0), (16, 32, 0.5), (8, 32, 1.7), (64, 256, 2.0**-10), (6, 10, 0.3),
+                (32, 64, 1.0 / 3.0), (4, 8, 7.123456789e-5), (12, 24, 123.456), (6570, 240, 5.0)]
+
+
+def _phi_hz_june(Nf, Nt, dt, d=4):
+    """June ``wdm/filter.py`` arithmetic, verbatim (the pre-``grid.delta_F`` phi_hz body)."""
+    from wdm.filter import nu_d
+
+    T = Nf * Nt * dt
+    f = (np.arange(Nt) - Nt // 2) / T
+    delta_F = 1.0 / (2.0 * dt * Nf)
+    A = delta_F / 4.0
+    B = delta_F / 2.0
+    amp = 1.0 / np.sqrt(delta_F)
+    f_abs = np.abs(f)
+    out = np.where(f_abs < A, amp, 0.0)
+    rolloff = (f_abs >= A) & (f_abs < A + B)
+    return np.where(rolloff, amp * np.cos(np.pi / 2.0 * nu_d((f_abs - A) / B, d)), out)
+
+
+@pytest.mark.parametrize("grid", WINDOW_GRIDS)
+def test_windows_are_bitwise_the_oracle(grid):
+    """phi_centered == the frozen oracle and phi_hz == the June arithmetic, bit for bit
+    (both now take Delta F from grid.delta_F)."""
+    import vendored_2f7136c.filter as ofilter
+
+    Nf, Nt, dt = grid
+    assert np.array_equal(phi_centered(Nf, Nt, dt), ofilter.phi_centered(Nf, Nt, dt))
+    assert np.array_equal(phi_hz(Nf, Nt, dt), _phi_hz_june(Nf, Nt, dt))
+
+
+@pytest.mark.parametrize("dt", [5e-324, 1e-320, 1e308])
+def test_unrepresentable_delta_F_raises_instead_of_returning_zeros(dt):
+    """dt is legal on its own but 1/(2 dt Nf) is 0 or inf: the transform used to return
+    a finite all-zero grid (lisa/wdm b5973b7 fixed it in filter.py via grid.delta_F)."""
+    Nf, Nt = 8, 16
+    calls = {
+        "phi_centered": lambda: phi_centered(Nf, Nt, dt),
+        "phi_hz": lambda: phi_hz(Nf, Nt, dt),
+        "forward_time": lambda: forward_time(np.ones(Nf * Nt), Nf, Nt, dt),
+        "inverse_time": lambda: wdm.inverse_time(np.ones((Nf + 1, Nt)), Nf, Nt, dt),
+    }
+    for name, call in calls.items():
+        with pytest.raises(ValueError, match="delta_F is not representable"):
+            call()
+            pytest.fail(f"{name} returned for dt={dt!r}")
+
+
 def test_atoms_are_the_rows_of_the_transform():
     Nf, Nt, dt = 8, 16, 0.5
     Wa = active_W(Nf, Nt, dt)

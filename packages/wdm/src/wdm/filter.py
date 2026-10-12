@@ -22,7 +22,7 @@ import numpy as np
 from numpy.typing import NDArray
 from scipy.special import betainc
 
-from .grid import validate_dt, validate_grid
+from .grid import delta_F, validate_dt, validate_grid
 
 type Array = NDArray[np.floating]
 
@@ -91,6 +91,12 @@ def phi_centered(Nf: int, Nt: int, dt: float, d: int = 4) -> Array:
     ndarray, shape (Nt,)
         Filter samples in centered ordering (peak at index $N_t/2$).
 
+    Raises
+    ------
+    ValueError
+        If the grid or ``dt`` is invalid, or if $\\Delta F = 1/(2\\,\\delta t N_f)$
+        is not a positive finite double (see :func:`wdm.delta_F`).
+
     Examples
     --------
     >>> import numpy as np, wdm
@@ -100,12 +106,15 @@ def phi_centered(Nf: int, Nt: int, dt: float, d: int = 4) -> Array:
     """
     validate_grid(Nf, Nt)
     validate_dt(dt)
+    # grid.delta_F is the same expression, 1/(2 dt Nf), so the window is bitwise
+    # unchanged; it raises when that width is 0 or inf (an unrepresentable dt*Nf),
+    # where the inline form returned a window -- and a transform -- of exact zeros.
+    dF = delta_F(Nf, dt)
     T = Nf * Nt * dt
     f = (np.arange(Nt) - Nt // 2) / T
-    delta_F = 1.0 / (2.0 * dt * Nf)
-    delta_Omega = 2.0 * np.pi * delta_F
-    A = delta_F / 4.0
-    B = delta_F / 2.0
+    delta_Omega = 2.0 * np.pi * dF
+    A = dF / 4.0
+    B = dF / 2.0
     amp = 1.0 / np.sqrt(delta_Omega)
 
     f_abs = np.abs(f)
@@ -139,12 +148,12 @@ def phi_hz(Nf: int, Nt: int, dt: float, d: int = 4) -> Array:
     """
     validate_grid(Nf, Nt)
     validate_dt(dt)
+    dF = delta_F(Nf, dt)          # = 1/(2 dt Nf), bitwise; raises if not representable
     T = Nf * Nt * dt
     f = (np.arange(Nt) - Nt // 2) / T
-    delta_F = 1.0 / (2.0 * dt * Nf)
-    A = delta_F / 4.0
-    B = delta_F / 2.0
-    amp = 1.0 / np.sqrt(delta_F)
+    A = dF / 4.0
+    B = dF / 2.0
+    amp = 1.0 / np.sqrt(dF)
 
     f_abs = np.abs(f)
     out = np.where(f_abs < A, amp, 0.0)

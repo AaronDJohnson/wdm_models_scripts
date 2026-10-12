@@ -139,6 +139,32 @@ def test_psd_round_trips(grid):
     assert np.max(np.abs(stat.psd_from_lambda_blocks(d, o, n, Nf, Nt, dt) / S - 1)) < 1e-12
 
 
+def _complex_psd_forms(Nf, Nt, dt, imag):
+    """Every accepted PSD form, made complex: callable, rfft / full 1D, both 2D sizes."""
+    N = Nf * Nt
+    rf = _psd(np.fft.rfftfreq(N, d=dt)) + imag
+    full = _psd(np.abs(np.fft.fftfreq(N, d=dt))) + imag
+    return {"callable": lambda f: _psd(f) + imag, "rfft": rf, "full": full,
+            "rfft matrix": np.diag(rf), "full matrix": np.diag(full)}
+
+
+@pytest.mark.parametrize("imag", [1e-3j, 0j])
+@pytest.mark.parametrize("build", ["build_lambda_blocks_full_active", "build_K_full_active"])
+def test_complex_psd_is_rejected(build, imag):
+    """A PSD is real: a complex one (even with a zero imaginary part) raises ValueError
+    in every input form, instead of being truncated to its real part (1D and callables
+    used to warn ComplexWarning and go on; the 2D form took np.real silently)."""
+    import warnings
+
+    Nf, Nt, dt = 8, 16, 1.0
+    for form, noise_in in _complex_psd_forms(Nf, Nt, dt, imag).items():
+        with warnings.catch_warnings():
+            warnings.simplefilter("error")          # a ComplexWarning must not stand in
+            with pytest.raises(ValueError, match="real-valued"):
+                getattr(stat, build)(Nf, Nt, dt, noise_in)
+                pytest.fail(f"{build} accepted a complex {form} PSD")
+
+
 def _on_device(out):
     """``out`` on the host, after checking it came back as a ``jax.Array``."""
     import jax

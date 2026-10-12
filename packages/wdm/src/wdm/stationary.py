@@ -181,11 +181,18 @@ def _normalize_noise_to_sigma2(
     ------
     ValueError
         If a 2D matrix input is not diagonal (i.e., the noise is not
-        stationary), or if the input shape is not recognized.
+        stationary), if the input shape is not recognized, or if the PSD is
+        complex in any form (even with a zero imaginary part): it is
+        rejected before any cast, rather than truncated to its real part
+        (with only a ``ComplexWarning`` for callables and 1D arrays, silently
+        for 2D ones), as :func:`wdm.grid.sanitize_psd` does.
     """
+    context = "stationary noise input"
     if callable(noise):
         freqs_full = np.fft.fftfreq(N, d=dt)
-        Sn_full = np.asarray(noise(np.abs(freqs_full)), dtype=float)
+        raw = np.asarray(noise(np.abs(freqs_full)))
+        _reject_complex_psd(raw, context)
+        Sn_full = np.asarray(raw, dtype=float)
         if Sn_full.shape != freqs_full.shape:
             raise ValueError(
                 f"noise callable must be elementwise: expected shape "
@@ -193,6 +200,7 @@ def _normalize_noise_to_sigma2(
             )
     else:
         arr = np.asarray(noise)
+        _reject_complex_psd(arr, context)
         n_rfft = N // 2 + 1
 
         if arr.ndim == 1:
@@ -229,8 +237,18 @@ def _normalize_noise_to_sigma2(
                 f"noise must be a callable or a 1D / 2D ndarray; got ndim={arr.ndim}"
             )
 
-    Sn_full = sanitize_psd(Sn_full, "stationary noise input")
+    Sn_full = sanitize_psd(Sn_full, context)
     return N * Sn_full / (2.0 * dt)
+
+
+def _reject_complex_psd(values: NDArray[np.generic], context: str) -> None:
+    """``ValueError`` for a complex PSD, with :func:`wdm.grid.sanitize_psd`'s message.
+
+    Checked on the raw input, before the ``float`` casts / ``np.real`` above
+    would discard the imaginary part.
+    """
+    if np.iscomplexobj(values):
+        raise ValueError(f"{context}: PSD must be real-valued, got a complex array")
 
 
 def _carriers(Nt: int) -> dict[tuple[int, int], CArray]:
