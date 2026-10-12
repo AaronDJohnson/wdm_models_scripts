@@ -38,6 +38,7 @@ from .filter import phi_centered
 from .grid import (
     band_frequencies,
     delta_F,
+    delta_T,
     n_samples,
     sanitize_psd,
     time_pixel_centers,
@@ -56,6 +57,7 @@ __all__ = [
     "colored_noise",
     "empirical_variance",
     "evaluate_psd_on_band_grid",
+    "evolutionary_band_variance",
     "evolutionary_variance",
     "whittle_variance",
     "whittle_variance_from_array",
@@ -432,3 +434,52 @@ def empirical_variance(
         w = forward(x_rfft, Nf, Nt, dt)
         accum += w * w
     return accum / n_realizations
+
+
+# ---------------------------------------------------------------------------
+# Evolutionary PSDs S(f, t) -- moved from wdm_dev ``evolutionary.py`` (verbatim)
+# ---------------------------------------------------------------------------
+
+
+def _psd_at(Sn: PsdFtFunc, f: Array, t: Array, context: str) -> Array:
+    """Evaluate an elementwise, broadcasting ``Sn(f, t)`` and sanitize it."""
+    shape = np.broadcast_shapes(np.shape(f), np.shape(t))
+    out = sanitize_psd(Sn(f, t), context)
+    if out.shape != shape:
+        raise ValueError(f"{context}: Sn(f, t) must be elementwise and broadcast to "
+                         f"{shape}; got {out.shape}")
+    return out
+
+
+def evolutionary_band_variance(Nf: int, Nt: int, dt: float, Sn: PsdFtFunc, *,
+                               bands: Array | None = None) -> Array:
+    r"""The filter-weighted band average of :math:`S(f, t_n)` at every cell centre,
+
+    .. math::  \sigma^2_{mn} = \frac12\,
+               \frac{\sum_j \tilde\phi^2(f_j - f_m)\,S(f_j, t_n)}{\sum_j \tilde\phi^2(f_j - f_m)},
+
+    WDM II Eq. 36 (eq:wdm_variance_band_average; the edge-band factor is not
+    applied -- inactive edge cells carry the same value, as in
+    :func:`evolutionary_variance`).  ``Sn(f, t)`` is elementwise and broadcasting
+    (argument order ``(f, t)``).  In the stationary limit this is
+    :func:`band_averaged_variance`.  Returns ``(Nf + 1, Nt)``, or
+    ``(len(bands), Nt)`` for selected bands.  Was wdm_dev
+    ``evolutionary.band_averaged_evolutionary_variance``.
+    """
+    validate_grid(Nf, Nt)
+    N = Nf * Nt
+    phi2 = phi_centered(Nf, Nt, dt) ** 2
+    # The Meyer window has compact support: a slab weight of exactly 0 cannot
+    # contribute, so dropping those bins is an exact restriction.
+    sup = np.flatnonzero(phi2)
+    phi2 = phi2[sup]
+    f_off = (np.arange(Nt) - Nt // 2)[sup] / (N * dt)
+    m = np.arange(Nf + 1) if bands is None else np.asarray(bands, int)
+    fb = band_frequencies(Nf, dt)[m][:, None] + f_off[None, :]
+    f_nyq = 0.5 / dt
+    ff = np.abs(fb)
+    ff = np.where(ff > f_nyq, 2.0 * f_nyq - ff, ff)                       # (B, J)
+    t = np.arange(Nt) * delta_T(Nf, dt)
+    S = _psd_at(Sn, ff[:, None, :], t[None, :, None],
+                "evolutionary_band_variance")                              # (B, Nt, J)
+    return 0.5 * (S * phi2).sum(axis=-1) / phi2.sum()

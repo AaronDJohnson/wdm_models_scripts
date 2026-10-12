@@ -1,863 +1,146 @@
-r"""Building blocks for nonstationary (evolutionary) noise analyses.
+r"""Stateless WDM II kernels for evolutionary (nonstationary) noise.
 
-Everything in the stationary modules (:mod:`wdm.noise`, :mod:`wdm.stationary`,
-:mod:`wdm.inner_product`) assumes a time-independent PSD.  This module collects
-the pieces that the WDM II analyses need beyond that, none of which depends on a
-particular noise model:
+Everything here is a pure function of ``(grid, spectrum, arrays)``.  Anything with
+state, a factorisation or a density (the wdm_dev ``PackedGrid``, ``BlockTri``,
+``Solver``, ``Schur``, ``PaddedMarginal``, ``marginal_lnlike``, ``FourierBand``,
+``Variant``) lives in ``domainia``.
 
-* :func:`endpoint_weights` -- the one-sided trapezoid weights :math:`\eta_k`
-  (``1/2`` at DC and Nyquist), WDM II eq:freq_edge_weight.
-* :class:`PackedGrid` -- the active cells of an ``(Nf, Nt, dt)`` grid in packed
-  band-major order, their atoms, the time mask :math:`M = W\chi W^{\mathsf T}/\delta t`
-  in the WDM domain, and per-cell energy fractions of a time weight.
-* :class:`BlockTri`, :class:`Solver`, :class:`Schur` -- :math:`C^{-1}` and
-  :math:`\log|C|` for a diagonal, block tri-diagonal or dense covariance, and for
-  one whose edge rows/columns are replaced by an exact block (the edge-exact
-  treatment).
-* :class:`PaddedMarginal` -- the zero-padded covariance :math:`M\Lambda M`,
-  handled as the extended Gaussian with the padding samples marginalised out.
-* :func:`marginal_lnlike`, :func:`nuisance_basis`, :class:`FourierBand`,
-  :func:`wdm_discarded` -- a Gaussian likelihood marginalised (flat prior) over
-  discarded Fourier modes, e.g. an analysis cut below some :math:`f_{\min}`.
-* :class:`Variant`, :func:`make_variant` -- the time-edge treatments of WDM II
-  (raw, cut, padded, exact edges) as one record map ``x -> y``.
+* Time masks: :func:`energy_fraction`, :func:`apply_time_mask`
+  (:math:`M = W\chi W^{\mathsf T}/\delta t`).
+* The 0.1% wrap rule: :func:`wrap_fractions`, :func:`wrap_cut_columns`.
+* The exact covariance (WDM II eq:wdm_generic_covariance, :math:`\theta = 0`):
+  :func:`time_domain_factor`, :func:`time_domain_covariance`,
+  :func:`exact_covariance`, :func:`draw_noise` (dense, NumPy, small grids).
+* WDM II Eq. (45), the nonstationary block tri-diagonal covariance
+  :math:`\Lambda_{pq} = \frac1T\,\mathrm{Re}\sum_k \eta_k S(f_k, \bar t_{pq})
+  \hat g_p(k)\hat g_q^*(k)`, :math:`\bar t = (t_n + t_{n'})/2` used literally:
 
-and, for a general evolutionary PSD ``Sn(f, t)`` (elementwise, broadcasting):
+  - :func:`eq45_plan` -- host constants (one plan per grid and kept-cell set);
+  - Chebyshev-in-time builders: :func:`eq45_coeffs_bessel` (exact Bessel-I
+    coefficients of the log-linear family; the WT ``TriCovariance._cheb_weights``
+    that wrote the NumPy references) or :func:`eq45_coeffs_interp` (any
+    ``Sn(f, t)``, interpolated at ``P`` Chebyshev nodes; wdm_dev), then
+    :func:`eq45_blocks_cheb`;
+  - the Gram form for the log-linear family (the JAX chains' WG build):
+    :func:`eq45_gram_plan`, :func:`eq45_gram_gather`, :func:`eq45_blocks_gram`;
+  - the separable form :math:`S_c = s_I + g(t) s_G` (GB):
+    :func:`eq45_separable_kernels`, :func:`eq45_separable_assemble`;
+  - :func:`eq45_direct` -- the direct sum, the oracle.
 
-* :func:`band_averaged_evolutionary_variance` -- WDM II
-  eq:wdm_variance_band_average at every cell (the cell-centre form is
-  :func:`wdm.noise.evolutionary_variance`).
-* :class:`TriCovariance` -- the nonstationary tri-diagonal covariance, WDM II
-  Eq. (45), as band blocks for :class:`BlockTri`.
-* :func:`time_domain_factor`, :func:`time_domain_covariance`, :func:`draw_noise`,
-  :func:`exact_covariance` -- the exact covariance (WDM II
-  eq:wdm_generic_covariance, phase :math:`\theta = 0`) and noise realisations.
-* :func:`wrap_fractions`, :func:`wrap_cut_columns` -- the 0.1% wrap rule that
-  sets how many time columns the cut treatment drops.
+PSDs are callables ``Sn(f, t)``: elementwise, broadcasting, argument order
+``(f, t)`` (WDM II writes :math:`S(t, f)`), samples through
+:func:`wdm.grid.sanitize_psd`.  Cell times are :math:`t_n = n\Delta T`.
 
-Provenance: ported on 2026-10-10 from the WDM II toy code
-(``wdm_paper_2/toy_models/src/wdm_toys``, modules ``matrix``, ``band`` and
-``noise``; reference copy ``wdm_paper_2/toy_models_reference_2026-10-10``).  The
-numerical code is unchanged; only the toy configuration object was replaced by the
-grid arguments ``(Nf, Nt, dt)``, and the cut and padding sizes, which the toy fixed
-as module constants, are now arguments.
-
-Conventions follow the rest of the package: grid arguments come first as
-``(Nf, Nt, dt)``; packed vectors list the active cells in band-major order
-(:func:`wdm.grid.active_mask`); the transform satisfies
-:math:`W_a W_a^{\mathsf T} = \delta t\, I`, so :math:`W_a^{-1} = W_a^{\mathsf T}/\delta t`.
+Numerics: every NumPy path is an operation-order-preserving transcription of its
+source (wdm_dev ``evolutionary.py``, WT ``wdm_toys/matrix.py``, WG
+``wdmtoysgpu/matrix.py``, GB ``galactic_binary/matrix.py``), so it is
+bit-identical to it; the JAX paths agree to round-off.
 """
 
 from __future__ import annotations
 
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+from typing import Any
 
 import numpy as np
 from numpy.typing import NDArray
-from scipy.linalg import cho_factor, cho_solve, solve_triangular
 
-from .filter import phi_centered
-from .grid import active_mask, band_frequencies, delta_T, sanitize_psd, validate_grid
+from .backend import NUMPY, Backend, get_backend
+from .grid import (
+    active_mask,
+    delta_T,
+    endpoint_weights,
+    validate_dt,
+    validate_grid,
+)
+from .noise import _psd_at
 from .transform import (
-    forward_many,
-    forward_time,
+    atom_spectrum,
+    base_atom_spectra,
     forward_time_many,
-    inverse_many,
     inverse_time_many,
 )
 
 type Array = NDArray[np.floating]
 type BoolArray = NDArray[np.bool_]
 type CArray = NDArray[np.complexfloating]
+type IntArray = NDArray[np.integer]
 type PsdFtFunc = Callable[[Array, Array], Array]
 
 __all__ = [
-    "BlockTri",
-    "TriCovariance",
-    "band_averaged_evolutionary_variance",
+    "Eq45GramPlan",
+    "Eq45Plan",
+    "apply_time_mask",
     "draw_noise",
+    "energy_fraction",
+    "eq45_blocks_cheb",
+    "eq45_blocks_gram",
+    "eq45_coeffs_bessel",
+    "eq45_coeffs_interp",
+    "eq45_direct",
+    "eq45_gram_gather",
+    "eq45_gram_plan",
+    "eq45_plan",
+    "eq45_separable_assemble",
+    "eq45_separable_kernels",
     "exact_covariance",
     "time_domain_covariance",
     "time_domain_factor",
     "wrap_cut_columns",
     "wrap_fractions",
-    "FourierBand",
-    "PackedGrid",
-    "PaddedMarginal",
-    "Schur",
-    "Solver",
-    "Variant",
-    "edge_columns",
-    "endpoint_weights",
-    "make_variant",
-    "marginal_lnlike",
-    "nuisance_basis",
-    "wdm_discarded",
 ]
 
-_LOG_2PI = float(np.log(2.0 * np.pi))
-
 
 # ---------------------------------------------------------------------------
-# Frequency-domain weights
+# Time masks in the WDM domain
 # ---------------------------------------------------------------------------
 
 
-def endpoint_weights(n_rfft: int) -> Array:
-    r"""Trapezoid weights :math:`\eta_k` for the one-sided sum: ``1/2`` at DC and
-    Nyquist, ``1`` in between (WDM II eq:freq_edge_weight).
+def energy_fraction(w2: Array, Nf: int, Nt: int, dt: float) -> Array:
+    """``rho_p = sum_t w2(t) g_p(t)^2 / dt`` for every active cell ``p`` (band order).
 
-    Getting these wrong is not a small error: :math:`\eta = 1` everywhere
-    overstates the variance, and dropping the DC voice altogether makes the
-    time-domain covariance singular.
-    """
-    c = np.ones(n_rfft)
-    c[0] = 0.5
-    c[-1] = 0.5
-    return c
-
-
-# ---------------------------------------------------------------------------
-# The packed grid
-# ---------------------------------------------------------------------------
-
-
-class PackedGrid:
-    """``Nf`` bands and ``Nt`` columns at ``dt``; the active cells in packed
-    (band-major) order, their atoms' spectra, and the forward transform.
-
-    Attributes: ``mask`` (``(Nf+1, Nt)`` active cells), ``m`` and ``n`` (band and
-    column of every active cell), ``size`` (number of active cells, ``N``), ``t``
-    (cell times :math:`n\\Delta T`), ``f`` (rfft frequencies) and ``eta``
-    (:func:`endpoint_weights`).
-    """
-
-    def __init__(self, Nf: int, Nt: int, dt: float) -> None:
-        validate_grid(Nf, Nt)
-        self.Nf, self.Nt, self.dt = int(Nf), int(Nt), float(dt)
-        self.N = self.Nf * self.Nt
-        self.T = self.N * self.dt
-        self.mask = active_mask(self.Nf, self.Nt)                         # (Nf+1, Nt)
-        m, n = np.nonzero(self.mask)                                      # band-major
-        self.m, self.n = m, n
-        self.size = m.size
-        self.t = n * delta_T(self.Nf, self.dt)                            # cell times
-        self.K = self.N // 2 + 1
-        self.f = np.fft.rfftfreq(self.N, d=self.dt)
-        self.eta = np.ones(self.K)
-        self.eta[[0, -1]] = 0.5
-        self._base = self._base_spectra()
-
-    def forward(self, x: Array) -> Array:
-        """Packed active WDM coefficients of ``x`` (length ``N``)."""
-        return forward_time(np.asarray(x, float), self.Nf, self.Nt, self.dt)[self.mask]
-
-    def forward_many(self, X: Array) -> Array:
-        """Packed active WDM coefficients of each row of ``X``."""
-        X = np.atleast_2d(X)
-        return forward_time_many(X, self.Nf, self.Nt, self.dt)[:, self.mask]
-
-    def inverse_many(self, Y: Array) -> Array:
-        """Time series of packed coefficients ``Y`` (rows): ``W^{-1} = W^T / dt``."""
-        Y = np.atleast_2d(Y)
-        full = np.zeros((Y.shape[0], self.Nf + 1, self.Nt))
-        full[:, self.mask] = Y
-        return inverse_time_many(full, self.Nf, self.Nt, self.dt)
-
-    def apply_mask(self, Y: Array, chi: Array) -> Array:
-        """``M y`` for each row ``y`` of ``Y``, ``M = W chi W^T / dt``: the time mask ``chi``
-        in the WDM domain (transform back, mask, transform)."""
-        return self.forward_many(self.inverse_many(Y) * chi)
-
-    def _base_spectra(self) -> dict:
-        """rfft of the atoms of cells ``(m, a)``, ``a in {0, 1}``; every other atom of a
-        band is a circular shift of these by an even number of columns."""
-        out = {}
-        for m in range(self.Nf + 1):
-            for a in (0, 1):
-                if not self.mask[m, a]:
-                    continue
-                e = np.zeros((self.Nf + 1, self.Nt))
-                e[m, a] = 1.0
-                # inverse_many returns rfft(W_a^{-1} e) = rfft(atom) / dt.
-                out[m, a] = self.dt * inverse_many(e[None], self.Nf, self.Nt, self.dt)[0]
-        return out
-
-    def atom_spectrum(self, p: int) -> CArray:
-        """rfft of the atom of packed cell ``p``."""
-        m, n = int(self.m[p]), int(self.n[p])
-        a = n % 2
-        k = np.arange(self.K)
-        return self._base[m, a] * np.exp(-2j * np.pi * k * (n - a) / self.Nt)
-
-    def atom(self, p: int) -> Array:
-        """The atom (basis function) of packed cell ``p``, length ``N``."""
-        return np.fft.irfft(self.atom_spectrum(p), n=self.N)
-
-    def energy_fraction(self, w2: Array) -> Array:
-        """``rho_p = sum_t w(t)^2 g_p(t)^2 / dt`` for every active cell."""
-        rho = np.empty(self.size)
-        W2 = np.fft.rfft(w2)
-        for (m, a), G in self._base.items():
-            g2 = np.fft.irfft(G, n=self.N) ** 2
-            corr = np.fft.irfft(W2 * np.conj(np.fft.rfft(g2)), n=self.N)  # sum_t w2[t+s] g2[t]
-            sel = np.flatnonzero((self.m == m) & (self.n % 2 == a))
-            shifts = (self.n[sel] - a) * self.Nf
-            rho[sel] = corr[shifts % self.N] / self.dt
-        return rho
-
-
-def edge_columns(Nt: int, lead: int, trail: int) -> tuple[int, ...]:
-    """The first ``lead`` and last ``trail`` time columns of an ``Nt``-column grid."""
-    return tuple(range(lead)) + tuple(range(Nt - trail, Nt))
-
-
-# ---------------------------------------------------------------------------
-# Structured covariances: C^{-1} and log|C|
-# ---------------------------------------------------------------------------
-
-
-class BlockTri:
-    """Cholesky of a symmetric matrix that is block tri-diagonal in the band index.
-
-    ``blocks`` are the diagonal blocks and ``upper[i]`` the block coupling block
-    ``i`` to block ``i + 1`` (``None`` where there is none).
-    """
-
-    def __init__(self, blocks: list[Array], upper: list[Array | None]) -> None:
-        self.sizes = [b.shape[0] for b in blocks]
-        self.off = np.concatenate([[0], np.cumsum(self.sizes)])
-        Ls, Xs = [], []
-        prev = None
-        for i, A in enumerate(blocks):
-            A = A.copy()
-            if i and prev is not None and upper[i - 1] is not None and A.size and prev.size:
-                X = solve_triangular(prev, upper[i - 1], lower=True)           # L_{i-1}^{-1} B
-                A -= X.T @ X
-                Xs.append(X)
-            else:
-                Xs.append(None)
-            L = np.linalg.cholesky(A) if A.size else A
-            Ls.append(L)
-            prev = L
-        self.Ls, self.Xs = Ls, Xs
-
-    def logdet(self) -> float:
-        return 2.0 * sum(float(np.sum(np.log(np.diag(L)))) for L in self.Ls if L.size)
-
-    def solve(self, b: Array) -> Array:
-        b = np.asarray(b, float)
-        one = b.ndim == 1
-        B = b[:, None] if one else b
-        z = []
-        for i, L in enumerate(self.Ls):
-            r = B[self.off[i]:self.off[i + 1]].copy()
-            if self.Xs[i] is not None:
-                r -= self.Xs[i].T @ z[i - 1]
-            z.append(solve_triangular(L, r, lower=True) if L.size else r)
-        x = [None] * len(self.Ls)
-        for i in range(len(self.Ls) - 1, -1, -1):
-            r = z[i]
-            if i + 1 < len(self.Ls) and self.Xs[i + 1] is not None:
-                r = r - self.Xs[i + 1] @ x[i + 1]
-            x[i] = solve_triangular(self.Ls[i], r, lower=True, trans="T") if self.Ls[i].size else r
-        out = np.concatenate(x, axis=0)
-        return out[:, 0] if one else out
-
-
-class Solver:
-    """``C^{-1}`` and ``log|C|`` for a diagonal, block tri-diagonal or dense ``C``.
-
-    Give exactly one of ``diag`` (the diagonal), ``blocktri`` (a :class:`BlockTri`)
-    or ``dense`` (the matrix).
-    """
-
-    def __init__(self, *, diag=None, blocktri=None, dense=None) -> None:
-        self.diag, self.bt, self.dense = diag, blocktri, dense
-        if dense is not None:
-            self.cf = cho_factor(dense, lower=True, check_finite=False)
-
-    def solve(self, b):
-        if self.diag is not None:
-            return b / (self.diag if b.ndim == 1 else self.diag[:, None])
-        if self.bt is not None:
-            return self.bt.solve(b)
-        return cho_solve(self.cf, b, check_finite=False)
-
-    def logdet(self) -> float:
-        if self.diag is not None:
-            return float(np.sum(np.log(self.diag)))
-        if self.bt is not None:
-            return self.bt.logdet()
-        return 2.0 * float(np.sum(np.log(np.diag(self.cf[0]))))
-
-
-class Schur:
-    """``C = [[A, B], [B^T, T]]`` with ``T`` from a :class:`Solver` (edge-exact).
-
-    ``e`` and ``i`` index the edge and interior cells in the packed vector; ``A``
-    is the exact edge block, ``B`` the exact edge-interior coupling and ``T`` the
-    approximate interior covariance.  The Schur complement ``A - B T^{-1} B^T``
-    must be positive definite; when it is not, :func:`scipy.linalg.cho_factor`
-    raises ``LinAlgError``.
-    """
-
-    def __init__(self, e: Array, i: Array, A: Array, B: Array, T: Solver) -> None:
-        self.e, self.i, self.T = e, i, T
-        self.TiBt = T.solve(B.T)                                   # (n_i, n_e)
-        Sc = A - B @ self.TiBt
-        self.cf = cho_factor(0.5 * (Sc + Sc.T), lower=True, check_finite=False)
-        self.B = B
-
-    def solve(self, b):
-        one = b.ndim == 1
-        b = b[:, None] if one else b
-        be, bi = b[self.e], b[self.i]
-        ti = self.T.solve(bi)
-        xe = cho_solve(self.cf, be - self.B @ ti, check_finite=False)
-        xi = ti - self.TiBt @ xe
-        x = np.empty_like(b)
-        x[self.e], x[self.i] = xe, xi
-        return x[:, 0] if one else x
-
-    def logdet(self) -> float:
-        return self.T.logdet() + 2.0 * float(np.sum(np.log(np.diag(self.cf[0]))))
-
-
-class PaddedMarginal:
-    r"""``C_dd^{-1}`` and ``log|C_dd|`` for the zero-padded treatment.
-
-    ``C_dd`` is the extended grid's covariance :math:`W^{\mathsf T}\Lambda W/\delta t^2`
-    on the data samples, i.e. the extended Gaussian with the padding samples
-    marginalised out; in the WDM domain this is the :math:`M\Lambda M` of WDM II.
-    ``grid`` is the extended :class:`PackedGrid`, ``Lam`` a :class:`Solver` on every
-    extended cell, ``Wp`` ``(size, N_pad)`` the transforms of the padding samples'
-    impulses, and vectors are time series of length ``n`` (the data samples, which
-    come first in the extended record).
-    """
-
-    def __init__(self, grid: PackedGrid, Lam: Solver, Wp: Array, n: int) -> None:
-        self.g, self.Lam, self.Wp, self.n = grid, Lam, Wp, int(n)
-        self.LiWp = Lam.solve(Wp)                                          # (size, N_pad)
-        Qpp = Wp.T @ self.LiWp
-        self.cf = cho_factor(0.5 * (Qpp + Qpp.T), lower=True, check_finite=False)
-
-    def solve(self, x):
-        g = self.g
-        one = x.ndim == 1
-        X = np.atleast_2d(x.T if not one else x)                           # (k, n)
-        ext = np.zeros((X.shape[0], g.N))
-        ext[:, :self.n] = X
-        Liw = self.Lam.solve(g.forward_many(ext).T)                        # (size, k)
-        c = cho_solve(self.cf, self.Wp.T @ Liw, check_finite=False)
-        # W^T z = dt W^{-1} z
-        out = g.dt * g.inverse_many((Liw - self.LiWp @ c).T)[:, :self.n]   # (k, n)
-        return out[0] if one else out.T
-
-    def logdet(self) -> float:
-        return (self.Lam.logdet() - self.g.N * np.log(self.g.dt)
-                + 2.0 * float(np.sum(np.log(np.diag(self.cf[0])))))
-
-
-# ---------------------------------------------------------------------------
-# Likelihood marginalised over discarded modes
-# ---------------------------------------------------------------------------
-
-
-def marginal_lnlike(y: Array, u: Array | None, solver, A_n: float, n_cells: int,
-                    log_jac: float) -> float:
-    r"""``ln N(y; 0, A_n C)`` marginalised over the columns of ``u`` (flat prior).
-
-    ``solver`` provides :math:`C^{-1}` and :math:`\log|C|` (:class:`Solver`,
-    :class:`Schur` or :class:`PaddedMarginal`); ``A_n`` scales the covariance,
-    ``n_cells`` is the dimension of ``y`` and ``log_jac`` a constant added to the
-    result (e.g. the Jacobian of the transform).  With ``u = None`` this is the
-    plain Gaussian log-likelihood.
-    """
-    Ciy = solver.solve(y)
-    quad = float(y @ Ciy)
-    logdet = solver.logdet()
-    n_eff = n_cells
-    if u is not None and u.shape[1]:
-        Ciu = solver.solve(u)
-        H = u.T @ Ciu
-        cf = cho_factor(0.5 * (H + H.T), lower=True, check_finite=False)
-        b = u.T @ Ciy
-        quad -= float(b @ cho_solve(cf, b, check_finite=False))
-        logdet += 2.0 * float(np.sum(np.log(np.diag(cf[0]))))
-        n_eff -= u.shape[1]
-    return -0.5 * (quad / A_n + logdet + n_eff * np.log(A_n) + n_eff * _LOG_2PI) + log_jac
-
-
-def nuisance_basis(u: Array, rtol: float = 1e-10) -> Array:
-    """The discarded modes' images on the kept cells, as marginalisation directions.
-
-    Kept as given when they have full rank.  When cutting cells leaves a mode with
-    no image -- it lived entirely in the removed cells -- the columns are replaced
-    by an orthonormal basis of their range: a direction the kept data cannot see
-    carries no information, and a flat marginal only depends on the range (up to a
-    parameter-independent constant).
-    """
-    s = np.linalg.svd(u, compute_uv=False)
-    if s.min() > rtol * s.max():
-        return u
-    U, s, _ = np.linalg.svd(u, full_matrices=False)
-    return U[:, s > rtol * s.max()]
-
-
-class FourierBand:
-    """An analysis band in frequency: positive cuts retain ``fmin <= f < Nyquist``;
-    ``analysis_fmin = 0`` keeps everything.
-
-    Basis vectors are rows in time coordinates.  Spectra use NumPy's unscaled
-    forward FFT convention, so their inverse FFT is an orthonormal real basis.
-    DC and Nyquist are real coordinates and are excluded by any positive cut.
-    """
-
-    def __init__(self, Nf: int, Nt: int, dt: float, analysis_fmin: float = 0.0) -> None:
-        validate_grid(Nf, Nt)
-        self.Nf, self.Nt, self.dt = int(Nf), int(Nt), float(dt)
-        self.N = self.Nf * self.Nt
-        self.fmin = float(analysis_fmin)
-        if not np.isfinite(self.fmin) or self.fmin < 0:
-            raise ValueError('analysis_fmin must be finite and nonnegative')
-        f = np.fft.rfftfreq(self.N, d=self.dt)
-        f_nyq = 0.5 / self.dt
-        self.keep_rfft = np.ones(len(f), dtype=bool)
-        if self.fmin:
-            self.keep_rfft = (f >= self.fmin) & (f < f_nyq)
-            # Endpoint frequencies may round below f_nyq for nonbinary dt.
-            # DC and Nyquist are real coordinates, excluded by convention.
-            self.keep_rfft[[0, -1]] = False
-            if not np.any(self.keep_rfft):
-                raise ValueError('analysis_fmin leaves no interior Fourier frequencies')
-        self.n_keep = (self.N if not self.fmin else 2 * int(self.keep_rfft.sum()))
-        self.n_drop = self.N - self.n_keep
-
-    def discarded_spectra(self) -> CArray:
-        """rfft spectra of the discarded real Fourier modes, ``(n_drop, N//2 + 1)``."""
-        spectra = np.zeros((self.n_drop, self.N // 2 + 1), dtype=complex)
-        row = 0
-        for k in np.flatnonzero(~self.keep_rfft):
-            if k in (0, self.N // 2):
-                spectra[row, k] = np.sqrt(self.N)
-                row += 1
-            else:
-                spectra[row, k] = np.sqrt(self.N / 2)
-                spectra[row + 1, k] = -1j * np.sqrt(self.N / 2)
-                row += 2
-        return spectra
-
-    def discarded_basis(self) -> Array:
-        """The discarded modes as orthonormal time series, ``(n_drop, N)``."""
-        return np.fft.irfft(self.discarded_spectra(), n=self.N, axis=-1)
-
-    def project(self, x: Array) -> Array:
-        """``x`` with the discarded modes removed (last axis of length ``N``)."""
-        x = np.asarray(x)
-        if x.shape[-1] != self.N:
-            raise ValueError(f'last axis must have length {self.N}')
-        if not self.fmin:
-            return x.copy()
-        spectrum = np.fft.rfft(x, axis=-1)
-        return np.fft.irfft(spectrum * self.keep_rfft, n=self.N, axis=-1)
-
-
-def wdm_discarded(band: FourierBand) -> tuple[NDArray[np.intp], Array]:
-    """Return exact nonzero active-pixel rows and their discarded WDM basis.
-
-    Sparse input spectra preserve exact zeros outside overlapping WDM filters;
-    no threshold or approximate row truncation enters the marginal precision.
-    """
-    transformed = forward_many(band.discarded_spectra(), band.Nf, band.Nt, band.dt)
-    u = transformed[:, active_mask(band.Nf, band.Nt)].T
-    rows = np.flatnonzero(np.any(u != 0, axis=1))
-    return rows, u[rows]
-
-
-# ---------------------------------------------------------------------------
-# Time-edge treatments
-# ---------------------------------------------------------------------------
-
-
-@dataclass
-class Variant:
-    """The record map ``x -> y`` of one time-edge treatment.
-
-    ``grid`` is the (possibly extended) :class:`PackedGrid`, ``keep`` selects the
-    packed cells the likelihood uses, and ``w`` is an optional time weight on the
-    grid's record (zeros over the padding).
-    """
-
-    grid: PackedGrid
-    keep: BoolArray             # bool over grid.size
-    w: Array | None             # time weight on the grid's record (padding)
-
-    def extend(self, x: Array) -> Array:
-        x = np.asarray(x, float)
-        N = self.grid.N
-        out = np.zeros(x.shape[:-1] + (N,))
-        out[..., :x.shape[-1]] = x
-        if self.w is not None:
-            out = out * self.w
-        return out
-
-    def map(self, x: Array) -> Array:
-        return self.grid.forward(self.extend(x))[self.keep]
-
-    def map_many(self, X: Array) -> Array:
-        return self.grid.forward_many(self.extend(X))[:, self.keep]
-
-
-def make_variant(Nf: int, Nt: int, dt: float, edge: str, *,
-                 cut: tuple[int, int] | None = None,
-                 pad_columns: int | None = None) -> Variant:
-    """The time-edge treatment ``edge`` of WDM II on an ``(Nf, Nt, dt)`` record.
-
-    * ``"raw"`` and ``"exact"``: the record's own grid, every cell kept (the exact
-      edges are applied to the covariance, e.g. with :class:`Schur`).
-    * ``"cut"``: drop the first ``cut[0]`` and last ``cut[1]`` time columns.
-    * ``"pad"``: append ``pad_columns`` columns of zeros (equivalent, by the
-      transform's periodicity, to half at each end) and keep the record's
-      ``Nt`` columns; use with :class:`PaddedMarginal`.
-    """
-    if edge in ("raw", "exact"):
-        g = PackedGrid(Nf, Nt, dt)
-        return Variant(g, np.ones(g.size, bool), None)
-    if edge == "cut":
-        if cut is None:
-            raise ValueError('edge "cut" needs cut=(leading, trailing) columns')
-        g = PackedGrid(Nf, Nt, dt)
-        return Variant(g, ~np.isin(g.n, edge_columns(Nt, *cut)), None)
-    if edge == "pad":
-        if pad_columns is None:
-            raise ValueError('edge "pad" needs pad_columns')
-        g = PackedGrid(Nf, Nt + int(pad_columns), dt)
-        w = np.zeros(g.N)
-        w[:Nf * Nt] = 1.0
-        keep = g.n < Nt
-        return Variant(g, keep, w)
-    raise ValueError(f"unknown edge treatment {edge!r}")
-
-
-# ===========================================================================
-# Beyond the toy's powerlaw: everything below takes a general S(f, t)
-# ===========================================================================
-#
-# A PSD here is a callable ``Sn(f, t)`` that is ELEMENTWISE and broadcasts like a
-# NumPy ufunc: given arrays ``f`` and ``t`` of broadcastable shapes it returns the
-# one-sided evolutionary PSD at every broadcast pair (note the package argument
-# order (f, t); WDM II writes S(t, f)). Samples pass through
-# :func:`wdm.grid.sanitize_psd` (inf -> 0, nan and negative values raise).
-
-
-def _psd_at(Sn: PsdFtFunc, f: Array, t: Array, context: str) -> Array:
-    shape = np.broadcast_shapes(np.shape(f), np.shape(t))
-    out = sanitize_psd(Sn(f, t), context)
-    if out.shape != shape:
-        raise ValueError(f"{context}: Sn(f, t) must be elementwise and broadcast to "
-                         f"{shape}; got {out.shape}")
-    return out
-
-
-def band_averaged_evolutionary_variance(Nf: int, Nt: int, dt: float, Sn: PsdFtFunc, *,
-                                        bands: Array | None = None) -> Array:
-    r"""The filter-weighted band average of :math:`S(f, t_n)` at every cell centre,
-
-    .. math::  \sigma^2_{mn} = \frac12\,
-               \frac{\sum_j \tilde\phi^2(f_j - f_m)\,S(f_j, t_n)}{\sum_j \tilde\phi^2(f_j - f_m)},
-
-    WDM II eq:wdm_variance_band_average (the edge-band factor
-    :math:`\varepsilon_{mn}` is not applied: inactive edge cells carry the same
-    value, as in :func:`wdm.noise.evolutionary_variance`). In the stationary limit
-    this is :func:`wdm.noise.band_averaged_variance`, i.e. the exact
-    :math:`\mathrm{diag}\,\Lambda`. The DC band's slab folds about 0 and the
-    Nyquist band's about :math:`f_{\rm Nyq}`, where the discrete spectrum aliases.
-    Cell times are :math:`t_n = n\Delta T`; the cell-centre (midpoint) variance
-    :math:`S(f_m, t_n)/2` is :func:`wdm.noise.evolutionary_variance`.
-
-    Returns shape ``(Nf + 1, Nt)``, or ``(len(bands), Nt)`` when ``bands`` selects
-    band indices (useful when ``Nf`` is large and only a few bands are analysed).
+    One FFT correlation per base atom (wdm_dev ``PackedGrid.energy_fraction``).
     """
     validate_grid(Nf, Nt)
+    validate_dt(dt)
     N = Nf * Nt
-    phi2 = phi_centered(Nf, Nt, dt) ** 2
-    # The Meyer window has compact support: a slab weight of exactly 0 cannot
-    # contribute, so dropping those bins is an exact restriction.
-    sup = np.flatnonzero(phi2)
-    phi2 = phi2[sup]
-    f_off = (np.arange(Nt) - Nt // 2)[sup] / (N * dt)
-    m = np.arange(Nf + 1) if bands is None else np.asarray(bands, int)
-    fb = band_frequencies(Nf, dt)[m][:, None] + f_off[None, :]
-    f_nyq = 0.5 / dt
-    ff = np.abs(fb)
-    ff = np.where(ff > f_nyq, 2.0 * f_nyq - ff, ff)                       # (B, J)
-    t = np.arange(Nt) * delta_T(Nf, dt)
-    S = _psd_at(Sn, ff[:, None, :], t[None, :, None],
-                "band_averaged_evolutionary_variance")                    # (B, Nt, J)
-    return 0.5 * (S * phi2).sum(axis=-1) / phi2.sum()
+    m_arr, n_arr = np.nonzero(active_mask(Nf, Nt))
+    base = base_atom_spectra(Nf, Nt, dt)
+    rho = np.empty(m_arr.size)
+    W2 = np.fft.rfft(w2)
+    for (m, a), G in base.items():
+        g2 = np.fft.irfft(G, n=N) ** 2
+        corr = np.fft.irfft(W2 * np.conj(np.fft.rfft(g2)), n=N)  # sum_t w2[t+s] g2[t]
+        sel = np.flatnonzero((m_arr == m) & (n_arr % 2 == a))
+        shifts = (n_arr[sel] - a) * Nf
+        rho[sel] = corr[shifts % N] / dt
+    return rho
 
 
-# ---------------------------------------------------------------------------
-# Exact covariance and noise simulation (theta = 0)
-# ---------------------------------------------------------------------------
-
-
-def time_domain_factor(N: int, dt: float, Sn: PsdFtFunc) -> Array:
-    r"""A square root :math:`G` of the exact time-domain covariance, :math:`\Sigma = G G^{\mathsf T}`.
-
-    The noise is the oscillatory process of WDM II with amplitude
-    :math:`\sqrt{S(f, t)}` and zero phase, :math:`\theta(t, f) = 0`:
-
-    .. math::  x(t_i) = \sum_k \sqrt{\eta_k\,\Delta f\,S(f_k, t_i)}\,
-               \big[\xi_k \cos(2\pi f_k t_i) + \zeta_k \sin(2\pi f_k t_i)\big],
-
-    so :math:`\Sigma_{ij} = \Delta f \sum_k \eta_k \sqrt{S(f_k, t_i) S(f_k, t_j)}
-    \cos(2\pi f_k (t_i - t_j))`, with :math:`t_i = i\,\delta t`,
-    :math:`f_k = k/(N\delta t)` and :func:`endpoint_weights` :math:`\eta_k`.
-    Columns are the cosine voices :math:`k = 0 \ldots N/2` followed by the sine
-    voices :math:`k = 1 \ldots N/2 - 1` (the DC and Nyquist sines vanish), so
-    :math:`G` is square. The exact covariance depends on the phase
-    :math:`\theta`, which a model of :math:`S(t, f)` alone does not fix; this is
-    the :math:`\theta = 0` member. :math:`O(N^2)` memory.
-    """
-    if N % 2:
-        raise ValueError("N must be even")
-    f = np.fft.rfftfreq(N, d=dt)
-    t = np.arange(N) * dt
-    df = 1.0 / (N * dt)
-    c = endpoint_weights(f.size)
-    S = _psd_at(Sn, f[None, :], t[:, None], "time_domain_factor")          # (N, K)
-    amp = np.sqrt(S * df * c[None, :])
-    ph = 2.0 * np.pi * np.outer(t, f)
-    G_cos = amp * np.cos(ph)
-    G_sin = (amp * np.sin(ph))[:, 1:-1]
-    return np.hstack([G_cos, G_sin])
-
-
-def time_domain_covariance(N: int, dt: float, Sn: PsdFtFunc) -> Array:
-    r"""The exact time-domain covariance :math:`\Sigma = G G^{\mathsf T}`
-    (:func:`time_domain_factor`), shape ``(N, N)``. :math:`O(N^3)`."""
-    G = time_domain_factor(N, dt, Sn)
-    return G @ G.T
-
-
-def draw_noise(N: int, dt: float, Sn: PsdFtFunc, rng: np.random.Generator) -> Array:
-    """One realisation of length ``N`` from the exact covariance (:func:`time_domain_factor`).
-
-    The standard normals are consumed in a fixed order (cosine coefficients
-    first, then sine), so a given ``rng`` state always yields the same series.
-    """
-    G = time_domain_factor(N, dt, Sn)
-    z = rng.standard_normal(G.shape[1])
-    return G @ z
-
-
-def exact_covariance(Nf: int, Nt: int, dt: float, Sn: PsdFtFunc) -> Array:
-    r"""The exact WDM covariance :math:`\Lambda = W_a \Sigma W_a^{\mathsf T}` on the
-    active cells (packed, band-major), shape ``(N, N)``.
-
-    Built in Gram form, :math:`\Lambda = (W_a G)(W_a G)^{\mathsf T}`, so it is
-    positive semi-definite by construction (WDM II eq:wdm_generic_covariance with
-    :math:`\theta = 0`). :math:`O(N^3)`; for tests and small grids.
-    """
+def apply_time_mask(Y: Array, chi: Array, Nf: int, Nt: int, dt: float) -> Array:
+    """``M y`` for each packed row ``y`` of ``Y``, ``M = W chi W^T / dt``: back to time,
+    mask, forward again (wdm_dev ``PackedGrid.apply_mask``)."""
     validate_grid(Nf, Nt)
-    N = Nf * Nt
-    G = time_domain_factor(N, dt, Sn)
-    A = forward_time_many(np.ascontiguousarray(G.T), Nf, Nt, dt)[:, active_mask(Nf, Nt)].T
-    Lam = A @ A.T
-    return 0.5 * (Lam + Lam.T)
+    mask = active_mask(Nf, Nt)
+    Y = np.atleast_2d(Y)
+    full = np.zeros((Y.shape[0], Nf + 1, Nt))
+    full[:, mask] = Y
+    X = np.atleast_2d(inverse_time_many(full, Nf, Nt, dt) * chi)
+    return forward_time_many(X, Nf, Nt, dt)[:, mask]
 
 
 # ---------------------------------------------------------------------------
-# The nonstationary tri-diagonal covariance, WDM II Eq. (45)
-# ---------------------------------------------------------------------------
-
-
-class TriCovariance:
-    r"""WDM II Eq. (45) on the cells ``keep`` of ``grid``, as dense band blocks.
-
-    For cells :math:`p = (m, n)` and :math:`q = (m', n')`, :math:`m' \in \{m, m+1\}`,
-    with base atoms of parities :math:`a = n \bmod 2`, :math:`b = n' \bmod 2`,
-
-    .. math::  \Lambda_{pq} = \frac1T\,\mathrm{Re}\sum_k \eta_k\,
-               S(f_k, \bar t)\, B_{ab}(k)\, e^{-2\pi i k d / N_t},
-               \quad d = (n - a) - (n' - b),\quad \bar t = (t_n + t_{n'})/2,
-
-    :math:`B_{ab} = \hat g_{m a}\hat g^*_{m' b}` (rfft of the base atoms). Blocks
-    are dense in time (no lag truncation). :meth:`blocks` expands the time
-    dependence of :math:`S(f_k, \bar t)` in ``P`` Chebyshev polynomials on
-    :math:`\bar t \in [0, t_{\max}]` (interpolated at Chebyshev nodes, so any
-    smooth :math:`S` works; raise ``P`` for faster time variation), and each block
-    costs one length-:math:`N_t` FFT per order. :meth:`values` and :meth:`dense`
-    evaluate the sum directly and are the reference. ``t_max`` defaults to the
-    grid's duration; pair mid-times of the kept cells must lie in
-    :math:`[0, t_{\max}]`. Use with :class:`BlockTri` and :class:`Solver`.
-    """
-
-    def __init__(self, grid: PackedGrid, keep: BoolArray | None = None, P: int = 24,
-                 t_max: float | None = None) -> None:
-        g = grid
-        self.grid, self.P = g, int(P)
-        self.keep = np.ones(g.size, bool) if keep is None else np.asarray(keep, bool)
-        self.t_max = float(g.T if t_max is None else t_max)
-        cells = np.flatnonzero(self.keep)
-        self.cells = cells
-        self.pos = -np.ones(g.size, int)
-        self.pos[cells] = np.arange(cells.size)
-        self.band_cells = [cells[g.m[cells] == m] for m in range(g.Nf + 1)]
-        # Chebyshev basis on the pair mid-times t_bar = s dT / 2, s = n + n'
-        s_grid = np.arange(2 * g.Nt - 1)
-        u = 2.0 * (s_grid * 0.5 * delta_T(g.Nf, g.dt) / self.t_max - 0.5)
-        used = s_grid <= 2 * int(g.n[cells].max())
-        if np.any(np.abs(u[used]) > 1 + 1e-12):
-            raise ValueError("pair mid-times must lie inside [0, t_max]")
-        Tp = np.empty((self.P, s_grid.size))
-        Tp[0] = 1.0
-        if self.P > 1:
-            Tp[1] = u
-        for q in range(2, self.P):
-            Tp[q] = 2 * u * Tp[q - 1] - Tp[q - 2]
-        self.Tp = Tp
-        self.specs = [self._block_spec(m, m2) for m in range(g.Nf + 1)
-                      for m2 in (m, m + 1) if m2 <= g.Nf]
-        k_all = [k for spec in self.specs for (k, _) in spec["B"].values()]
-        self.k_used = np.unique(np.concatenate(k_all)) if k_all else np.zeros(0, int)
-
-    def _block_spec(self, m: int, m2: int) -> dict:
-        """Static index arrays for block ``(m, m2)``: one entry per (row, col) cell pair."""
-        g = self.grid
-        R, C = self.band_cells[m], self.band_cells[m2]
-        nr, nc = g.n[R], g.n[C]
-        a = (nr % 2)[:, None] + 0 * nc[None, :]
-        b = 0 * nr[:, None] + (nc % 2)[None, :]
-        combo = 2 * a + b                                              # (nR, nC)
-        d = ((nr[:, None] - a) - (nc[None, :] - b)) % g.Nt
-        s = nr[:, None] + nc[None, :]
-        B = {}
-        for aa in (0, 1):
-            for bb in (0, 1):
-                Ga, Gb = g._base.get((m, aa)), g._base.get((m2, bb))
-                if Ga is None or Gb is None:
-                    continue
-                k = np.flatnonzero((np.abs(Ga) > 0) & (np.abs(Gb) > 0))
-                B[2 * aa + bb] = (k, g.eta[k] * Ga[k] * np.conj(Gb[k]) / g.T)
-        return dict(m=m, m2=m2, R=R, C=C, combo=combo, d=d, s=s, B=B)
-
-    def chebyshev_coefficients(self, Sn: PsdFtFunc) -> Array:
-        r"""``(P, K)``: Chebyshev coefficients :math:`c_p(f_k)` of :math:`S(f_k, \bar t)` in
-        :math:`u = 2\bar t/t_{\max} - 1`, by interpolation at the ``P`` Chebyshev
-        nodes (zero for bins no block uses)."""
-        g, P = self.grid, self.P
-        j = np.arange(P)
-        x = np.cos(np.pi * (j + 0.5) / P)                                 # nodes in u
-        t_nodes = 0.5 * (x + 1.0) * self.t_max
-        k = self.k_used
-        S = _psd_at(Sn, g.f[k][None, :], t_nodes[:, None], "TriCovariance")   # (P, |k|)
-        Cmat = np.cos(np.pi * np.outer(np.arange(P), j + 0.5) / P)          # (p, j)
-        c = (2.0 / P) * (Cmat @ S)
-        c[0] *= 0.5
-        out = np.zeros((P, g.K))
-        out[:, k] = c
-        return out
-
-    def block(self, spec: dict, coeffs: Array) -> Array:
-        """One band block from the Chebyshev coefficients (:meth:`chebyshev_coefficients`)."""
-        g = self.grid
-        F = np.zeros((4, self.P, g.Nt), complex)
-        for cb, (k, Bk) in spec["B"].items():
-            V = coeffs[:, k] * Bk[None, :]                                   # (P, |k|)
-            folded = np.zeros((self.P, g.Nt), complex)
-            np.add.at(folded, (slice(None), k % g.Nt), V)
-            F[cb] = np.fft.fft(folded, axis=1)                          # F_p(d)
-        Fg = F[spec["combo"], :, spec["d"]]                             # (nR, nC, P)
-        Tg = self.Tp[:, spec["s"]]                                      # (P, nR, nC)
-        return np.real(np.einsum("ijp,pij->ij", Fg, Tg))
-
-    def blocks(self, Sn: PsdFtFunc):
-        """Diagonal and upper off-diagonal band blocks, for :class:`BlockTri`."""
-        g = self.grid
-        coeffs = self.chebyshev_coefficients(Sn)
-        diag = [None] * (g.Nf + 1)
-        up = [None] * g.Nf
-        for spec in self.specs:
-            blk = self.block(spec, coeffs)
-            if spec["m2"] == spec["m"]:
-                diag[spec["m"]] = 0.5 * (blk + blk.T)
-            else:
-                up[spec["m"]] = blk
-        return diag, up
-
-    # -- direct evaluation: the reference ------------------------------------
-    def pairs(self):
-        """Every ``(p, q)``, ``m_q in {m_p, m_p + 1}`` (upper triangle within a band)."""
-        g = self.grid
-        P, Q = [], []
-        for m in range(g.Nf + 1):
-            A = self.band_cells[m]
-            for m2 in (m, m + 1):
-                if m2 > g.Nf:
-                    continue
-                B = self.band_cells[m2]
-                if not A.size or not B.size:
-                    continue
-                ok = np.ones((A.size, B.size), bool)
-                if m2 == m:
-                    ok = A[:, None] <= B[None, :]
-                i, j = np.nonzero(ok)
-                P.append(A[i])
-                Q.append(B[j])
-        return np.concatenate(P), np.concatenate(Q)
-
-    def values(self, P: Array, Q: Array, Sn: PsdFtFunc) -> Array:
-        """Eq. (45) at the cell pairs ``(P, Q)`` by the direct sum over Fourier bins."""
-        g = self.grid
-        out = np.empty(P.size)
-        tbar = 0.5 * (g.t[P] + g.t[Q])
-        k = np.arange(g.K)
-        key = ((g.m[P] * 2 + g.n[P] % 2) * (2 * g.Nf + 4) + g.m[Q] * 2 + g.n[Q] % 2)
-        for kk in np.unique(key):
-            sel = np.flatnonzero(key == kk)
-            p0, q0 = P[sel[0]], Q[sel[0]]
-            mp, ap, mq, aq = int(g.m[p0]), int(g.n[p0] % 2), int(g.m[q0]), int(g.n[q0] % 2)
-            Gp, Gq = g._base[mp, ap], g._base[mq, aq]
-            s = np.flatnonzero((np.abs(Gp) > 0) & (np.abs(Gq) > 0))
-            if not s.size:
-                out[sel] = 0.0
-                continue
-            prod = g.eta[s] * Gp[s] * np.conj(Gq[s]) / g.T
-            d = (g.n[P[sel]] - ap) - (g.n[Q[sel]] - aq)
-            ph = np.exp(-2j * np.pi * np.outer(d, k[s]) / g.Nt)
-            S = _psd_at(Sn, g.f[s][None, :], tbar[sel][:, None], "TriCovariance.values")
-            out[sel] = np.real(np.sum(S * ph * prod[None, :], axis=1))
-        return out
-
-    def dense(self, Sn: PsdFtFunc) -> Array:
-        """The full matrix on the kept cells by the direct sum (tests, small grids)."""
-        P, Q = self.pairs()
-        v = self.values(P, Q, Sn)
-        n = self.cells.size
-        C = np.zeros((n, n))
-        C[self.pos[P], self.pos[Q]] = v
-        C[self.pos[Q], self.pos[P]] = v
-        return C
-
-
-# ---------------------------------------------------------------------------
-# Time edges: how much of each atom wraps around the record
+# The 0.1% wrap rule
 # ---------------------------------------------------------------------------
 
 
 def wrap_fractions(Nf: int, Nt: int, dt: float, *, bands: Array | None = None) -> Array:
     r"""Fraction of each atom's energy that wraps across the record boundary.
 
-    The transform is periodic, so the atom of a cell near the start of the record
-    extends past :math:`t = 0` and reappears at the end (and vice versa). For the
-    cell :math:`(m, n)`, centred on sample :math:`n N_f`, this is the fraction of
-    :math:`\sum_j g_{mn}(t_j)^2` at samples whose unwrapped position, measured from
-    the centre along the shorter way round, lies outside :math:`[0, N)`.
-
+    For the cell :math:`(m, n)`, centred on sample :math:`n N_f`, the fraction of
+    :math:`\sum_j g_{mn}(t_j)^2` at samples whose unwrapped position (measured from
+    the centre along the shorter way round) lies outside :math:`[0, N)`.
     Returns ``(Nf + 1, Nt)`` (or ``(len(bands), Nt)``), ``nan`` at inactive cells.
     """
     validate_grid(Nf, Nt)
@@ -887,12 +170,17 @@ def wrap_fractions(Nf: int, Nt: int, dt: float, *, bands: Array | None = None) -
 
 def wrap_cut_columns(Nf: int, Nt: int, dt: float, tol: float = 1e-3, *,
                      bands: Array | None = None) -> tuple[int, int]:
-    """``(leading, trailing)``: the time columns to cut so that no kept atom of
-    ``bands`` (all bands by default) wraps more than ``tol`` of its energy across
-    the record boundary (:func:`wrap_fractions`; WDM II uses ``tol = 1e-3``).
+    """``(leading, trailing)`` time columns to cut so that no kept atom of ``bands``
+    (all by default) wraps more than ``tol`` of its energy (WDM II: ``tol = 1e-3``).
 
-    The rule is geometric: it ignores the noise. A record whose noise is periodic
-    over its length (e.g. a full year of LISA's annual modulation) needs no cut.
+    The rule is geometric (it ignores the noise).  ``(6, 5)`` on the sinusoid grid
+    ``(64, 256, 2**-10)``; ``(5, 4)`` on the 3- and 6-month GB analysis bands.
+
+    Examples
+    --------
+    >>> import wdm
+    >>> wdm.evolutionary.wrap_cut_columns(64, 256, 2**-10)
+    (6, 5)
     """
     frac = np.nanmax(wrap_fractions(Nf, Nt, dt, bands=bands), axis=0)    # worst band per column
     bad = np.flatnonzero(frac > tol)
@@ -900,3 +188,434 @@ def wrap_cut_columns(Nf: int, Nt: int, dt: float, tol: float = 1e-3, *,
     lead = int(bad[bad < half].max()) + 1 if np.any(bad < half) else 0
     trail = Nt - int(bad[bad >= half].min()) if np.any(bad >= half) else 0
     return lead, trail
+
+
+# ---------------------------------------------------------------------------
+# The exact covariance (theta = 0) and noise draws -- dense, NumPy
+# ---------------------------------------------------------------------------
+
+
+def time_domain_factor(N: int, dt: float, Sn: PsdFtFunc) -> Array:
+    r"""A square root :math:`G` of the exact time-domain covariance, :math:`\Sigma = G G^{\mathsf T}`.
+
+    :math:`x(t_i) = \sum_k \sqrt{\eta_k\,\Delta f\,S(f_k, t_i)}\,[\xi_k \cos 2\pi f_k t_i
+    + \zeta_k \sin 2\pi f_k t_i]`, :math:`t_i = i\,\delta t`, :math:`f_k = k/(N\delta t)`.
+    Columns: cosine voices :math:`k = 0..N/2`, then sine voices :math:`k = 1..N/2-1`.
+    :math:`O(N^2)` memory.
+    """
+    if N % 2:
+        raise ValueError("N must be even")
+    f = np.fft.rfftfreq(N, d=dt)
+    t = np.arange(N) * dt
+    df = 1.0 / (N * dt)
+    c = endpoint_weights(f.size)
+    S = _psd_at(Sn, f[None, :], t[:, None], "time_domain_factor")          # (N, K)
+    amp = np.sqrt(S * df * c[None, :])
+    ph = 2.0 * np.pi * np.outer(t, f)
+    G_cos = amp * np.cos(ph)
+    G_sin = (amp * np.sin(ph))[:, 1:-1]
+    return np.hstack([G_cos, G_sin])
+
+
+def time_domain_covariance(N: int, dt: float, Sn: PsdFtFunc) -> Array:
+    r""":math:`\Sigma = G G^{\mathsf T}` (:func:`time_domain_factor`), ``(N, N)``."""
+    G = time_domain_factor(N, dt, Sn)
+    return G @ G.T
+
+
+def draw_noise(N: int, dt: float, Sn: PsdFtFunc, rng: np.random.Generator) -> Array:
+    """One realisation from the exact covariance; normals consumed cosine voices
+    first, then sine voices, so a given ``rng`` state always gives the same series."""
+    G = time_domain_factor(N, dt, Sn)
+    z = rng.standard_normal(G.shape[1])
+    return G @ z
+
+
+def exact_covariance(Nf: int, Nt: int, dt: float, Sn: PsdFtFunc) -> Array:
+    r"""Exact :math:`\Lambda = W_a \Sigma W_a^{\mathsf T}` on the active cells (band order),
+    built in Gram form :math:`(W_a G)(W_a G)^{\mathsf T}`, so PSD by construction."""
+    validate_grid(Nf, Nt)
+    N = Nf * Nt
+    G = time_domain_factor(N, dt, Sn)
+    A = forward_time_many(np.ascontiguousarray(G.T), Nf, Nt, dt)[:, active_mask(Nf, Nt)].T
+    Lam = A @ A.T
+    return 0.5 * (Lam + Lam.T)
+
+
+# ---------------------------------------------------------------------------
+# WDM II Eq. (45): plans (host constants)
+# ---------------------------------------------------------------------------
+
+
+@dataclass(frozen=True, eq=False)
+class Eq45Plan:
+    """Host (NumPy float64) constants of Eq. (45) on the kept cells of one grid.
+
+    ``specs`` holds one entry per band block ``(m, m2)``, ``m2 in {m, m+1}``:
+    ``R``/``C`` (row/column packed cells), ``combo = 2a + b`` (base-atom parities),
+    ``d`` (circular column lag), ``s = n + n'`` (mid-time index; ``t_bar = s dT/2``)
+    and ``B = {combo: (k, eta_k G_ma(k) G*_m2b(k) / T)}`` over the support bins.
+    Mirrors WT ``TriCovariance.__init__``/``_block_spec`` line for line.
+    """
+
+    Nf: int
+    Nt: int
+    dt: float
+    N: int
+    T: float
+    K: int
+    P: int
+    t_max: float
+    f: Array
+    eta: Array
+    m: IntArray
+    n: IntArray
+    t: Array
+    base: dict[tuple[int, int], CArray] = field(repr=False)
+    keep: BoolArray = field(repr=False)
+    cells: IntArray = field(repr=False)
+    pos: IntArray = field(repr=False)
+    band_cells: list[IntArray] = field(repr=False)
+    Tp: Array = field(repr=False)
+    specs: list[dict[str, Any]] = field(repr=False)
+    k_used: IntArray = field(repr=False)
+    fold_has_duplicates: bool = False
+
+
+def _block_spec(Nf: int, Nt: int, T: float, n: IntArray, eta: Array,
+                base: dict[tuple[int, int], CArray], band_cells: list[IntArray],
+                m: int, m2: int) -> dict[str, Any]:
+    R, C = band_cells[m], band_cells[m2]
+    nr, nc = n[R], n[C]
+    a = (nr % 2)[:, None] + 0 * nc[None, :]
+    b = 0 * nr[:, None] + (nc % 2)[None, :]
+    combo = 2 * a + b                                              # (nR, nC)
+    d = ((nr[:, None] - a) - (nc[None, :] - b)) % Nt
+    s = nr[:, None] + nc[None, :]
+    B = {}
+    for aa in (0, 1):
+        for bb in (0, 1):
+            Ga, Gb = base.get((m, aa)), base.get((m2, bb))
+            if Ga is None or Gb is None:
+                continue
+            k = np.flatnonzero((np.abs(Ga) > 0) & (np.abs(Gb) > 0))
+            B[2 * aa + bb] = (k, eta[k] * Ga[k] * np.conj(Gb[k]) / T)
+    return dict(m=m, m2=m2, R=R, C=C, combo=combo, d=d, s=s, B=B)
+
+
+def eq45_plan(Nf: int, Nt: int, dt: float, keep: BoolArray | None = None, *,
+              P: int = 24, t_max: float | None = None) -> Eq45Plan:
+    """Static plan of Eq. (45) on the cells ``keep`` (a mask over the ``N`` packed
+    cells, band order; all by default), Chebyshev order ``P`` in time on
+    ``t_bar in [0, t_max]`` (default: this grid's ``T = N dt``).
+
+    Pair mid-times of the kept cells must lie in ``[0, t_max]``.  A padded grid
+    passes its extended ``t_max``; the spectrum's time dependence is then
+    continued over the padding by the caller (``r = t_max / T_obs`` in
+    :func:`eq45_coeffs_bessel`).
+    """
+    validate_grid(Nf, Nt)
+    validate_dt(dt)
+    Nf, Nt, dt, P = int(Nf), int(Nt), float(dt), int(P)
+    N = Nf * Nt
+    T = N * dt
+    mask = active_mask(Nf, Nt)
+    m, n = np.nonzero(mask)                                       # band-major
+    t = n * delta_T(Nf, dt)                                       # cell times
+    K = N // 2 + 1
+    f = np.fft.rfftfreq(N, d=dt)
+    eta = np.ones(K)
+    eta[[0, -1]] = 0.5
+    base = base_atom_spectra(Nf, Nt, dt)
+    keep = np.ones(m.size, bool) if keep is None else np.asarray(keep, bool)
+    if keep.shape != (m.size,):
+        raise ValueError(f"keep must be a mask over the {m.size} packed cells; got {keep.shape}")
+    t_max = float(T if t_max is None else t_max)
+    cells = np.flatnonzero(keep)
+    pos = -np.ones(m.size, int)
+    pos[cells] = np.arange(cells.size)
+    band_cells = [cells[m[cells] == mm] for mm in range(Nf + 1)]
+    # Chebyshev basis on the pair mid-times t_bar = s dT / 2, s = n + n'
+    s_grid = np.arange(2 * Nt - 1)
+    u = 2.0 * (s_grid * 0.5 * delta_T(Nf, dt) / t_max - 0.5)
+    used = s_grid <= 2 * int(n[cells].max())
+    if np.any(np.abs(u[used]) > 1 + 1e-12):
+        raise ValueError("pair mid-times must lie inside [0, t_max]")
+    Tp = np.empty((P, s_grid.size))
+    Tp[0] = 1.0
+    if P > 1:
+        Tp[1] = u
+    for q in range(2, P):
+        Tp[q] = 2 * u * Tp[q - 1] - Tp[q - 2]
+    specs = [_block_spec(Nf, Nt, T, n, eta, base, band_cells, mm, m2)
+             for mm in range(Nf + 1) for m2 in (mm, mm + 1) if m2 <= Nf]
+    k_all = [k for spec in specs for (k, _) in spec["B"].values()]
+    k_used = np.unique(np.concatenate(k_all)) if k_all else np.zeros(0, int)
+    dup = any(np.unique(k % Nt).size != k.size for spec in specs for (k, _) in spec["B"].values())
+    return Eq45Plan(Nf, Nt, dt, N, T, K, P, t_max, f, eta, m, n, t, base, keep, cells, pos,
+                    band_cells, Tp, specs, k_used, dup)
+
+
+# ---------------------------------------------------------------------------
+# Eq. (45): Chebyshev-in-time coefficients and blocks
+# ---------------------------------------------------------------------------
+
+
+def eq45_coeffs_bessel(L: Array, alpha_c: Any, alpha_d: Any, P: int, *, r: float = 1.0,
+                       be: Backend | None = None) -> Array:
+    r"""``(P, len(L))``: Chebyshev coefficients of :math:`e^{\alpha(\bar t) L}` in
+    :math:`u = 2\bar t/t_{\max} - 1` for the log-linear family
+    :math:`\alpha(t) = \alpha_c + \alpha_d (t/T_{\rm obs} - 1/2)`, exactly (Bessel I):
+    with :math:`r = t_{\max}/T_{\rm obs}`,
+    :math:`\alpha = \alpha_c + \alpha_d (r/2 - 1/2) + (\alpha_d r/2)\,u`.
+
+    WT ``TriCovariance._cheb_weights`` verbatim (``r`` is needed by the padded
+    models, whose ``t_max`` is the extended record; the spec's 4-argument
+    signature omitted it).  On JAX the Bessel functions are the 40-term series
+    of :meth:`wdm.backend.Backend.bessel_i`.
+    """
+    be = be or get_backend(L, alpha_c, alpha_d)
+    xp = be.xp
+    a = 0.5 * alpha_d * r * L
+    c = be.bessel_i(P, a)
+    c = be.set(c, slice(1, None), c[1:] * 2.0, copy=False)          # c[1:] *= 2.0
+    return c * xp.exp((alpha_c + alpha_d * (0.5 * r - 0.5)) * L)[None, :]
+
+
+def eq45_coeffs_interp(Sn: PsdFtFunc, f: Array, t_max: float, P: int, *,
+                       k: IntArray | None = None) -> Array:
+    r"""``(P, len(f))``: Chebyshev coefficients :math:`c_p(f_k)` of a general
+    :math:`S(f_k, \bar t)` in :math:`u = 2\bar t/t_{\max} - 1`, by interpolation at
+    the ``P`` Chebyshev nodes; zero outside the bins ``k`` (all by default; pass
+    ``plan.k_used``).  wdm_dev ``TriCovariance.chebyshev_coefficients`` verbatim.
+    NumPy (the PSD is a host callable).
+    """
+    f = np.asarray(f, float)
+    k = np.arange(f.size) if k is None else np.asarray(k, int)
+    j = np.arange(P)
+    x = np.cos(np.pi * (j + 0.5) / P)                                 # nodes in u
+    t_nodes = 0.5 * (x + 1.0) * t_max
+    S = _psd_at(Sn, f[k][None, :], t_nodes[:, None], "eq45_coeffs_interp")   # (P, |k|)
+    Cmat = np.cos(np.pi * np.outer(np.arange(P), j + 0.5) / P)          # (p, j)
+    c = (2.0 / P) * (Cmat @ S)
+    c[0] *= 0.5
+    out = np.zeros((P, f.size))
+    out[:, k] = c
+    return out
+
+
+def eq45_blocks_cheb(plan: Eq45Plan, coeffs: Array | Callable[[IntArray], Array], *,
+                     be: Backend | None = None) -> tuple[list[Array], list[Array]]:
+    """Diagonal (symmetrised) and upper band blocks of Eq. (45) from Chebyshev coefficients.
+
+    ``coeffs`` is either a ``(P, K)`` array over every rfft bin
+    (:func:`eq45_coeffs_interp`; read as ``coeffs[:, k]``) or a callable
+    ``k -> (P, len(k))`` evaluated per block (the WT call pattern:
+    ``lambda k: eq45_coeffs_bessel(L[k], ac, ad, P, r=r)``).  Each block costs
+    one length-``Nt`` FFT per order.  The NumPy path is WT ``TriCovariance.blocks``
+    / wdm_dev ``TriCovariance.blocks`` line for line (``np.add.at`` fold).
+    Returns ragged lists (``diag[m]``: kept cells of band ``m`` squared).
+    """
+    if be is None:
+        be = NUMPY if callable(coeffs) else get_backend(coeffs)
+    xp = be.xp
+    P, Nt = plan.P, plan.Nt
+    Tp = be.asarray(plan.Tp)
+    diag: list[Array] = [None] * (plan.Nf + 1)  # type: ignore[list-item]
+    up: list[Array] = [None] * plan.Nf  # type: ignore[list-item]
+    for spec in plan.specs:
+        F = xp.zeros((4, P, Nt), complex)
+        for cb, (k, Bk) in spec["B"].items():
+            Ck = coeffs(k) if callable(coeffs) else coeffs[:, k]
+            V = Ck * Bk[None, :]                                        # (P, |k|)
+            folded = xp.zeros((P, Nt), complex)
+            folded = be.add_at(folded, (slice(None), k % Nt), V, copy=False)
+            F = be.set(F, cb, be.fft.fft(folded, axis=1), copy=False)   # F_p(d)
+        Fg = F[spec["combo"], :, spec["d"]]                             # (nR, nC, P)
+        Tg = Tp[:, spec["s"]]                                           # (P, nR, nC)
+        blk = xp.real(xp.einsum("ijp,pij->ij", Fg, Tg))
+        if spec["m2"] == spec["m"]:
+            diag[spec["m"]] = 0.5 * (blk + blk.T)
+        else:
+            up[spec["m"]] = blk
+    return diag, up
+
+
+# ---------------------------------------------------------------------------
+# Eq. (45): Gram form for the log-linear family (WG ``_gram_setup``/``_tri_blocks``)
+# ---------------------------------------------------------------------------
+
+
+@dataclass(frozen=True, eq=False)
+class Eq45GramPlan:
+    """Host constants of the Gram form, bands laid out ``(nb, B)`` with dummy slots.
+
+    ``slot[m, i]`` is the kept-cell position of slot ``i`` of band ``m`` (``-1`` for
+    a dummy); ``gG`` the cells' atom spectra on their band's support bins
+    ``sup[m]``; ``gW = eta/T``; ``gT`` the cell times; ``uI1``/``uI2``/``uW`` the
+    overlap bins of adjacent bands.  WG ``MatrixGPU._gram_setup`` line for line.
+    """
+
+    nb: int
+    B: int
+    Kb: int
+    sup: list[IntArray] = field(repr=False)
+    slot: IntArray = field(repr=False)
+    gG: CArray = field(repr=False)
+    gW: Array = field(repr=False)
+    gT: Array = field(repr=False)
+    uI1: NDArray[np.int32] = field(repr=False)
+    uI2: NDArray[np.int32] = field(repr=False)
+    uW: Array = field(repr=False)
+
+
+def eq45_gram_plan(plan: Eq45Plan) -> Eq45GramPlan:
+    r"""Gram constants for :func:`eq45_blocks_gram`.
+
+    For :math:`S(t, f) = e^{\alpha(t) L(f)}` with :math:`\alpha` linear in
+    :math:`t`, :math:`S(\bar t_{pq}) = \sqrt{S(t_p) S(t_q)}` exactly, so
+    :math:`\Lambda_{pq} = \frac1T \mathrm{Re}\sum_k \eta_k v_p(k) v_q^*(k)` with
+    :math:`v_p = e^{\alpha(t_p) L/2}\hat g_p` -- one matrix product per band block.
+    """
+    nb = len(plan.band_cells)
+    B = max(len(c) for c in plan.band_cells)
+    slot = np.full((nb, B), -1)
+    for mm, c in enumerate(plan.band_cells):
+        slot[mm, :len(c)] = plan.pos[c]
+    sup = []
+    for mm in range(nb):
+        ks = [np.flatnonzero(np.abs(G) > 0) for (m2, _), G in plan.base.items() if m2 == mm]
+        sup.append(np.unique(np.concatenate(ks)) if ks else np.zeros(0, int))
+    Kb = max(len(k) for k in sup)
+    gG = np.zeros((nb, B, Kb), complex)
+    gW = np.zeros((nb, Kb))
+    gT = np.zeros((nb, B))
+    for mm, cells in enumerate(plan.band_cells):
+        k = sup[mm]
+        for i, p in enumerate(cells):
+            gG[mm, i, :len(k)] = atom_spectrum(int(plan.m[p]), int(plan.n[p]), plan.Nf,
+                                               plan.Nt, plan.dt, base=plan.base)[k]
+            gT[mm, i] = plan.t[p]
+        gW[mm, :len(k)] = plan.eta[k] / plan.T
+    ov = [np.intersect1d(sup[mm], sup[mm + 1], return_indices=True) for mm in range(nb - 1)]
+    Ko = max(1, max(len(k) for k, _, _ in ov))
+    uI1 = np.zeros((nb - 1, Ko), np.int32)
+    uI2 = np.zeros((nb - 1, Ko), np.int32)
+    uW = np.zeros((nb - 1, Ko))
+    for mm, (k, i1, i2) in enumerate(ov):
+        uI1[mm, :len(k)], uI2[mm, :len(k)] = i1, i2
+        uW[mm, :len(k)] = plan.eta[k] / plan.T
+    return Eq45GramPlan(nb, B, Kb, sup, slot, gG, gW, gT, uI1, uI2, uW)
+
+
+def eq45_gram_gather(gplan: Eq45GramPlan, values: Array) -> Array:
+    """``(nb, Kb)``: a per-rfft-bin array (e.g. ``L(f)``) on each band's support bins,
+    zero-padded (WG ``gL[m, :len(k)] = L[k]``)."""
+    out = np.zeros((gplan.nb, gplan.Kb))
+    for mm, k in enumerate(gplan.sup):
+        out[mm, :len(k)] = values[k]
+    return out
+
+
+def eq45_blocks_gram(gplan: Eq45GramPlan, alpha_cells: Array, gL: Array, *,
+                     be: Backend | None = None) -> tuple[Array, Array]:
+    """Eq. (45) blocks in the Gram form: diagonal ``(nb, B, B)`` and upper ``(nb-1, B, B)``.
+
+    ``alpha_cells`` is ``alpha(t_p)`` per slot, ``(nb, B)``; the caller computes it
+    from ``gplan.gT`` with the **data record's** ``T_obs`` (WG:
+    ``ac + ad * (gT / T_obs - 0.5)``).  ``gL`` is :func:`eq45_gram_gather` of
+    ``L(f)``.  Dummy slots give zero rows and columns.  WG ``_tri_blocks`` verbatim.
+    """
+    be = be or get_backend(alpha_cells)
+    xp = be.xp
+    gG, gW = be.asarray(gplan.gG), be.asarray(gplan.gW)
+    uI1, uI2, uW = be.asarray(gplan.uI1), be.asarray(gplan.uI2), be.asarray(gplan.uW)
+    al = be.asarray(alpha_cells)
+    V = xp.exp(0.5 * al[:, :, None] * be.asarray(gL)[:, None, :]) * gG          # (nb, B, Kb)
+    diag = xp.real(xp.einsum("bik,bjk->bij", V * gW[:, None, :], xp.conj(V)))
+    Va = xp.take_along_axis(V[:-1], uI1[:, None, :], axis=2) * uW[:, None, :]
+    Vb = xp.take_along_axis(V[1:], uI2[:, None, :], axis=2)
+    up = xp.real(xp.einsum("bik,bjk->bij", Va, xp.conj(Vb)))
+    return diag, up
+
+
+# ---------------------------------------------------------------------------
+# Eq. (45): separable spectra S_c(f, t) = s_I(f) + g(t) s_G(f)  (GB ``tri_kernels``)
+# ---------------------------------------------------------------------------
+
+
+def eq45_separable_kernels(U: CArray, s: Array) -> Array:
+    r""":math:`K^X = \tfrac12 \mathrm{Re}(U\,\mathrm{diag}(s)\,U^{\mathsf H})` in real arithmetic.
+
+    ``U`` (cells x window bins) holds the unit-norm atoms; ``s`` a stationary
+    spectrum on the window bins.  GB ``matrix._kernel`` verbatim (host NumPy,
+    built once per noise component).
+    """
+    Ur, Ui = U.real, U.imag
+    return 0.5 * ((Ur * s) @ Ur.T + (Ui * s) @ Ui.T)
+
+
+def eq45_separable_assemble(KI: Array, KG: Array, g_half: Array, half_index: IntArray, *,
+                            be: Backend | None = None) -> Array:
+    r"""Eq. (45) for :math:`S = s_I + g(t)\,s_G`: :math:`K^I + g(\bar t)\,K^G`.
+
+    ``g_half`` is the envelope on the half-step grid :math:`t = j\,\Delta T/2`,
+    ``half_index = n_p + n_q`` (non-circular), so ``g_half[half_index]`` is
+    :math:`g(\bar t_{pq})`.  GB ``covariance_builder``: ``KI[c] + g[half] * KG[c]``.
+    """
+    be = be or get_backend(g_half)
+    return be.asarray(KI) + be.asarray(g_half)[be.asarray(half_index)] * be.asarray(KG)
+
+
+# ---------------------------------------------------------------------------
+# Eq. (45): the direct sum (oracle)
+# ---------------------------------------------------------------------------
+
+
+def _eq45_pairs(plan: Eq45Plan) -> tuple[IntArray, IntArray]:
+    P, Q = [], []
+    for mm in range(plan.Nf + 1):
+        A = plan.band_cells[mm]
+        for m2 in (mm, mm + 1):
+            if m2 > plan.Nf:
+                continue
+            B = plan.band_cells[m2]
+            if not A.size or not B.size:
+                continue
+            ok = np.ones((A.size, B.size), bool)
+            if m2 == mm:
+                ok = A[:, None] <= B[None, :]
+            i, j = np.nonzero(ok)
+            P.append(A[i])
+            Q.append(B[j])
+    return np.concatenate(P), np.concatenate(Q)
+
+
+def eq45_direct(plan: Eq45Plan, Sn: PsdFtFunc) -> Array:
+    """Eq. (45) on the kept cells by the direct sum over rfft bins (dense; tests and
+    small grids).  wdm_dev ``TriCovariance.pairs/values/dense`` verbatim."""
+    g = plan
+    Pp, Qq = _eq45_pairs(plan)
+    out = np.empty(Pp.size)
+    tbar = 0.5 * (g.t[Pp] + g.t[Qq])
+    k = np.arange(g.K)
+    key = ((g.m[Pp] * 2 + g.n[Pp] % 2) * (2 * g.Nf + 4) + g.m[Qq] * 2 + g.n[Qq] % 2)
+    for kk in np.unique(key):
+        sel = np.flatnonzero(key == kk)
+        p0, q0 = Pp[sel[0]], Qq[sel[0]]
+        mp, ap, mq, aq = int(g.m[p0]), int(g.n[p0] % 2), int(g.m[q0]), int(g.n[q0] % 2)
+        Gp, Gq = g.base[mp, ap], g.base[mq, aq]
+        s = np.flatnonzero((np.abs(Gp) > 0) & (np.abs(Gq) > 0))
+        if not s.size:
+            out[sel] = 0.0
+            continue
+        prod = g.eta[s] * Gp[s] * np.conj(Gq[s]) / g.T
+        d = (g.n[Pp[sel]] - ap) - (g.n[Qq[sel]] - aq)
+        ph = np.exp(-2j * np.pi * np.outer(d, k[s]) / g.Nt)
+        S = _psd_at(Sn, g.f[s][None, :], tbar[sel][:, None], "eq45_direct")
+        out[sel] = np.real(np.sum(S * ph * prod[None, :], axis=1))
+    n = plan.cells.size
+    C = np.zeros((n, n))
+    C[plan.pos[Pp], plan.pos[Qq]] = out
+    C[plan.pos[Qq], plan.pos[Pp]] = out
+    return C

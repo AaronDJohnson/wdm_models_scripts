@@ -5,7 +5,13 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-from wdm import evolutionary as ev
+# wdm-paper 1.0 split wdm_dev's evolutionary.py: the stateless kernels are
+# wdm.evolutionary (tests/test_evolutionary_kernels.py checks them against this
+# oracle bit for bit); the classes (PackedGrid, BlockTri, Solver, Schur,
+# PaddedMarginal, marginal_lnlike, nuisance_basis, FourierBand, wdm_discarded,
+# Variant, make_variant, TriCovariance) move to domainia in S2.  These tests now
+# run against the frozen wdm_dev copy, tests/oracle/wdm_dev_ev.
+from wdm_dev_ev import evolutionary as ev
 from wdm.grid import active_mask
 from wdm.matrix import active_W
 from wdm.transform import forward_time
