@@ -47,7 +47,7 @@ from typing import Any, Literal
 
 import numpy as np
 
-from wdm.backend import Backend, get_backend, is_tracer, pytree_dataclass
+from wdm.backend import Backend, get_backend, is_tracer, jax_backend, pytree_dataclass
 
 from .domains import CellSet
 
@@ -72,6 +72,7 @@ __all__ = [
     "chol_factor",
     "chol_solve",
     "chol_whiten",
+    "device_constants",
     "diag_factor",
     "diag_solve",
     "factor_solve",
@@ -865,3 +866,20 @@ def pcg(apply_A: Callable[[Any], Any], apply_M: Callable[[Any], Any], B: Any, *,
     else:
         x = xp.where(converged[:, None], x, xp.nan)
     return PCGResult(x, it, converged)
+
+
+# ---------------------------------------------------------------------------
+# Host constants on the device
+# ---------------------------------------------------------------------------
+
+
+def device_constants(tree: Any) -> Any:
+    """Move a pytree of host constants to the JAX device once (spec section 3.3).
+
+    Calls :func:`wdm.backend.jax_backend` first, so it raises ``RuntimeError`` when
+    ``jax_enable_x64`` is off and registers every pending pytree class.
+    """
+    jax_backend()
+    import jax
+
+    return jax.device_put(tree)
