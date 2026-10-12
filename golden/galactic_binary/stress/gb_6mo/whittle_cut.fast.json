@@ -1,0 +1,346 @@
+{
+ "backends": [
+  "numpy",
+  "jax"
+ ],
+ "build": {
+  "gbonfly": "0.1.0",
+  "jax": "0.9.0.1",
+  "jaxlib": "0.9.0.1",
+  "machine": "arm64",
+  "numpy": "2.3.5",
+  "platform": "macOS-14.3.1-arm64-arm-64bit",
+  "python": "3.12.4",
+  "scipy": "1.16.3",
+  "threads": {
+   "JAX_ENABLE_X64": "true",
+   "JAX_PLATFORMS": "cpu",
+   "MKL_NUM_THREADS": null,
+   "OMP_NUM_THREADS": null,
+   "OPENBLAS_NUM_THREADS": null,
+   "VECLIB_MAXIMUM_THREADS": null,
+   "XLA_FLAGS": null
+  }
+ },
+ "cache_class": null,
+ "case": "gb_6mo",
+ "counters_cache": null,
+ "counters_jax": null,
+ "marginal_threshold": 1e-10,
+ "model": "whittle_cut",
+ "n_points": 11,
+ "points": [
+  {
+   "expected_neg_inf": false,
+   "index": 0,
+   "lnl_jax": -1294.9589307001665,
+   "lnl_ref": -1294.9589307001665,
+   "marginal": false,
+   "mask_consistent": true,
+   "name": "anchor",
+   "pd_margin": 0.9536051676959695,
+   "pd_margin_channels": [
+    0.9547807743657174,
+    0.9536051676959695
+   ],
+   "ref_raised": false,
+   "source_out": false,
+   "theta": [
+    15768.0,
+    -0.20833333333333326,
+    0.0,
+    -48.68387547936903,
+    0.3,
+    0.7,
+    0.5,
+    0.000248629824,
+    -0.0852065039299861,
+    0.12719824180753522
+   ]
+  },
+  {
+   "expected_neg_inf": false,
+   "index": 1,
+   "lnl_jax": -10137.71939058588,
+   "lnl_ref": -10137.71939058588,
+   "marginal": false,
+   "mask_consistent": true,
+   "name": "noise_hi",
+   "pd_margin": 0.9480378695827426,
+   "pd_margin_channels": [
+    0.9480378695827426,
+    0.9480378695827426
+   ],
+   "ref_raised": false,
+   "source_out": false,
+   "theta": [
+    15768.0,
+    -0.20833333333333326,
+    0.0,
+    -48.68387547936903,
+    0.3,
+    0.7,
+    0.5,
+    0.000248629824,
+    8.0,
+    8.0
+   ]
+  },
+  {
+   "expected_neg_inf": false,
+   "index": 2,
+   "lnl_jax": -9910.456583320834,
+   "lnl_ref": -9910.456583320833,
+   "marginal": false,
+   "mask_consistent": true,
+   "name": "noise_lo",
+   "pd_margin": 0.9898389670314918,
+   "pd_margin_channels": [
+    0.9898389670314918,
+    0.9898389670314918
+   ],
+   "ref_raised": false,
+   "source_out": false,
+   "theta": [
+    15768.0,
+    -0.20833333333333326,
+    0.0,
+    -48.68387547936903,
+    0.3,
+    0.7,
+    0.5,
+    0.000248629824,
+    -8.0,
+    -8.0
+   ]
+  },
+  {
+   "expected_neg_inf": false,
+   "index": 3,
+   "lnl_jax": -10641.694368278098,
+   "lnl_ref": -10641.694368278098,
+   "marginal": false,
+   "mask_consistent": true,
+   "name": "noise_mixed",
+   "pd_margin": 0.9480378695827426,
+   "pd_margin_channels": [
+    0.9480378695827426,
+    0.9898389670314918
+   ],
+   "ref_raised": false,
+   "source_out": false,
+   "theta": [
+    15768.0,
+    -0.20833333333333326,
+    0.0,
+    -48.68387547936903,
+    0.3,
+    0.7,
+    0.5,
+    0.000248629824,
+    8.0,
+    -8.0
+   ]
+  },
+  {
+   "expected_neg_inf": false,
+   "index": 4,
+   "lnl_jax": -5778.119119445358,
+   "lnl_ref": -5778.119119445359,
+   "marginal": false,
+   "mask_consistent": true,
+   "name": "edge_A_hi",
+   "pd_margin": 0.9480378719134553,
+   "pd_margin_channels": [
+    0.9480378719134553,
+    0.9536051676959695
+   ],
+   "ref_raised": false,
+   "source_out": false,
+   "theta": [
+    15768.0,
+    -0.20833333333333326,
+    0.0,
+    -48.68387547936903,
+    0.3,
+    0.7,
+    0.5,
+    0.000248629824,
+    7.999,
+    0.12719824180753522
+   ]
+  },
+  {
+   "expected_neg_inf": false,
+   "index": 5,
+   "lnl_jax": -6157.871768169661,
+   "lnl_ref": -6157.871768169661,
+   "marginal": false,
+   "mask_consistent": true,
+   "name": "edge_E_lo",
+   "pd_margin": 0.9547807743657174,
+   "pd_margin_channels": [
+    0.9547807743657174,
+    0.989839150400573
+   ],
+   "ref_raised": false,
+   "source_out": false,
+   "theta": [
+    15768.0,
+    -0.20833333333333326,
+    0.0,
+    -48.68387547936903,
+    0.3,
+    0.7,
+    0.5,
+    0.000248629824,
+    -0.0852065039299861,
+    -7.999
+   ]
+  },
+  {
+   "expected_neg_inf": false,
+   "index": 6,
+   "lnl_jax": -9405.822818327515,
+   "lnl_ref": -9405.822818327515,
+   "marginal": false,
+   "mask_consistent": true,
+   "name": "edge_cross",
+   "pd_margin": 0.9480378719134553,
+   "pd_margin_channels": [
+    0.989839150400573,
+    0.9480378719134553
+   ],
+   "ref_raised": false,
+   "source_out": false,
+   "theta": [
+    15768.0,
+    -0.20833333333333326,
+    0.0,
+    -48.68387547936903,
+    0.3,
+    0.7,
+    0.5,
+    0.000248629824,
+    -7.999,
+    7.999
+   ]
+  },
+  {
+   "expected_neg_inf": false,
+   "index": 7,
+   "lnl_jax": -1710.4996826451743,
+   "lnl_ref": -1710.499682645174,
+   "marginal": false,
+   "mask_consistent": true,
+   "name": "level_up",
+   "pd_margin": 0.9502069718537254,
+   "pd_margin_channels": [
+    0.9506989107403115,
+    0.9502069718537254
+   ],
+   "ref_raised": false,
+   "source_out": false,
+   "theta": [
+    15768.0,
+    -0.20833333333333326,
+    0.0,
+    -48.68387547936903,
+    0.3,
+    0.7,
+    0.5,
+    0.000248629824,
+    0.9147934960700139,
+    1.1271982418075353
+   ]
+  },
+  {
+   "expected_neg_inf": false,
+   "index": 8,
+   "lnl_jax": -1919.4119028324901,
+   "lnl_ref": -1919.41190283249,
+   "marginal": false,
+   "mask_consistent": true,
+   "name": "level_down",
+   "pd_margin": 0.9611626374805697,
+   "pd_margin_channels": [
+    0.9634995038702763,
+    0.9611626374805697
+   ],
+   "ref_raised": false,
+   "source_out": false,
+   "theta": [
+    15768.0,
+    -0.20833333333333326,
+    0.0,
+    -48.68387547936903,
+    0.3,
+    0.7,
+    0.5,
+    0.000248629824,
+    -1.085206503929986,
+    -0.8728017581924647
+   ]
+  },
+  {
+   "expected_neg_inf": true,
+   "index": 9,
+   "lnl_jax": -Infinity,
+   "lnl_ref": -Infinity,
+   "marginal": false,
+   "mask_consistent": true,
+   "name": "source_out_lnA",
+   "pd_margin": 0.9536051676959695,
+   "pd_margin_channels": [
+    0.9547807743657174,
+    0.9536051676959695
+   ],
+   "ref_raised": false,
+   "source_out": true,
+   "theta": [
+    15768.0,
+    -0.20833333333333326,
+    0.0,
+    -45.0,
+    0.3,
+    0.7,
+    0.5,
+    0.000248629824,
+    -0.0852065039299861,
+    0.12719824180753522
+   ]
+  },
+  {
+   "expected_neg_inf": true,
+   "index": 10,
+   "lnl_jax": -Infinity,
+   "lnl_ref": -Infinity,
+   "marginal": false,
+   "mask_consistent": true,
+   "name": "source_out_f0",
+   "pd_margin": 0.9536051676959695,
+   "pd_margin_channels": [
+    0.9547807743657174,
+    0.9536051676959695
+   ],
+   "ref_raised": false,
+   "source_out": true,
+   "theta": [
+    15657.999999999998,
+    -0.20833333333333326,
+    0.0,
+    -48.68387547936903,
+    0.3,
+    0.7,
+    0.5,
+    0.000248629824,
+    -0.0852065039299861,
+    0.12719824180753522
+   ]
+  }
+ ],
+ "prepared_sha256": "2ced666ca77f564a40ae0a40baf707db6f913ee063e3df291baf2a0844dc9bd6",
+ "scan": null,
+ "schema": 1,
+ "tier": "fast"
+}

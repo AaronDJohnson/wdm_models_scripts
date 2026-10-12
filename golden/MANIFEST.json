@@ -89,6 +89,36 @@
   "galactic_binary/intermediates_gb_6mo.npz": "bf81e61696583599a1c1a20b405ffdf14124dda6776ec08222b6439759311efb",
   "galactic_binary/products.json": "c4f48de4a7db4fc73766cb8ba6e7c2164fa82210b49b3b3881de00943e8a007a",
   "galactic_binary/psd_window.npz": "ae36d217608e2dd06e5fbc0ffb6624f8b4b4514ac8b2c80e51dc48c352ee36ea",
+  "galactic_binary/stress/gb_3mo/band_cut.fast.json": "8a12573f4360f2ea5158e2c0ded61df143133839c3e61e7e067a155100bc436f",
+  "galactic_binary/stress/gb_3mo/band_exact.fast.json": "366a25459ccada5dd79bffc9afc22d8098c7625789cbe88fcf2628790fca8120",
+  "galactic_binary/stress/gb_3mo/band_pad.fast.json": "767160ad63c21c1b1f3ea869a56901b17672e71cb78f0b4ab7e4b34cedab741e",
+  "galactic_binary/stress/gb_3mo/band_raw.fast.json": "2d051550d14502685fe2dcd2a4d9dcec7a815479d36488ac264ce02c03387658",
+  "galactic_binary/stress/gb_3mo/exact.fast.json": "ea291e1cc5d6764b8752fa9a2bc2dfb26cda1eaa5310aa029faae68a0905ccab",
+  "galactic_binary/stress/gb_3mo/mid_cut.fast.json": "a40683aabfd9a50eb41e3c869b35150677db18ce5e33c51648d1b7b87e49877a",
+  "galactic_binary/stress/gb_3mo/mid_exact.fast.json": "f19fa0ec9c4d2728c265fe4d3674c5af4781ff11481c3b8fd963ca7e5edd23f4",
+  "galactic_binary/stress/gb_3mo/mid_pad.fast.json": "bf39dcfd3e56591199b6e202bb731042999026ae4cb914c9f5703a3cec39244d",
+  "galactic_binary/stress/gb_3mo/mid_raw.fast.json": "457d77ccfce4253614043f77e9b9d6d43720a49c678d26a89a006d033ef0e7fe",
+  "galactic_binary/stress/gb_3mo/tri_cut.fast.json": "3ff61e23c8b4c24e6ccb2696212a81ea717f1756961d8435bc1f58d7871e4797",
+  "galactic_binary/stress/gb_3mo/tri_exact.fast.json": "ab7771542bc13004bf6f8391a057f724ed6ed74b4c9a1c83c2c7916dc827b379",
+  "galactic_binary/stress/gb_3mo/tri_pad.fast.json": "d4ca5837738a49f1670b7a23fca3a4e012a7186384fed045f86926670ebdd39e",
+  "galactic_binary/stress/gb_3mo/tri_raw.fast.json": "0af98c2e123b1a68d649e38a03fe61dd85a17c4f81561691172d657a30288f43",
+  "galactic_binary/stress/gb_3mo/whittle_cut.fast.json": "db25c24ed3c23d8f0a0e720bf6d684b63bb8e867f8311ad42689703789398cd7",
+  "galactic_binary/stress/gb_3mo/whittle_raw.fast.json": "9ae8017f8a028ed0f980f542d52c5d510fddb448763f0b6b4d597eb5ec0f1d07",
+  "galactic_binary/stress/gb_6mo/band_cut.fast.json": "306392e35cb3a87f47c5c1cebb199628ea9f53b7879c9d1169b6ecbe24810dad",
+  "galactic_binary/stress/gb_6mo/band_exact.fast.json": "57077747b7f2f82732f8da5863c2355f195cd2b6a974ed96ca76817f2a09018b",
+  "galactic_binary/stress/gb_6mo/band_pad.fast.json": "6ed7d0192120b8f04ebc134f224be31f1c513811ba127ad9b343c64948c1eaa6",
+  "galactic_binary/stress/gb_6mo/band_raw.fast.json": "2ff38ec352b47537b1086cf0cd0844547081d700f0739f21d8a0606135d6ef98",
+  "galactic_binary/stress/gb_6mo/exact.fast.json": "d4b1ffde0586420e16ea229e6e853fc2933c2dccb152a352e62361a76d65c298",
+  "galactic_binary/stress/gb_6mo/mid_cut.fast.json": "7290e683b52f86aa0c9017cebfd5c4f652feeba5878c9baf82e268ae3201e3c4",
+  "galactic_binary/stress/gb_6mo/mid_exact.fast.json": "2a57fff4ebe0f09a62aaca8785fdfe5b855d8a3d86887e25d4f74a77a1526a73",
+  "galactic_binary/stress/gb_6mo/mid_pad.fast.json": "b2067baed5025992a5c9d8966667a959dd1098a966e2d42a4a9af4586956f434",
+  "galactic_binary/stress/gb_6mo/mid_raw.fast.json": "7f4b54a81707a5378ba0dba05e5a41eececd62f005ecf7b717c0fb15bc7d7e56",
+  "galactic_binary/stress/gb_6mo/tri_cut.fast.json": "d0f7ebab0ccfad95fbaad54f3764c27795190310f043a5351331ff12c00b7c18",
+  "galactic_binary/stress/gb_6mo/tri_exact.fast.json": "815637dcd467d260657d4cdea0f1c7ed72823018f3c482d156fd5aacaf3472e8",
+  "galactic_binary/stress/gb_6mo/tri_pad.fast.json": "dc39d215dd66e98d3cf374c1687ead8132bd5bd82531ae2b0def29201fb3f040",
+  "galactic_binary/stress/gb_6mo/tri_raw.fast.json": "50111cde2c5a70cfb995f9866f16ccbd61fa52678048821eb32f7af9fddd30ab",
+  "galactic_binary/stress/gb_6mo/whittle_cut.fast.json": "ce00b312cdbdf1761b523a2edbc79b119305903adf4aba39bde39ac3dbdb59cb",
+  "galactic_binary/stress/gb_6mo/whittle_raw.fast.json": "1b95653218eb36811440e6b9adf2af1e451bbc0f2844675453a0c5dd571d570d",
   "sinusoid/chain_rows/INDEX.json": "8216fd4aeb0a229340da0e51f9255179c5b6ad36f4a71a5eebf68e45a2ef881a",
   "sinusoid/chain_rows/manuscript_high_band_cut.npz": "67d42255e92ceecb9a0713aeef2255e9a1a7f78c06a05c1e13cc8d5837b618b3",
   "sinusoid/chain_rows/manuscript_high_band_exact.npz": "65def8c8fa510c6ae00e0a6a63c94c976ee2e0bc423e32c3eacb4683a760752d",
@@ -2804,6 +2834,1146 @@
    },
    "lineage": "C",
    "subcommand": "products",
+   "worker": "gb_legacy"
+  },
+  "galactic_binary/stress/gb_3mo/band_cut.fast.json": {
+   "args": [
+    "--workspace",
+    "/Users/aaron/Documents/GitHub/wdm_test",
+    "--data-dir",
+    "/Users/aaron/Documents/GitHub/wdm_test/wdm_models_scripts/data",
+    "--case",
+    "gb_3mo",
+    "--tier",
+    "fast"
+   ],
+   "build": {
+    "gbonfly": "0.1.0",
+    "jax": "0.9.0.1",
+    "jaxlib": "0.9.0.1",
+    "machine": "arm64",
+    "numpy": "2.3.5",
+    "platform": "macOS-14.3.1-arm64-arm-64bit",
+    "python": "3.12.4",
+    "scipy": "1.16.3",
+    "threads": {
+     "JAX_ENABLE_X64": "true",
+     "JAX_PLATFORMS": "cpu",
+     "MKL_NUM_THREADS": null,
+     "OMP_NUM_THREADS": null,
+     "OPENBLAS_NUM_THREADS": null,
+     "VECLIB_MAXIMUM_THREADS": null,
+     "XLA_FLAGS": null
+    }
+   },
+   "inputs": {
+    "wdm_models_scripts/data/galactic_binary/prepared/gb_3mo.npz": "ad440fc145b693c46bed9f16a90ba1d64b4fff60f2bdb6209c9f58482d0b6afc",
+    "wdm_paper_2/final_chains/gb_likelihood_matrix/manifest.json": "3e7aa793544b47610a5f15b916c514b432ff738e22ec4f02b120738093f8a499"
+   },
+   "lineage": "C",
+   "subcommand": "stress",
+   "worker": "gb_legacy"
+  },
+  "galactic_binary/stress/gb_3mo/band_exact.fast.json": {
+   "args": [
+    "--workspace",
+    "/Users/aaron/Documents/GitHub/wdm_test",
+    "--data-dir",
+    "/Users/aaron/Documents/GitHub/wdm_test/wdm_models_scripts/data",
+    "--case",
+    "gb_3mo",
+    "--tier",
+    "fast"
+   ],
+   "build": {
+    "gbonfly": "0.1.0",
+    "jax": "0.9.0.1",
+    "jaxlib": "0.9.0.1",
+    "machine": "arm64",
+    "numpy": "2.3.5",
+    "platform": "macOS-14.3.1-arm64-arm-64bit",
+    "python": "3.12.4",
+    "scipy": "1.16.3",
+    "threads": {
+     "JAX_ENABLE_X64": "true",
+     "JAX_PLATFORMS": "cpu",
+     "MKL_NUM_THREADS": null,
+     "OMP_NUM_THREADS": null,
+     "OPENBLAS_NUM_THREADS": null,
+     "VECLIB_MAXIMUM_THREADS": null,
+     "XLA_FLAGS": null
+    }
+   },
+   "inputs": {
+    "wdm_models_scripts/data/galactic_binary/prepared/gb_3mo.npz": "ad440fc145b693c46bed9f16a90ba1d64b4fff60f2bdb6209c9f58482d0b6afc",
+    "wdm_paper_2/final_chains/gb_likelihood_matrix/manifest.json": "3e7aa793544b47610a5f15b916c514b432ff738e22ec4f02b120738093f8a499"
+   },
+   "lineage": "C",
+   "subcommand": "stress",
+   "worker": "gb_legacy"
+  },
+  "galactic_binary/stress/gb_3mo/band_pad.fast.json": {
+   "args": [
+    "--workspace",
+    "/Users/aaron/Documents/GitHub/wdm_test",
+    "--data-dir",
+    "/Users/aaron/Documents/GitHub/wdm_test/wdm_models_scripts/data",
+    "--case",
+    "gb_3mo",
+    "--tier",
+    "fast"
+   ],
+   "build": {
+    "gbonfly": "0.1.0",
+    "jax": "0.9.0.1",
+    "jaxlib": "0.9.0.1",
+    "machine": "arm64",
+    "numpy": "2.3.5",
+    "platform": "macOS-14.3.1-arm64-arm-64bit",
+    "python": "3.12.4",
+    "scipy": "1.16.3",
+    "threads": {
+     "JAX_ENABLE_X64": "true",
+     "JAX_PLATFORMS": "cpu",
+     "MKL_NUM_THREADS": null,
+     "OMP_NUM_THREADS": null,
+     "OPENBLAS_NUM_THREADS": null,
+     "VECLIB_MAXIMUM_THREADS": null,
+     "XLA_FLAGS": null
+    }
+   },
+   "inputs": {
+    "wdm_models_scripts/data/galactic_binary/prepared/gb_3mo.npz": "ad440fc145b693c46bed9f16a90ba1d64b4fff60f2bdb6209c9f58482d0b6afc",
+    "wdm_paper_2/final_chains/gb_likelihood_matrix/manifest.json": "3e7aa793544b47610a5f15b916c514b432ff738e22ec4f02b120738093f8a499"
+   },
+   "lineage": "C",
+   "subcommand": "stress",
+   "worker": "gb_legacy"
+  },
+  "galactic_binary/stress/gb_3mo/band_raw.fast.json": {
+   "args": [
+    "--workspace",
+    "/Users/aaron/Documents/GitHub/wdm_test",
+    "--data-dir",
+    "/Users/aaron/Documents/GitHub/wdm_test/wdm_models_scripts/data",
+    "--case",
+    "gb_3mo",
+    "--tier",
+    "fast"
+   ],
+   "build": {
+    "gbonfly": "0.1.0",
+    "jax": "0.9.0.1",
+    "jaxlib": "0.9.0.1",
+    "machine": "arm64",
+    "numpy": "2.3.5",
+    "platform": "macOS-14.3.1-arm64-arm-64bit",
+    "python": "3.12.4",
+    "scipy": "1.16.3",
+    "threads": {
+     "JAX_ENABLE_X64": "true",
+     "JAX_PLATFORMS": "cpu",
+     "MKL_NUM_THREADS": null,
+     "OMP_NUM_THREADS": null,
+     "OPENBLAS_NUM_THREADS": null,
+     "VECLIB_MAXIMUM_THREADS": null,
+     "XLA_FLAGS": null
+    }
+   },
+   "inputs": {
+    "wdm_models_scripts/data/galactic_binary/prepared/gb_3mo.npz": "ad440fc145b693c46bed9f16a90ba1d64b4fff60f2bdb6209c9f58482d0b6afc",
+    "wdm_paper_2/final_chains/gb_likelihood_matrix/manifest.json": "3e7aa793544b47610a5f15b916c514b432ff738e22ec4f02b120738093f8a499"
+   },
+   "lineage": "C",
+   "subcommand": "stress",
+   "worker": "gb_legacy"
+  },
+  "galactic_binary/stress/gb_3mo/exact.fast.json": {
+   "args": [
+    "--workspace",
+    "/Users/aaron/Documents/GitHub/wdm_test",
+    "--data-dir",
+    "/Users/aaron/Documents/GitHub/wdm_test/wdm_models_scripts/data",
+    "--case",
+    "gb_3mo",
+    "--tier",
+    "fast"
+   ],
+   "build": {
+    "gbonfly": "0.1.0",
+    "jax": "0.9.0.1",
+    "jaxlib": "0.9.0.1",
+    "machine": "arm64",
+    "numpy": "2.3.5",
+    "platform": "macOS-14.3.1-arm64-arm-64bit",
+    "python": "3.12.4",
+    "scipy": "1.16.3",
+    "threads": {
+     "JAX_ENABLE_X64": "true",
+     "JAX_PLATFORMS": "cpu",
+     "MKL_NUM_THREADS": null,
+     "OMP_NUM_THREADS": null,
+     "OPENBLAS_NUM_THREADS": null,
+     "VECLIB_MAXIMUM_THREADS": null,
+     "XLA_FLAGS": null
+    }
+   },
+   "inputs": {
+    "wdm_models_scripts/data/galactic_binary/prepared/gb_3mo.npz": "ad440fc145b693c46bed9f16a90ba1d64b4fff60f2bdb6209c9f58482d0b6afc",
+    "wdm_paper_2/final_chains/gb_likelihood_matrix/manifest.json": "3e7aa793544b47610a5f15b916c514b432ff738e22ec4f02b120738093f8a499"
+   },
+   "lineage": "C",
+   "subcommand": "stress",
+   "worker": "gb_legacy"
+  },
+  "galactic_binary/stress/gb_3mo/mid_cut.fast.json": {
+   "args": [
+    "--workspace",
+    "/Users/aaron/Documents/GitHub/wdm_test",
+    "--data-dir",
+    "/Users/aaron/Documents/GitHub/wdm_test/wdm_models_scripts/data",
+    "--case",
+    "gb_3mo",
+    "--tier",
+    "fast"
+   ],
+   "build": {
+    "gbonfly": "0.1.0",
+    "jax": "0.9.0.1",
+    "jaxlib": "0.9.0.1",
+    "machine": "arm64",
+    "numpy": "2.3.5",
+    "platform": "macOS-14.3.1-arm64-arm-64bit",
+    "python": "3.12.4",
+    "scipy": "1.16.3",
+    "threads": {
+     "JAX_ENABLE_X64": "true",
+     "JAX_PLATFORMS": "cpu",
+     "MKL_NUM_THREADS": null,
+     "OMP_NUM_THREADS": null,
+     "OPENBLAS_NUM_THREADS": null,
+     "VECLIB_MAXIMUM_THREADS": null,
+     "XLA_FLAGS": null
+    }
+   },
+   "inputs": {
+    "wdm_models_scripts/data/galactic_binary/prepared/gb_3mo.npz": "ad440fc145b693c46bed9f16a90ba1d64b4fff60f2bdb6209c9f58482d0b6afc",
+    "wdm_paper_2/final_chains/gb_likelihood_matrix/manifest.json": "3e7aa793544b47610a5f15b916c514b432ff738e22ec4f02b120738093f8a499"
+   },
+   "lineage": "C",
+   "subcommand": "stress",
+   "worker": "gb_legacy"
+  },
+  "galactic_binary/stress/gb_3mo/mid_exact.fast.json": {
+   "args": [
+    "--workspace",
+    "/Users/aaron/Documents/GitHub/wdm_test",
+    "--data-dir",
+    "/Users/aaron/Documents/GitHub/wdm_test/wdm_models_scripts/data",
+    "--case",
+    "gb_3mo",
+    "--tier",
+    "fast"
+   ],
+   "build": {
+    "gbonfly": "0.1.0",
+    "jax": "0.9.0.1",
+    "jaxlib": "0.9.0.1",
+    "machine": "arm64",
+    "numpy": "2.3.5",
+    "platform": "macOS-14.3.1-arm64-arm-64bit",
+    "python": "3.12.4",
+    "scipy": "1.16.3",
+    "threads": {
+     "JAX_ENABLE_X64": "true",
+     "JAX_PLATFORMS": "cpu",
+     "MKL_NUM_THREADS": null,
+     "OMP_NUM_THREADS": null,
+     "OPENBLAS_NUM_THREADS": null,
+     "VECLIB_MAXIMUM_THREADS": null,
+     "XLA_FLAGS": null
+    }
+   },
+   "inputs": {
+    "wdm_models_scripts/data/galactic_binary/prepared/gb_3mo.npz": "ad440fc145b693c46bed9f16a90ba1d64b4fff60f2bdb6209c9f58482d0b6afc",
+    "wdm_paper_2/final_chains/gb_likelihood_matrix/manifest.json": "3e7aa793544b47610a5f15b916c514b432ff738e22ec4f02b120738093f8a499"
+   },
+   "lineage": "C",
+   "subcommand": "stress",
+   "worker": "gb_legacy"
+  },
+  "galactic_binary/stress/gb_3mo/mid_pad.fast.json": {
+   "args": [
+    "--workspace",
+    "/Users/aaron/Documents/GitHub/wdm_test",
+    "--data-dir",
+    "/Users/aaron/Documents/GitHub/wdm_test/wdm_models_scripts/data",
+    "--case",
+    "gb_3mo",
+    "--tier",
+    "fast"
+   ],
+   "build": {
+    "gbonfly": "0.1.0",
+    "jax": "0.9.0.1",
+    "jaxlib": "0.9.0.1",
+    "machine": "arm64",
+    "numpy": "2.3.5",
+    "platform": "macOS-14.3.1-arm64-arm-64bit",
+    "python": "3.12.4",
+    "scipy": "1.16.3",
+    "threads": {
+     "JAX_ENABLE_X64": "true",
+     "JAX_PLATFORMS": "cpu",
+     "MKL_NUM_THREADS": null,
+     "OMP_NUM_THREADS": null,
+     "OPENBLAS_NUM_THREADS": null,
+     "VECLIB_MAXIMUM_THREADS": null,
+     "XLA_FLAGS": null
+    }
+   },
+   "inputs": {
+    "wdm_models_scripts/data/galactic_binary/prepared/gb_3mo.npz": "ad440fc145b693c46bed9f16a90ba1d64b4fff60f2bdb6209c9f58482d0b6afc",
+    "wdm_paper_2/final_chains/gb_likelihood_matrix/manifest.json": "3e7aa793544b47610a5f15b916c514b432ff738e22ec4f02b120738093f8a499"
+   },
+   "lineage": "C",
+   "subcommand": "stress",
+   "worker": "gb_legacy"
+  },
+  "galactic_binary/stress/gb_3mo/mid_raw.fast.json": {
+   "args": [
+    "--workspace",
+    "/Users/aaron/Documents/GitHub/wdm_test",
+    "--data-dir",
+    "/Users/aaron/Documents/GitHub/wdm_test/wdm_models_scripts/data",
+    "--case",
+    "gb_3mo",
+    "--tier",
+    "fast"
+   ],
+   "build": {
+    "gbonfly": "0.1.0",
+    "jax": "0.9.0.1",
+    "jaxlib": "0.9.0.1",
+    "machine": "arm64",
+    "numpy": "2.3.5",
+    "platform": "macOS-14.3.1-arm64-arm-64bit",
+    "python": "3.12.4",
+    "scipy": "1.16.3",
+    "threads": {
+     "JAX_ENABLE_X64": "true",
+     "JAX_PLATFORMS": "cpu",
+     "MKL_NUM_THREADS": null,
+     "OMP_NUM_THREADS": null,
+     "OPENBLAS_NUM_THREADS": null,
+     "VECLIB_MAXIMUM_THREADS": null,
+     "XLA_FLAGS": null
+    }
+   },
+   "inputs": {
+    "wdm_models_scripts/data/galactic_binary/prepared/gb_3mo.npz": "ad440fc145b693c46bed9f16a90ba1d64b4fff60f2bdb6209c9f58482d0b6afc",
+    "wdm_paper_2/final_chains/gb_likelihood_matrix/manifest.json": "3e7aa793544b47610a5f15b916c514b432ff738e22ec4f02b120738093f8a499"
+   },
+   "lineage": "C",
+   "subcommand": "stress",
+   "worker": "gb_legacy"
+  },
+  "galactic_binary/stress/gb_3mo/tri_cut.fast.json": {
+   "args": [
+    "--workspace",
+    "/Users/aaron/Documents/GitHub/wdm_test",
+    "--data-dir",
+    "/Users/aaron/Documents/GitHub/wdm_test/wdm_models_scripts/data",
+    "--case",
+    "gb_3mo",
+    "--tier",
+    "fast"
+   ],
+   "build": {
+    "gbonfly": "0.1.0",
+    "jax": "0.9.0.1",
+    "jaxlib": "0.9.0.1",
+    "machine": "arm64",
+    "numpy": "2.3.5",
+    "platform": "macOS-14.3.1-arm64-arm-64bit",
+    "python": "3.12.4",
+    "scipy": "1.16.3",
+    "threads": {
+     "JAX_ENABLE_X64": "true",
+     "JAX_PLATFORMS": "cpu",
+     "MKL_NUM_THREADS": null,
+     "OMP_NUM_THREADS": null,
+     "OPENBLAS_NUM_THREADS": null,
+     "VECLIB_MAXIMUM_THREADS": null,
+     "XLA_FLAGS": null
+    }
+   },
+   "inputs": {
+    "wdm_models_scripts/data/galactic_binary/prepared/gb_3mo.npz": "ad440fc145b693c46bed9f16a90ba1d64b4fff60f2bdb6209c9f58482d0b6afc",
+    "wdm_paper_2/final_chains/gb_likelihood_matrix/manifest.json": "3e7aa793544b47610a5f15b916c514b432ff738e22ec4f02b120738093f8a499"
+   },
+   "lineage": "C",
+   "subcommand": "stress",
+   "worker": "gb_legacy"
+  },
+  "galactic_binary/stress/gb_3mo/tri_exact.fast.json": {
+   "args": [
+    "--workspace",
+    "/Users/aaron/Documents/GitHub/wdm_test",
+    "--data-dir",
+    "/Users/aaron/Documents/GitHub/wdm_test/wdm_models_scripts/data",
+    "--case",
+    "gb_3mo",
+    "--tier",
+    "fast"
+   ],
+   "build": {
+    "gbonfly": "0.1.0",
+    "jax": "0.9.0.1",
+    "jaxlib": "0.9.0.1",
+    "machine": "arm64",
+    "numpy": "2.3.5",
+    "platform": "macOS-14.3.1-arm64-arm-64bit",
+    "python": "3.12.4",
+    "scipy": "1.16.3",
+    "threads": {
+     "JAX_ENABLE_X64": "true",
+     "JAX_PLATFORMS": "cpu",
+     "MKL_NUM_THREADS": null,
+     "OMP_NUM_THREADS": null,
+     "OPENBLAS_NUM_THREADS": null,
+     "VECLIB_MAXIMUM_THREADS": null,
+     "XLA_FLAGS": null
+    }
+   },
+   "inputs": {
+    "wdm_models_scripts/data/galactic_binary/prepared/gb_3mo.npz": "ad440fc145b693c46bed9f16a90ba1d64b4fff60f2bdb6209c9f58482d0b6afc",
+    "wdm_paper_2/final_chains/gb_likelihood_matrix/manifest.json": "3e7aa793544b47610a5f15b916c514b432ff738e22ec4f02b120738093f8a499"
+   },
+   "lineage": "C",
+   "subcommand": "stress",
+   "worker": "gb_legacy"
+  },
+  "galactic_binary/stress/gb_3mo/tri_pad.fast.json": {
+   "args": [
+    "--workspace",
+    "/Users/aaron/Documents/GitHub/wdm_test",
+    "--data-dir",
+    "/Users/aaron/Documents/GitHub/wdm_test/wdm_models_scripts/data",
+    "--case",
+    "gb_3mo",
+    "--tier",
+    "fast"
+   ],
+   "build": {
+    "gbonfly": "0.1.0",
+    "jax": "0.9.0.1",
+    "jaxlib": "0.9.0.1",
+    "machine": "arm64",
+    "numpy": "2.3.5",
+    "platform": "macOS-14.3.1-arm64-arm-64bit",
+    "python": "3.12.4",
+    "scipy": "1.16.3",
+    "threads": {
+     "JAX_ENABLE_X64": "true",
+     "JAX_PLATFORMS": "cpu",
+     "MKL_NUM_THREADS": null,
+     "OMP_NUM_THREADS": null,
+     "OPENBLAS_NUM_THREADS": null,
+     "VECLIB_MAXIMUM_THREADS": null,
+     "XLA_FLAGS": null
+    }
+   },
+   "inputs": {
+    "wdm_models_scripts/data/galactic_binary/prepared/gb_3mo.npz": "ad440fc145b693c46bed9f16a90ba1d64b4fff60f2bdb6209c9f58482d0b6afc",
+    "wdm_paper_2/final_chains/gb_likelihood_matrix/manifest.json": "3e7aa793544b47610a5f15b916c514b432ff738e22ec4f02b120738093f8a499"
+   },
+   "lineage": "C",
+   "subcommand": "stress",
+   "worker": "gb_legacy"
+  },
+  "galactic_binary/stress/gb_3mo/tri_raw.fast.json": {
+   "args": [
+    "--workspace",
+    "/Users/aaron/Documents/GitHub/wdm_test",
+    "--data-dir",
+    "/Users/aaron/Documents/GitHub/wdm_test/wdm_models_scripts/data",
+    "--case",
+    "gb_3mo",
+    "--tier",
+    "fast"
+   ],
+   "build": {
+    "gbonfly": "0.1.0",
+    "jax": "0.9.0.1",
+    "jaxlib": "0.9.0.1",
+    "machine": "arm64",
+    "numpy": "2.3.5",
+    "platform": "macOS-14.3.1-arm64-arm-64bit",
+    "python": "3.12.4",
+    "scipy": "1.16.3",
+    "threads": {
+     "JAX_ENABLE_X64": "true",
+     "JAX_PLATFORMS": "cpu",
+     "MKL_NUM_THREADS": null,
+     "OMP_NUM_THREADS": null,
+     "OPENBLAS_NUM_THREADS": null,
+     "VECLIB_MAXIMUM_THREADS": null,
+     "XLA_FLAGS": null
+    }
+   },
+   "inputs": {
+    "wdm_models_scripts/data/galactic_binary/prepared/gb_3mo.npz": "ad440fc145b693c46bed9f16a90ba1d64b4fff60f2bdb6209c9f58482d0b6afc",
+    "wdm_paper_2/final_chains/gb_likelihood_matrix/manifest.json": "3e7aa793544b47610a5f15b916c514b432ff738e22ec4f02b120738093f8a499"
+   },
+   "lineage": "C",
+   "subcommand": "stress",
+   "worker": "gb_legacy"
+  },
+  "galactic_binary/stress/gb_3mo/whittle_cut.fast.json": {
+   "args": [
+    "--workspace",
+    "/Users/aaron/Documents/GitHub/wdm_test",
+    "--data-dir",
+    "/Users/aaron/Documents/GitHub/wdm_test/wdm_models_scripts/data",
+    "--case",
+    "gb_3mo",
+    "--tier",
+    "fast"
+   ],
+   "build": {
+    "gbonfly": "0.1.0",
+    "jax": "0.9.0.1",
+    "jaxlib": "0.9.0.1",
+    "machine": "arm64",
+    "numpy": "2.3.5",
+    "platform": "macOS-14.3.1-arm64-arm-64bit",
+    "python": "3.12.4",
+    "scipy": "1.16.3",
+    "threads": {
+     "JAX_ENABLE_X64": "true",
+     "JAX_PLATFORMS": "cpu",
+     "MKL_NUM_THREADS": null,
+     "OMP_NUM_THREADS": null,
+     "OPENBLAS_NUM_THREADS": null,
+     "VECLIB_MAXIMUM_THREADS": null,
+     "XLA_FLAGS": null
+    }
+   },
+   "inputs": {
+    "wdm_models_scripts/data/galactic_binary/prepared/gb_3mo.npz": "ad440fc145b693c46bed9f16a90ba1d64b4fff60f2bdb6209c9f58482d0b6afc",
+    "wdm_paper_2/final_chains/gb_likelihood_matrix/manifest.json": "3e7aa793544b47610a5f15b916c514b432ff738e22ec4f02b120738093f8a499"
+   },
+   "lineage": "C",
+   "subcommand": "stress",
+   "worker": "gb_legacy"
+  },
+  "galactic_binary/stress/gb_3mo/whittle_raw.fast.json": {
+   "args": [
+    "--workspace",
+    "/Users/aaron/Documents/GitHub/wdm_test",
+    "--data-dir",
+    "/Users/aaron/Documents/GitHub/wdm_test/wdm_models_scripts/data",
+    "--case",
+    "gb_3mo",
+    "--tier",
+    "fast"
+   ],
+   "build": {
+    "gbonfly": "0.1.0",
+    "jax": "0.9.0.1",
+    "jaxlib": "0.9.0.1",
+    "machine": "arm64",
+    "numpy": "2.3.5",
+    "platform": "macOS-14.3.1-arm64-arm-64bit",
+    "python": "3.12.4",
+    "scipy": "1.16.3",
+    "threads": {
+     "JAX_ENABLE_X64": "true",
+     "JAX_PLATFORMS": "cpu",
+     "MKL_NUM_THREADS": null,
+     "OMP_NUM_THREADS": null,
+     "OPENBLAS_NUM_THREADS": null,
+     "VECLIB_MAXIMUM_THREADS": null,
+     "XLA_FLAGS": null
+    }
+   },
+   "inputs": {
+    "wdm_models_scripts/data/galactic_binary/prepared/gb_3mo.npz": "ad440fc145b693c46bed9f16a90ba1d64b4fff60f2bdb6209c9f58482d0b6afc",
+    "wdm_paper_2/final_chains/gb_likelihood_matrix/manifest.json": "3e7aa793544b47610a5f15b916c514b432ff738e22ec4f02b120738093f8a499"
+   },
+   "lineage": "C",
+   "subcommand": "stress",
+   "worker": "gb_legacy"
+  },
+  "galactic_binary/stress/gb_6mo/band_cut.fast.json": {
+   "args": [
+    "--workspace",
+    "/Users/aaron/Documents/GitHub/wdm_test",
+    "--data-dir",
+    "/Users/aaron/Documents/GitHub/wdm_test/wdm_models_scripts/data",
+    "--case",
+    "gb_6mo",
+    "--tier",
+    "fast"
+   ],
+   "build": {
+    "gbonfly": "0.1.0",
+    "jax": "0.9.0.1",
+    "jaxlib": "0.9.0.1",
+    "machine": "arm64",
+    "numpy": "2.3.5",
+    "platform": "macOS-14.3.1-arm64-arm-64bit",
+    "python": "3.12.4",
+    "scipy": "1.16.3",
+    "threads": {
+     "JAX_ENABLE_X64": "true",
+     "JAX_PLATFORMS": "cpu",
+     "MKL_NUM_THREADS": null,
+     "OMP_NUM_THREADS": null,
+     "OPENBLAS_NUM_THREADS": null,
+     "VECLIB_MAXIMUM_THREADS": null,
+     "XLA_FLAGS": null
+    }
+   },
+   "inputs": {
+    "wdm_models_scripts/data/galactic_binary/prepared/gb_6mo.npz": "2ced666ca77f564a40ae0a40baf707db6f913ee063e3df291baf2a0844dc9bd6",
+    "wdm_paper_2/final_chains/gb_likelihood_matrix/manifest.json": "3e7aa793544b47610a5f15b916c514b432ff738e22ec4f02b120738093f8a499"
+   },
+   "lineage": "C",
+   "subcommand": "stress",
+   "worker": "gb_legacy"
+  },
+  "galactic_binary/stress/gb_6mo/band_exact.fast.json": {
+   "args": [
+    "--workspace",
+    "/Users/aaron/Documents/GitHub/wdm_test",
+    "--data-dir",
+    "/Users/aaron/Documents/GitHub/wdm_test/wdm_models_scripts/data",
+    "--case",
+    "gb_6mo",
+    "--tier",
+    "fast"
+   ],
+   "build": {
+    "gbonfly": "0.1.0",
+    "jax": "0.9.0.1",
+    "jaxlib": "0.9.0.1",
+    "machine": "arm64",
+    "numpy": "2.3.5",
+    "platform": "macOS-14.3.1-arm64-arm-64bit",
+    "python": "3.12.4",
+    "scipy": "1.16.3",
+    "threads": {
+     "JAX_ENABLE_X64": "true",
+     "JAX_PLATFORMS": "cpu",
+     "MKL_NUM_THREADS": null,
+     "OMP_NUM_THREADS": null,
+     "OPENBLAS_NUM_THREADS": null,
+     "VECLIB_MAXIMUM_THREADS": null,
+     "XLA_FLAGS": null
+    }
+   },
+   "inputs": {
+    "wdm_models_scripts/data/galactic_binary/prepared/gb_6mo.npz": "2ced666ca77f564a40ae0a40baf707db6f913ee063e3df291baf2a0844dc9bd6",
+    "wdm_paper_2/final_chains/gb_likelihood_matrix/manifest.json": "3e7aa793544b47610a5f15b916c514b432ff738e22ec4f02b120738093f8a499"
+   },
+   "lineage": "C",
+   "subcommand": "stress",
+   "worker": "gb_legacy"
+  },
+  "galactic_binary/stress/gb_6mo/band_pad.fast.json": {
+   "args": [
+    "--workspace",
+    "/Users/aaron/Documents/GitHub/wdm_test",
+    "--data-dir",
+    "/Users/aaron/Documents/GitHub/wdm_test/wdm_models_scripts/data",
+    "--case",
+    "gb_6mo",
+    "--tier",
+    "fast"
+   ],
+   "build": {
+    "gbonfly": "0.1.0",
+    "jax": "0.9.0.1",
+    "jaxlib": "0.9.0.1",
+    "machine": "arm64",
+    "numpy": "2.3.5",
+    "platform": "macOS-14.3.1-arm64-arm-64bit",
+    "python": "3.12.4",
+    "scipy": "1.16.3",
+    "threads": {
+     "JAX_ENABLE_X64": "true",
+     "JAX_PLATFORMS": "cpu",
+     "MKL_NUM_THREADS": null,
+     "OMP_NUM_THREADS": null,
+     "OPENBLAS_NUM_THREADS": null,
+     "VECLIB_MAXIMUM_THREADS": null,
+     "XLA_FLAGS": null
+    }
+   },
+   "inputs": {
+    "wdm_models_scripts/data/galactic_binary/prepared/gb_6mo.npz": "2ced666ca77f564a40ae0a40baf707db6f913ee063e3df291baf2a0844dc9bd6",
+    "wdm_paper_2/final_chains/gb_likelihood_matrix/manifest.json": "3e7aa793544b47610a5f15b916c514b432ff738e22ec4f02b120738093f8a499"
+   },
+   "lineage": "C",
+   "subcommand": "stress",
+   "worker": "gb_legacy"
+  },
+  "galactic_binary/stress/gb_6mo/band_raw.fast.json": {
+   "args": [
+    "--workspace",
+    "/Users/aaron/Documents/GitHub/wdm_test",
+    "--data-dir",
+    "/Users/aaron/Documents/GitHub/wdm_test/wdm_models_scripts/data",
+    "--case",
+    "gb_6mo",
+    "--tier",
+    "fast"
+   ],
+   "build": {
+    "gbonfly": "0.1.0",
+    "jax": "0.9.0.1",
+    "jaxlib": "0.9.0.1",
+    "machine": "arm64",
+    "numpy": "2.3.5",
+    "platform": "macOS-14.3.1-arm64-arm-64bit",
+    "python": "3.12.4",
+    "scipy": "1.16.3",
+    "threads": {
+     "JAX_ENABLE_X64": "true",
+     "JAX_PLATFORMS": "cpu",
+     "MKL_NUM_THREADS": null,
+     "OMP_NUM_THREADS": null,
+     "OPENBLAS_NUM_THREADS": null,
+     "VECLIB_MAXIMUM_THREADS": null,
+     "XLA_FLAGS": null
+    }
+   },
+   "inputs": {
+    "wdm_models_scripts/data/galactic_binary/prepared/gb_6mo.npz": "2ced666ca77f564a40ae0a40baf707db6f913ee063e3df291baf2a0844dc9bd6",
+    "wdm_paper_2/final_chains/gb_likelihood_matrix/manifest.json": "3e7aa793544b47610a5f15b916c514b432ff738e22ec4f02b120738093f8a499"
+   },
+   "lineage": "C",
+   "subcommand": "stress",
+   "worker": "gb_legacy"
+  },
+  "galactic_binary/stress/gb_6mo/exact.fast.json": {
+   "args": [
+    "--workspace",
+    "/Users/aaron/Documents/GitHub/wdm_test",
+    "--data-dir",
+    "/Users/aaron/Documents/GitHub/wdm_test/wdm_models_scripts/data",
+    "--case",
+    "gb_6mo",
+    "--tier",
+    "fast"
+   ],
+   "build": {
+    "gbonfly": "0.1.0",
+    "jax": "0.9.0.1",
+    "jaxlib": "0.9.0.1",
+    "machine": "arm64",
+    "numpy": "2.3.5",
+    "platform": "macOS-14.3.1-arm64-arm-64bit",
+    "python": "3.12.4",
+    "scipy": "1.16.3",
+    "threads": {
+     "JAX_ENABLE_X64": "true",
+     "JAX_PLATFORMS": "cpu",
+     "MKL_NUM_THREADS": null,
+     "OMP_NUM_THREADS": null,
+     "OPENBLAS_NUM_THREADS": null,
+     "VECLIB_MAXIMUM_THREADS": null,
+     "XLA_FLAGS": null
+    }
+   },
+   "inputs": {
+    "wdm_models_scripts/data/galactic_binary/prepared/gb_6mo.npz": "2ced666ca77f564a40ae0a40baf707db6f913ee063e3df291baf2a0844dc9bd6",
+    "wdm_paper_2/final_chains/gb_likelihood_matrix/manifest.json": "3e7aa793544b47610a5f15b916c514b432ff738e22ec4f02b120738093f8a499"
+   },
+   "lineage": "C",
+   "subcommand": "stress",
+   "worker": "gb_legacy"
+  },
+  "galactic_binary/stress/gb_6mo/mid_cut.fast.json": {
+   "args": [
+    "--workspace",
+    "/Users/aaron/Documents/GitHub/wdm_test",
+    "--data-dir",
+    "/Users/aaron/Documents/GitHub/wdm_test/wdm_models_scripts/data",
+    "--case",
+    "gb_6mo",
+    "--tier",
+    "fast"
+   ],
+   "build": {
+    "gbonfly": "0.1.0",
+    "jax": "0.9.0.1",
+    "jaxlib": "0.9.0.1",
+    "machine": "arm64",
+    "numpy": "2.3.5",
+    "platform": "macOS-14.3.1-arm64-arm-64bit",
+    "python": "3.12.4",
+    "scipy": "1.16.3",
+    "threads": {
+     "JAX_ENABLE_X64": "true",
+     "JAX_PLATFORMS": "cpu",
+     "MKL_NUM_THREADS": null,
+     "OMP_NUM_THREADS": null,
+     "OPENBLAS_NUM_THREADS": null,
+     "VECLIB_MAXIMUM_THREADS": null,
+     "XLA_FLAGS": null
+    }
+   },
+   "inputs": {
+    "wdm_models_scripts/data/galactic_binary/prepared/gb_6mo.npz": "2ced666ca77f564a40ae0a40baf707db6f913ee063e3df291baf2a0844dc9bd6",
+    "wdm_paper_2/final_chains/gb_likelihood_matrix/manifest.json": "3e7aa793544b47610a5f15b916c514b432ff738e22ec4f02b120738093f8a499"
+   },
+   "lineage": "C",
+   "subcommand": "stress",
+   "worker": "gb_legacy"
+  },
+  "galactic_binary/stress/gb_6mo/mid_exact.fast.json": {
+   "args": [
+    "--workspace",
+    "/Users/aaron/Documents/GitHub/wdm_test",
+    "--data-dir",
+    "/Users/aaron/Documents/GitHub/wdm_test/wdm_models_scripts/data",
+    "--case",
+    "gb_6mo",
+    "--tier",
+    "fast"
+   ],
+   "build": {
+    "gbonfly": "0.1.0",
+    "jax": "0.9.0.1",
+    "jaxlib": "0.9.0.1",
+    "machine": "arm64",
+    "numpy": "2.3.5",
+    "platform": "macOS-14.3.1-arm64-arm-64bit",
+    "python": "3.12.4",
+    "scipy": "1.16.3",
+    "threads": {
+     "JAX_ENABLE_X64": "true",
+     "JAX_PLATFORMS": "cpu",
+     "MKL_NUM_THREADS": null,
+     "OMP_NUM_THREADS": null,
+     "OPENBLAS_NUM_THREADS": null,
+     "VECLIB_MAXIMUM_THREADS": null,
+     "XLA_FLAGS": null
+    }
+   },
+   "inputs": {
+    "wdm_models_scripts/data/galactic_binary/prepared/gb_6mo.npz": "2ced666ca77f564a40ae0a40baf707db6f913ee063e3df291baf2a0844dc9bd6",
+    "wdm_paper_2/final_chains/gb_likelihood_matrix/manifest.json": "3e7aa793544b47610a5f15b916c514b432ff738e22ec4f02b120738093f8a499"
+   },
+   "lineage": "C",
+   "subcommand": "stress",
+   "worker": "gb_legacy"
+  },
+  "galactic_binary/stress/gb_6mo/mid_pad.fast.json": {
+   "args": [
+    "--workspace",
+    "/Users/aaron/Documents/GitHub/wdm_test",
+    "--data-dir",
+    "/Users/aaron/Documents/GitHub/wdm_test/wdm_models_scripts/data",
+    "--case",
+    "gb_6mo",
+    "--tier",
+    "fast"
+   ],
+   "build": {
+    "gbonfly": "0.1.0",
+    "jax": "0.9.0.1",
+    "jaxlib": "0.9.0.1",
+    "machine": "arm64",
+    "numpy": "2.3.5",
+    "platform": "macOS-14.3.1-arm64-arm-64bit",
+    "python": "3.12.4",
+    "scipy": "1.16.3",
+    "threads": {
+     "JAX_ENABLE_X64": "true",
+     "JAX_PLATFORMS": "cpu",
+     "MKL_NUM_THREADS": null,
+     "OMP_NUM_THREADS": null,
+     "OPENBLAS_NUM_THREADS": null,
+     "VECLIB_MAXIMUM_THREADS": null,
+     "XLA_FLAGS": null
+    }
+   },
+   "inputs": {
+    "wdm_models_scripts/data/galactic_binary/prepared/gb_6mo.npz": "2ced666ca77f564a40ae0a40baf707db6f913ee063e3df291baf2a0844dc9bd6",
+    "wdm_paper_2/final_chains/gb_likelihood_matrix/manifest.json": "3e7aa793544b47610a5f15b916c514b432ff738e22ec4f02b120738093f8a499"
+   },
+   "lineage": "C",
+   "subcommand": "stress",
+   "worker": "gb_legacy"
+  },
+  "galactic_binary/stress/gb_6mo/mid_raw.fast.json": {
+   "args": [
+    "--workspace",
+    "/Users/aaron/Documents/GitHub/wdm_test",
+    "--data-dir",
+    "/Users/aaron/Documents/GitHub/wdm_test/wdm_models_scripts/data",
+    "--case",
+    "gb_6mo",
+    "--tier",
+    "fast"
+   ],
+   "build": {
+    "gbonfly": "0.1.0",
+    "jax": "0.9.0.1",
+    "jaxlib": "0.9.0.1",
+    "machine": "arm64",
+    "numpy": "2.3.5",
+    "platform": "macOS-14.3.1-arm64-arm-64bit",
+    "python": "3.12.4",
+    "scipy": "1.16.3",
+    "threads": {
+     "JAX_ENABLE_X64": "true",
+     "JAX_PLATFORMS": "cpu",
+     "MKL_NUM_THREADS": null,
+     "OMP_NUM_THREADS": null,
+     "OPENBLAS_NUM_THREADS": null,
+     "VECLIB_MAXIMUM_THREADS": null,
+     "XLA_FLAGS": null
+    }
+   },
+   "inputs": {
+    "wdm_models_scripts/data/galactic_binary/prepared/gb_6mo.npz": "2ced666ca77f564a40ae0a40baf707db6f913ee063e3df291baf2a0844dc9bd6",
+    "wdm_paper_2/final_chains/gb_likelihood_matrix/manifest.json": "3e7aa793544b47610a5f15b916c514b432ff738e22ec4f02b120738093f8a499"
+   },
+   "lineage": "C",
+   "subcommand": "stress",
+   "worker": "gb_legacy"
+  },
+  "galactic_binary/stress/gb_6mo/tri_cut.fast.json": {
+   "args": [
+    "--workspace",
+    "/Users/aaron/Documents/GitHub/wdm_test",
+    "--data-dir",
+    "/Users/aaron/Documents/GitHub/wdm_test/wdm_models_scripts/data",
+    "--case",
+    "gb_6mo",
+    "--tier",
+    "fast"
+   ],
+   "build": {
+    "gbonfly": "0.1.0",
+    "jax": "0.9.0.1",
+    "jaxlib": "0.9.0.1",
+    "machine": "arm64",
+    "numpy": "2.3.5",
+    "platform": "macOS-14.3.1-arm64-arm-64bit",
+    "python": "3.12.4",
+    "scipy": "1.16.3",
+    "threads": {
+     "JAX_ENABLE_X64": "true",
+     "JAX_PLATFORMS": "cpu",
+     "MKL_NUM_THREADS": null,
+     "OMP_NUM_THREADS": null,
+     "OPENBLAS_NUM_THREADS": null,
+     "VECLIB_MAXIMUM_THREADS": null,
+     "XLA_FLAGS": null
+    }
+   },
+   "inputs": {
+    "wdm_models_scripts/data/galactic_binary/prepared/gb_6mo.npz": "2ced666ca77f564a40ae0a40baf707db6f913ee063e3df291baf2a0844dc9bd6",
+    "wdm_paper_2/final_chains/gb_likelihood_matrix/manifest.json": "3e7aa793544b47610a5f15b916c514b432ff738e22ec4f02b120738093f8a499"
+   },
+   "lineage": "C",
+   "subcommand": "stress",
+   "worker": "gb_legacy"
+  },
+  "galactic_binary/stress/gb_6mo/tri_exact.fast.json": {
+   "args": [
+    "--workspace",
+    "/Users/aaron/Documents/GitHub/wdm_test",
+    "--data-dir",
+    "/Users/aaron/Documents/GitHub/wdm_test/wdm_models_scripts/data",
+    "--case",
+    "gb_6mo",
+    "--tier",
+    "fast"
+   ],
+   "build": {
+    "gbonfly": "0.1.0",
+    "jax": "0.9.0.1",
+    "jaxlib": "0.9.0.1",
+    "machine": "arm64",
+    "numpy": "2.3.5",
+    "platform": "macOS-14.3.1-arm64-arm-64bit",
+    "python": "3.12.4",
+    "scipy": "1.16.3",
+    "threads": {
+     "JAX_ENABLE_X64": "true",
+     "JAX_PLATFORMS": "cpu",
+     "MKL_NUM_THREADS": null,
+     "OMP_NUM_THREADS": null,
+     "OPENBLAS_NUM_THREADS": null,
+     "VECLIB_MAXIMUM_THREADS": null,
+     "XLA_FLAGS": null
+    }
+   },
+   "inputs": {
+    "wdm_models_scripts/data/galactic_binary/prepared/gb_6mo.npz": "2ced666ca77f564a40ae0a40baf707db6f913ee063e3df291baf2a0844dc9bd6",
+    "wdm_paper_2/final_chains/gb_likelihood_matrix/manifest.json": "3e7aa793544b47610a5f15b916c514b432ff738e22ec4f02b120738093f8a499"
+   },
+   "lineage": "C",
+   "subcommand": "stress",
+   "worker": "gb_legacy"
+  },
+  "galactic_binary/stress/gb_6mo/tri_pad.fast.json": {
+   "args": [
+    "--workspace",
+    "/Users/aaron/Documents/GitHub/wdm_test",
+    "--data-dir",
+    "/Users/aaron/Documents/GitHub/wdm_test/wdm_models_scripts/data",
+    "--case",
+    "gb_6mo",
+    "--tier",
+    "fast"
+   ],
+   "build": {
+    "gbonfly": "0.1.0",
+    "jax": "0.9.0.1",
+    "jaxlib": "0.9.0.1",
+    "machine": "arm64",
+    "numpy": "2.3.5",
+    "platform": "macOS-14.3.1-arm64-arm-64bit",
+    "python": "3.12.4",
+    "scipy": "1.16.3",
+    "threads": {
+     "JAX_ENABLE_X64": "true",
+     "JAX_PLATFORMS": "cpu",
+     "MKL_NUM_THREADS": null,
+     "OMP_NUM_THREADS": null,
+     "OPENBLAS_NUM_THREADS": null,
+     "VECLIB_MAXIMUM_THREADS": null,
+     "XLA_FLAGS": null
+    }
+   },
+   "inputs": {
+    "wdm_models_scripts/data/galactic_binary/prepared/gb_6mo.npz": "2ced666ca77f564a40ae0a40baf707db6f913ee063e3df291baf2a0844dc9bd6",
+    "wdm_paper_2/final_chains/gb_likelihood_matrix/manifest.json": "3e7aa793544b47610a5f15b916c514b432ff738e22ec4f02b120738093f8a499"
+   },
+   "lineage": "C",
+   "subcommand": "stress",
+   "worker": "gb_legacy"
+  },
+  "galactic_binary/stress/gb_6mo/tri_raw.fast.json": {
+   "args": [
+    "--workspace",
+    "/Users/aaron/Documents/GitHub/wdm_test",
+    "--data-dir",
+    "/Users/aaron/Documents/GitHub/wdm_test/wdm_models_scripts/data",
+    "--case",
+    "gb_6mo",
+    "--tier",
+    "fast"
+   ],
+   "build": {
+    "gbonfly": "0.1.0",
+    "jax": "0.9.0.1",
+    "jaxlib": "0.9.0.1",
+    "machine": "arm64",
+    "numpy": "2.3.5",
+    "platform": "macOS-14.3.1-arm64-arm-64bit",
+    "python": "3.12.4",
+    "scipy": "1.16.3",
+    "threads": {
+     "JAX_ENABLE_X64": "true",
+     "JAX_PLATFORMS": "cpu",
+     "MKL_NUM_THREADS": null,
+     "OMP_NUM_THREADS": null,
+     "OPENBLAS_NUM_THREADS": null,
+     "VECLIB_MAXIMUM_THREADS": null,
+     "XLA_FLAGS": null
+    }
+   },
+   "inputs": {
+    "wdm_models_scripts/data/galactic_binary/prepared/gb_6mo.npz": "2ced666ca77f564a40ae0a40baf707db6f913ee063e3df291baf2a0844dc9bd6",
+    "wdm_paper_2/final_chains/gb_likelihood_matrix/manifest.json": "3e7aa793544b47610a5f15b916c514b432ff738e22ec4f02b120738093f8a499"
+   },
+   "lineage": "C",
+   "subcommand": "stress",
+   "worker": "gb_legacy"
+  },
+  "galactic_binary/stress/gb_6mo/whittle_cut.fast.json": {
+   "args": [
+    "--workspace",
+    "/Users/aaron/Documents/GitHub/wdm_test",
+    "--data-dir",
+    "/Users/aaron/Documents/GitHub/wdm_test/wdm_models_scripts/data",
+    "--case",
+    "gb_6mo",
+    "--tier",
+    "fast"
+   ],
+   "build": {
+    "gbonfly": "0.1.0",
+    "jax": "0.9.0.1",
+    "jaxlib": "0.9.0.1",
+    "machine": "arm64",
+    "numpy": "2.3.5",
+    "platform": "macOS-14.3.1-arm64-arm-64bit",
+    "python": "3.12.4",
+    "scipy": "1.16.3",
+    "threads": {
+     "JAX_ENABLE_X64": "true",
+     "JAX_PLATFORMS": "cpu",
+     "MKL_NUM_THREADS": null,
+     "OMP_NUM_THREADS": null,
+     "OPENBLAS_NUM_THREADS": null,
+     "VECLIB_MAXIMUM_THREADS": null,
+     "XLA_FLAGS": null
+    }
+   },
+   "inputs": {
+    "wdm_models_scripts/data/galactic_binary/prepared/gb_6mo.npz": "2ced666ca77f564a40ae0a40baf707db6f913ee063e3df291baf2a0844dc9bd6",
+    "wdm_paper_2/final_chains/gb_likelihood_matrix/manifest.json": "3e7aa793544b47610a5f15b916c514b432ff738e22ec4f02b120738093f8a499"
+   },
+   "lineage": "C",
+   "subcommand": "stress",
+   "worker": "gb_legacy"
+  },
+  "galactic_binary/stress/gb_6mo/whittle_raw.fast.json": {
+   "args": [
+    "--workspace",
+    "/Users/aaron/Documents/GitHub/wdm_test",
+    "--data-dir",
+    "/Users/aaron/Documents/GitHub/wdm_test/wdm_models_scripts/data",
+    "--case",
+    "gb_6mo",
+    "--tier",
+    "fast"
+   ],
+   "build": {
+    "gbonfly": "0.1.0",
+    "jax": "0.9.0.1",
+    "jaxlib": "0.9.0.1",
+    "machine": "arm64",
+    "numpy": "2.3.5",
+    "platform": "macOS-14.3.1-arm64-arm-64bit",
+    "python": "3.12.4",
+    "scipy": "1.16.3",
+    "threads": {
+     "JAX_ENABLE_X64": "true",
+     "JAX_PLATFORMS": "cpu",
+     "MKL_NUM_THREADS": null,
+     "OMP_NUM_THREADS": null,
+     "OPENBLAS_NUM_THREADS": null,
+     "VECLIB_MAXIMUM_THREADS": null,
+     "XLA_FLAGS": null
+    }
+   },
+   "inputs": {
+    "wdm_models_scripts/data/galactic_binary/prepared/gb_6mo.npz": "2ced666ca77f564a40ae0a40baf707db6f913ee063e3df291baf2a0844dc9bd6",
+    "wdm_paper_2/final_chains/gb_likelihood_matrix/manifest.json": "3e7aa793544b47610a5f15b916c514b432ff738e22ec4f02b120738093f8a499"
+   },
+   "lineage": "C",
+   "subcommand": "stress",
    "worker": "gb_legacy"
   }
  },
