@@ -1,0 +1,105 @@
+"""C4: wdm.noise and wdm.stationary against the frozen oracle, bit for bit."""
+
+from __future__ import annotations
+
+import numpy as np
+import pytest
+import vendored_2f7136c.noise as onoise
+import vendored_2f7136c.stationary as ostat
+
+import wdm.noise as noise
+import wdm.stationary as stat
+
+GRIDS = [(4, 8, 1.0), (8, 16, 0.5), (8, 32, 1.7), (16, 32, 2.0**-10)]
+
+
+def _psd(f):
+    f = np.asarray(f, dtype=float)
+    return 1.0 + 0.3 / (np.abs(f) + 0.05) ** 2 + 5.0 * f**2
+
+
+def _psd32(f):
+    return _psd(f).astype(np.float32)
+
+
+def _psd_ft(f, t):
+    return np.outer(_psd(f), 1.0 + 0.1 * np.asarray(t) / (1.0 + np.max(t)))
+
+
+def test_dropped_and_renamed_names():
+    for gone in ("build_lambda_blocks", "build_lambda_blocks_packed", "unpack_diag_block",
+                 "assemble_lambda", "lambda_to_psd", "lambda_to_psd_slab"):
+        assert not hasattr(stat, gone), gone
+    assert not hasattr(noise, "_generate_colored_noise")
+    assert {"psd_from_K", "psd_from_lambda_blocks"} <= set(stat.__all__)
+    assert "colored_noise" in noise.__all__
+
+
+@pytest.mark.parametrize("grid", GRIDS)
+@pytest.mark.parametrize("psd", [_psd, _psd32])
+def test_variance_builders_are_bitwise_the_oracle(grid, psd):
+    Nf, Nt, dt = grid
+    for name in ("whittle_variance", "band_averaged_variance"):
+        got = getattr(noise, name)(Nf, Nt, dt, psd)
+        ref = getattr(onoise, name)(Nf, Nt, dt, psd)
+        assert got.dtype == ref.dtype and np.array_equal(got, ref), name
+    assert np.array_equal(noise.evolutionary_variance(Nf, Nt, dt, _psd_ft),
+                          onoise.evolutionary_variance(Nf, Nt, dt, _psd_ft))
+    band = noise.evaluate_psd_on_band_grid(Nf, dt, psd)
+    assert np.array_equal(band, onoise.evaluate_psd_on_band_grid(Nf, dt, psd))
+    assert np.array_equal(noise.whittle_variance_from_array(Nt, band),
+                          onoise.whittle_variance_from_array(Nt, band))
+
+
+def test_colored_noise_and_empirical_variance_are_bitwise_the_oracle():
+    Nf, Nt, dt = 8, 16, 0.5
+    a = noise.colored_noise(Nf * Nt, dt, _psd, np.random.default_rng(7))
+    b = onoise._generate_colored_noise(Nf * Nt, dt, _psd, np.random.default_rng(7))
+    assert np.array_equal(a, b)
+    assert np.array_equal(noise.empirical_variance(Nf, Nt, dt, _psd, 20, seed=3),
+                          onoise.empirical_variance(Nf, Nt, dt, _psd, 20, seed=3))
+
+
+@pytest.mark.parametrize("grid", GRIDS)
+def test_stationary_builders_are_bitwise_the_oracle(grid, rng):
+    Nf, Nt, dt = grid
+    N = Nf * Nt
+    S_rfft = _psd(np.fft.rfftfreq(N, d=dt))
+    for noise_in in (_psd, S_rfft):
+        d1, o1, n1 = stat.build_lambda_blocks_full_active(Nf, Nt, dt, noise_in)
+        d2, o2, n2 = ostat.build_lambda_blocks_full_active(Nf, Nt, dt, noise_in)
+        assert all(np.array_equal(a, b) for a, b in zip(d1, d2, strict=True))
+        assert all(np.array_equal(a, b) for a, b in zip(o1, o2, strict=True))
+        assert all(np.array_equal(a, b) for a, b in zip(n1, n2, strict=True))
+        assert np.array_equal(stat.assemble_lambda_full_active(d1, o1, n1, Nf, Nt),
+                              ostat.assemble_lambda_full_active(d2, o2, n2, Nf, Nt))
+        K1, L1 = stat.build_K_full_active(Nf, Nt, dt, noise_in)
+        K2, L2 = ostat.build_K_full_active(Nf, Nt, dt, noise_in)
+        assert all(np.array_equal(a, b) for a, b in zip(K1 + L1, K2 + L2, strict=True))
+        assert np.array_equal(stat.psd_from_K(K1, Nf, Nt, dt),
+                              ostat.lambda_to_psd_slab(K2, Nf, Nt, dt))
+        assert np.array_equal(stat.psd_from_lambda_blocks(d1, o1, n1, Nf, Nt, dt),
+                              ostat.lambda_to_psd(d2, o2, n2, Nf, Nt, dt))
+    x = rng.standard_normal((Nf + 1, Nt))
+    assert np.array_equal(stat.apply_lambda_from_psd(x, Nf, Nt, dt, S_rfft),
+                          ostat.apply_lambda_from_psd(x, Nf, Nt, dt, S_rfft))
+
+
+@pytest.mark.parametrize("grid", GRIDS)
+def test_psd_round_trips(grid):
+    Nf, Nt, dt = grid
+    N = Nf * Nt
+    S = _psd(np.fft.rfftfreq(N, d=dt))
+    K, _ = stat.build_K_full_active(Nf, Nt, dt, S)
+    d, o, n = stat.build_lambda_blocks_full_active(Nf, Nt, dt, S)
+    assert np.max(np.abs(stat.psd_from_K(K, Nf, Nt, dt) / S - 1)) < 1e-12
+    assert np.max(np.abs(stat.psd_from_lambda_blocks(d, o, n, Nf, Nt, dt) / S - 1)) < 1e-12
+
+
+def test_apply_lambda_from_psd_on_jax(jax_be, rng):
+    Nf, Nt, dt = 8, 16, 0.5
+    S = _psd(np.fft.rfftfreq(Nf * Nt, d=dt))
+    x = rng.standard_normal((Nf + 1, Nt))
+    ref = stat.apply_lambda_from_psd(x, Nf, Nt, dt, S)
+    got = np.asarray(stat.apply_lambda_from_psd(jax_be.asarray(x), Nf, Nt, dt, jax_be.asarray(S)))
+    assert np.max(np.abs(got - ref)) <= 1e-13 * np.max(np.abs(ref))

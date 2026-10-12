@@ -53,6 +53,7 @@ type PsdFtFunc = Callable[[Array, Array], Array]
 
 __all__ = [
     "band_averaged_variance",
+    "colored_noise",
     "empirical_variance",
     "evaluate_psd_on_band_grid",
     "evolutionary_variance",
@@ -318,13 +319,17 @@ def evolutionary_variance(
     return 0.5 * Sn_grid
 
 
-def _generate_colored_noise(
+def colored_noise(
     N: int,
     dt: float,
     Sn_func: PsdFunc,
     rng: np.random.Generator,
 ) -> CArray:
     """Generate one realization of stationary noise with PSD $S_n(f)$.
+
+    Public since wdm-paper 1.0 (it was the vendored private
+    ``_generate_colored_noise``; same draws, same order: interior real parts,
+    interior imaginary parts, DC, Nyquist).  $O(N\\log N)$, NumPy only.
 
     Returns the rfft of the time-domain noise, with the convention
     $E[|X_j|^2] = N\\,S_n(f_j)/(2\\,\\delta t)$ at **every** bin.
@@ -341,7 +346,7 @@ def _generate_colored_noise(
        ``src/wdm/summary.md``.
     """
     freqs = np.fft.rfftfreq(N, d=dt)
-    Sn = sanitize_psd(Sn_func(freqs), "_generate_colored_noise")
+    Sn = sanitize_psd(Sn_func(freqs), "colored_noise")
     sigma_full = np.sqrt(N * Sn / (2.0 * dt))
 
     n_rfft = N // 2 + 1
@@ -405,7 +410,7 @@ def empirical_variance(
     rng = np.random.default_rng(seed)
     accum = np.zeros((Nf + 1, Nt))
     for _ in range(n_realizations):
-        x_rfft = _generate_colored_noise(N, dt, Sn_func, rng)
+        x_rfft = colored_noise(N, dt, Sn_func, rng)
         w = forward(x_rfft, Nf, Nt, dt)
         accum += w * w
     return accum / n_realizations

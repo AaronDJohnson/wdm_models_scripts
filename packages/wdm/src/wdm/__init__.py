@@ -68,18 +68,14 @@ Explicit matrix construction (in :mod:`wdm.matrix`):
 
 Fast stationary noise covariance (in :mod:`wdm.stationary`):
 
-* :func:`stationary.build_lambda_blocks`,
-  :func:`stationary.build_lambda_blocks_packed` (interior bands only)
 * :func:`stationary.build_lambda_blocks_full_active` (interior + edges,
   matches dense $W_a\\,C\\,W_a^T$ to machine precision)
-* :func:`stationary.assemble_lambda`,
-  :func:`stationary.assemble_lambda_full_active`,
-  :func:`stationary.unpack_diag_block`
+* :func:`stationary.assemble_lambda_full_active`
 * :func:`stationary.is_diagonal`
-* :func:`stationary.lambda_to_psd` (fast inverse: $\\Lambda \\to S_n(f)$)
+* :func:`stationary.psd_from_lambda_blocks` (fast inverse: $\\Lambda \\to S_n(f)$)
 * :func:`stationary.apply_lambda_from_psd` ($\\Lambda x$ without assembling
   $\\Lambda$; $O(N \\log N_t)$ per call)
-* :func:`stationary.build_K_full_active`, :func:`stationary.lambda_to_psd_slab`
+* :func:`stationary.build_K_full_active`, :func:`stationary.psd_from_K`
   (compact $\\Lambda$: one length-$N_t$ vector per band pair, and the inverse
   taken straight from it)
 

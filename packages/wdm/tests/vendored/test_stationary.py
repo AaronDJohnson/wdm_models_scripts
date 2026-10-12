@@ -7,14 +7,22 @@ import pytest
 
 from wdm.matrix import active_W, build_C_time, build_W
 from wdm.stationary import (
-    assemble_lambda,
     assemble_lambda_full_active,
-    build_lambda_blocks,
     build_lambda_blocks_full_active,
-    build_lambda_blocks_packed,
     is_diagonal,
-    unpack_diag_block,
 )
+
+
+def build_lambda_blocks(Nf, Nt, dt, noise, *, rtol=1e-10):
+    """Interior blocks, read off the full-active builder.
+
+    wdm-paper 1.0 dropped the vendored interior-only builder; its blocks are
+    exactly ``diag[1:Nf]`` / ``offd[1:Nf-1]`` of the full-active tier (same
+    ``_interior_slab_K``, same carriers, same prefactor), so these tests keep
+    testing the same numbers.
+    """
+    diag, offd, _ = build_lambda_blocks_full_active(Nf, Nt, dt, noise, rtol=rtol)
+    return diag[1:Nf], offd[1 : Nf - 1]
 
 
 def _rel(a, b, scale):
@@ -46,17 +54,6 @@ def test_blocks_match_dense_reference(simple_grid, lisa_psd):
     for k, m in enumerate(range(1, g.Nf - 1)):
         ref = Lambda[m * g.Nt : (m + 1) * g.Nt, (m + 1) * g.Nt : (m + 2) * g.Nt]
         assert _rel(offd[k], ref, scale) < 1e-12
-
-
-def test_packed_unpack_roundtrip(simple_grid, lisa_psd):
-    """Packed diagonal blocks unpack to the full symmetric blocks."""
-    g = simple_grid
-    diag_full, _ = build_lambda_blocks(g.Nf, g.Nt, g.dt, lisa_psd)
-    diag_packed, _ = build_lambda_blocks_packed(g.Nf, g.Nt, g.dt, lisa_psd)
-    scale = max(float(np.max(np.abs(b))) for b in diag_full)
-    assert scale > 0
-    for full, packed in zip(diag_full, diag_packed, strict=False):
-        assert _rel(unpack_diag_block(packed, g.Nt), full, scale) < 1e-12
 
 
 def test_psd_array_input_one_sided(simple_grid, lisa_psd):
@@ -146,22 +143,6 @@ def test_invalid_2d_shape_raises(simple_grid):
     bad = np.eye(g.N + 1)
     with pytest.raises(ValueError, match="2D PSD matrix must have shape"):
         build_lambda_blocks(g.Nf, g.Nt, g.dt, bad)
-
-
-def test_assemble_block_tridiagonal(simple_grid, lisa_psd):
-    """assemble_lambda places blocks in the right rows/columns."""
-    g = simple_grid
-    diag, offd = build_lambda_blocks(g.Nf, g.Nt, g.dt, lisa_psd)
-    full = assemble_lambda(diag, offd, g.Nf, g.Nt)
-    assert full.shape == ((g.Nf + 1) * g.Nt, (g.Nf + 1) * g.Nt)
-    # Edge-band rows are all zero (interior-only fast algorithm).
-    assert np.all(full[: g.Nt, :] == 0)
-    assert np.all(full[g.Nf * g.Nt :, :] == 0)
-    # Symmetry across the off-diagonal.
-    Lambda = _dense_lambda(g.Nf, g.Nt, g.dt, lisa_psd)
-    interior = slice(g.Nt, g.Nf * g.Nt)
-    scale = float(np.max(np.abs(Lambda)))
-    assert _rel(full[interior, interior], Lambda[interior, interior], scale) < 1e-12
 
 
 def test_full_active_blocks_match_dense_active(simple_grid, lisa_psd):

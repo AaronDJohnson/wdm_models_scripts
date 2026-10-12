@@ -19,15 +19,12 @@ $(-1)^{(m+1)(n+n')}$ and Wilson parity factor $C^*_{mn}\\,C_{m'n'}$.
 Total cost: $\\mathcal O((N_f+1)\\,N_t\\,\\log N_t + N_f\\,N_t^2)$,
 versus $\\mathcal O(N^3)$ for the dense $W\\,C_{\\rm time}\\,W^T$.
 
-Two API tiers
--------------
-:func:`build_lambda_blocks` (and its packed variant) cover the
-**interior** bands $m \\in [1, N_f - 1]$.  Useful when one is content
-to drop the edge contributions (typically a 10--100 ppm bias on the
-matched-filter SNR$^2$, depending on how much signal sits near DC or
-Nyquist).
-
-:func:`build_lambda_blocks_full_active` covers **every** band pair,
+Scope (wdm-paper 1.0)
+---------------------
+The interior-only tier of the vendored package (``build_lambda_blocks``,
+``build_lambda_blocks_packed``, ``unpack_diag_block``, ``assemble_lambda``)
+is not carried: it drops the edge bands, an approximation the paper never
+uses.  :func:`build_lambda_blocks_full_active` covers **every** band pair,
 including the parity-restricted edge bands $m \\in \\{0, N_f\\}$, via
 half-slab Hermitian-extended IFFTs.  The full-active result matches
 the dense $W_a\\,C_{\\rm time}\\,W_a^T$ at machine precision and is
@@ -39,9 +36,14 @@ Edge-band convention
 --------------------
 There is one coefficient convention (unit-norm basis functions; see
 :mod:`wdm.transform`), so nothing here is parameterised by it.  The edge
-$\\sqrt 2$ factors are baked into the builders that touch the edge bands;
-:func:`build_lambda_blocks` and its packed variant cover interior bands only
-and never see them.
+$\\sqrt 2$ factors are baked into the builders that touch the edge bands.
+
+Backward maps (Paper I Alg. 4)
+------------------------------
+:func:`psd_from_K` (was ``lambda_to_psd_slab``) recovers $S_n$ from the
+diagonal $K$ vectors; :func:`psd_from_lambda_blocks` (was the vendored
+operator-form ``lambda_to_psd``) recovers it from stored blocks.  The literal
+Alg. 4 is :func:`wdm.paper.alg4_psd_from_lambda`.
 
 Inputs
 ------
@@ -65,6 +67,7 @@ from collections.abc import Callable
 import numpy as np
 from numpy.typing import NDArray
 
+from .backend import Backend, get_backend, is_tracer
 from .filter import phi_centered
 from .grid import n_samples, sanitize_psd, validate_dt, validate_grid
 
@@ -75,16 +78,12 @@ type NoiseInput = PsdFunc | Array | CArray
 
 __all__ = [
     "apply_lambda_from_psd",
-    "assemble_lambda",
     "assemble_lambda_full_active",
     "build_K_full_active",
-    "build_lambda_blocks",
     "build_lambda_blocks_full_active",
-    "build_lambda_blocks_packed",
     "is_diagonal",
-    "lambda_to_psd",
-    "lambda_to_psd_slab",
-    "unpack_diag_block",
+    "psd_from_K",
+    "psd_from_lambda_blocks",
 ]
 
 
@@ -165,7 +164,7 @@ def _normalize_noise_to_sigma2(
     Parameters
     ----------
     noise : callable, 1D ndarray, or 2D ndarray
-        See :func:`build_lambda_blocks` for accepted forms — all of
+        See :func:`build_lambda_blocks_full_active` for accepted forms — all of
         which are interpreted as $S_n$ values (no internal scaling).
     N : int
         Total time-domain sample count.
@@ -268,7 +267,7 @@ def _interior_slab_K(
     builders.
 
     ``sigma2`` is the one-sided ``sigma2_rfft = sigma2_full / N`` grid, the
-    module's single convention (see :func:`_interior_setup`).  Interior slabs
+    module's single convention (``sigma2_full[:N//2+1] / N``).  Interior slabs
     index at most ``N//2 - 1``, so the one-sided array is always long enough.
     """
     half = Nt // 2
@@ -297,302 +296,6 @@ def _block_from_K_with_carrier(
     plus one $\\Re$ instead of two broadcasts.
     """
     return pref * np.real(carrier * K[diff])
-
-
-def _block_upper_from_K(
-    K: CArray,
-    carrier: CArray,
-    diff_iu: NDArray[np.integer],
-    pref: float,
-    iu_n: NDArray[np.integer],
-    iu_np: NDArray[np.integer],
-) -> Array:
-    """Upper-triangular entries of the symmetric diagonal block $\\Lambda^{(m,m)}$.
-
-    The triangular counterpart of :func:`_block_from_K_with_carrier`, gathering
-    only the ``np.triu_indices`` entries.
-
-    Takes ``carrier`` and ``diff_iu`` precomputed by the caller.  Both depend
-    only on ``Nt`` and the parity of $m$, so deriving them here -- which meant
-    building all four $N_t \\times N_t$ carrier matrices and re-deriving the
-    index difference once per band -- repeated $O(N_t^2)$ work $N_f - 1$ times
-    to get four distinct answers.
-    """
-    return pref * np.real(carrier[iu_n, iu_np] * K[diff_iu])
-
-
-def _interior_setup(
-    Nf: int, Nt: int, dt: float, noise: NoiseInput, rtol: float
-) -> tuple[CArray, CArray, float, NDArray[np.integer], dict[tuple[int, int], CArray]]:
-    """Shared preamble of the two interior-band builders.
-
-    Returns ``(K_diag, K_off, pref, diff, carriers)``.
-
-    Both tiers now use the **same** prefactor, ``2*pi/N`` against
-    ``sigma2_rfft = sigma2_full / N``.  The interior tier used to carry a
-    second, algebraically identical form -- ``alpha**2 / (2 Nt**2)`` with
-    ``alpha = 2*sqrt(pi)/Nf``, applied to the unnormalised ``sigma2_full`` --
-    which differed only in where the ``1/N`` lived:
-
-        alpha**2 / 2 / Nt**2  ==  (4 pi / Nf**2) / 2 / Nt**2  ==  2 pi / N**2
-        (2 pi / N) * (1 / N)  ==  2 pi / N**2
-
-    Two spellings of one number is a standing invitation to "fix" one of them.
-    They are not bit-identical in floating point (they group the divisions
-    differently, ~1e-16 apart), which is precisely why having both was worse
-    than useless: a reader comparing the tiers could not tell whether a
-    discrepancy was a bug or rounding.
-    """
-    validate_grid(Nf, Nt)
-    validate_dt(dt)
-    N = n_samples(Nf, Nt)
-    sigma2_full = _normalize_noise_to_sigma2(noise, N, dt, rtol=rtol)
-    sigma2_rfft = sigma2_full[: N // 2 + 1] / N
-    phi_c = phi_centered(Nf, Nt, dt)
-
-    pref = 2.0 * np.pi / N
-    n_arr = np.arange(Nt)
-    diff = (n_arr[:, None] - n_arr[None, :]) % Nt
-
-    K_diag, K_off = _interior_slab_K(sigma2_rfft, phi_c, Nf, Nt)
-    return K_diag, K_off, pref, diff, _carriers(Nt)
-
-
-def build_lambda_blocks(
-    Nf: int,
-    Nt: int,
-    dt: float,
-    noise: NoiseInput,
-    *,
-    rtol: float = 1e-10,
-) -> tuple[list[Array], list[Array]]:
-    """Block-tridiagonal stationary $\\Lambda = W\\,\\Sigma\\,W^T$ via slab-IFFT.
-
-    For each interior band pair $(m, m')$ with $1\\le m,m'\\le N_f - 1$
-    and $|m - m'|\\le 1$, builds the dense $N_t\\times N_t$ block
-    using one length-$N_t$ IFFT plus a vectorised Toeplitz expansion.
-
-    Parameters
-    ----------
-    Nf, Nt : int
-    dt : float
-    noise : callable, 1D ndarray, or 2D ndarray
-        Stationary noise specification — every form is the **one-sided
-        PSD** $S_n(f)$. The package applies the $N/(2\\,\\delta t)$
-        scaling internally; do not pre-scale.
-
-        * ``Sn_func(f) -> S_n(f)``: one-sided PSD function.
-        * 1D ndarray of length ``N`` or ``N//2+1``: $S_n$ values on the
-          two-sided ``fftfreq`` grid or one-sided ``rfftfreq`` grid.
-        * 2D diagonal ndarray of shape ``(N, N)`` or ``(N//2+1, N//2+1)``
-          with $S_n$ values on the diagonal. Diagonality is enforced
-          (see ``rtol``); non-diagonal input raises ``ValueError``.
-    rtol : float, optional
-        Relative tolerance for the diagonality check on 2D inputs.
-        Off-diagonal entries are tolerated if their absolute value is
-        at most ``rtol`` times the maximum absolute diagonal entry.
-        Default ``1e-10``.
-
-    Returns
-    -------
-    diag : list of ($N_f - 1$) ndarrays, shape ($N_t$, $N_t$)
-        ``diag[i]`` is $\\Lambda^{(m,m)}$ for $m = i + 1$.
-    offd : list of ($N_f - 2$) ndarrays, shape ($N_t$, $N_t$)
-        ``offd[i]`` is $\\Lambda^{(m,m+1)}$ for $m = i + 1$.
-
-    Raises
-    ------
-    ValueError
-        If a 2D input matrix is not diagonal, or if a 1D input has
-        unrecognized length.
-
-    Notes
-    -----
-    Edge bands ($m \\in \\{0, N_f\\}$) are not covered by the fast
-    algorithm; their complementary-covariance contribution is small
-    and typically dropped (see module docstring).
-
-    Examples
-    --------
-    >>> import numpy as np, wdm
-    >>> flat = lambda f: 1e-3 * np.ones_like(f)
-    >>> diag, offd = wdm.stationary.build_lambda_blocks(8, 16, 1.0, flat)
-    >>> len(diag), len(offd), diag[0].shape
-    (7, 6, (16, 16))
-    """
-    K_diag_all, K_off_all, pref, diff, carrier = _interior_setup(
-        Nf, Nt, dt, noise, rtol
-    )
-    carrier_diag = (carrier[0, 0], carrier[1, 1])  # by m parity
-    carrier_off = (carrier[0, 1], carrier[1, 0])  # by m_left parity
-    m_arr = np.arange(1, Nf)
-
-    # Block expansion stays in a Python loop: one (Nt, Nt) buffer per
-    # iteration is cache-friendly, while a fully batched (Nf, Nt, Nt)
-    # intermediate would blow the L2/L3 cache and be slower.
-    diag: list[Array] = []
-    offd: list[Array] = []
-    for i, m in enumerate(m_arr):
-        diag.append(
-            _block_from_K_with_carrier(K_diag_all[i], carrier_diag[m % 2], diff, pref)
-        )
-        if m < Nf - 1:
-            offd.append(
-                _block_from_K_with_carrier(K_off_all[i], carrier_off[m % 2], diff, pref)
-            )
-
-    return diag, offd
-
-
-def build_lambda_blocks_packed(
-    Nf: int,
-    Nt: int,
-    dt: float,
-    noise: NoiseInput,
-    *,
-    rtol: float = 1e-10,
-) -> tuple[list[Array], list[Array]]:
-    """Same as :func:`build_lambda_blocks`, but with packed-upper diagonal blocks.
-
-    Each diagonal block $\\Lambda^{(m,m)}$ is symmetric in $(n, n')$,
-    so only the $N_t(N_t + 1)/2$ upper-triangular entries are stored.
-    Off-diagonal blocks are returned full.  Roughly $25\\%$ less
-    **storage** than :func:`build_lambda_blocks`; it is not faster --
-    the triangular fancy-index gather costs more than the full
-    circulant expansion, so this trades runtime for the memory saving.
-    Currently ~1.2-1.3x slower (it was several times slower before the
-    per-band carrier rebuild was hoisted out of :func:`_block_upper_from_K`).
-    Run ``python tools/benchmark.py`` for the figure on your machine; choose
-    this variant for the storage, not for speed.
-
-    Parameters
-    ----------
-    Nf, Nt : int
-    dt : float
-    noise : callable, 1D ndarray, or 2D ndarray
-        See :func:`build_lambda_blocks`.
-    rtol : float, optional
-
-    Returns
-    -------
-    diag_packed : list of ($N_f - 1$) ndarrays, shape ($N_t(N_t+1)/2$,)
-        ``np.triu_indices``-order packing of $\\Lambda^{(m,m)}$.
-        Use :func:`unpack_diag_block` to materialize a full block.
-    offd : list of ($N_f - 2$) ndarrays, shape ($N_t$, $N_t$)
-
-    Examples
-    --------
-    >>> import numpy as np, wdm
-    >>> flat = lambda f: 1e-3 * np.ones_like(f)
-    >>> packed, offd = wdm.stationary.build_lambda_blocks_packed(
-    ...     8, 16, 1.0, flat
-    ... )
-    >>> packed[0].shape   # Nt*(Nt+1)/2 upper-triangular entries
-    (136,)
-    """
-    K_diag_all, K_off_all, pref, diff_off, carrier = _interior_setup(
-        Nf, Nt, dt, noise, rtol
-    )
-    carrier_diag = (carrier[0, 0], carrier[1, 1])  # by m parity
-    carrier_off = (carrier[0, 1], carrier[1, 0])
-    iu_n, iu_np = np.triu_indices(Nt)
-    diff_iu = (iu_n - iu_np) % Nt
-    m_arr = np.arange(1, Nf)
-
-    diag_packed: list[Array] = []
-    offd: list[Array] = []
-    for i, m in enumerate(m_arr):
-        diag_packed.append(
-            _block_upper_from_K(
-                K_diag_all[i], carrier_diag[m % 2], diff_iu, pref, iu_n, iu_np
-            )
-        )
-        if m < Nf - 1:
-            offd.append(
-                _block_from_K_with_carrier(
-                    K_off_all[i], carrier_off[m % 2], diff_off, pref
-                )
-            )
-
-    return diag_packed, offd
-
-
-def unpack_diag_block(packed: Array, Nt: int) -> Array:
-    """Reconstruct a full $N_t\\times N_t$ symmetric matrix from a packed-upper vector.
-
-    Parameters
-    ----------
-    packed : ndarray, shape ($N_t(N_t+1)/2$,)
-        Upper-triangular entries in ``np.triu_indices`` order.
-    Nt : int
-
-    Returns
-    -------
-    ndarray, shape ($N_t$, $N_t$)
-
-    Examples
-    --------
-    >>> import numpy as np, wdm
-    >>> flat = lambda f: 1e-3 * np.ones_like(f)
-    >>> packed, _ = wdm.stationary.build_lambda_blocks_packed(8, 16, 1.0, flat)
-    >>> block = wdm.stationary.unpack_diag_block(packed[0], 16)
-    >>> block.shape, bool(np.allclose(block, block.T))
-    ((16, 16), True)
-    """
-    block = np.zeros((Nt, Nt), dtype=packed.dtype)
-    iu = np.triu_indices(Nt)
-    block[iu] = packed
-    diag = np.diag(np.diag(block))
-    return block + block.T - diag
-
-
-def assemble_lambda(
-    diag: list[Array],
-    offd: list[Array],
-    Nf: int,
-    Nt: int,
-) -> Array:
-    """Assemble the interior block-tridiagonal $\\Lambda$ into a dense $(N_f+1)N_t$ matrix.
-
-    Edge-band rows/columns ($m = 0, N_f$) are zero; only the interior
-    bands $m \\in [1, N_f - 1]$ are populated.  The lower off-diagonal
-    is filled by transposition: $\\Lambda^{(m+1,m)} = (\\Lambda^{(m,m+1)})^T$.
-
-    Parameters
-    ----------
-    diag : list of ($N_f - 1$) ndarrays, shape ($N_t$, $N_t$)
-    offd : list of ($N_f - 2$) ndarrays, shape ($N_t$, $N_t$)
-    Nf, Nt : int
-
-    Returns
-    -------
-    ndarray, shape ($(N_f+1) N_t$, $(N_f+1) N_t$)
-
-    Examples
-    --------
-    >>> import numpy as np, wdm
-    >>> flat = lambda f: 1e-3 * np.ones_like(f)
-    >>> diag, offd = wdm.stationary.build_lambda_blocks(8, 16, 1.0, flat)
-    >>> wdm.stationary.assemble_lambda(diag, offd, 8, 16).shape
-    (144, 144)
-    """
-    validate_grid(Nf, Nt)
-    if len(diag) != Nf - 1:
-        raise ValueError(
-            f"diag must have Nf-1 = {Nf - 1} interior blocks; got {len(diag)}"
-        )
-    if len(offd) != Nf - 2:
-        raise ValueError(f"offd must have Nf-2 = {Nf - 2} blocks; got {len(offd)}")
-    n_total = (Nf + 1) * Nt
-    out = np.zeros((n_total, n_total))
-    for k, m in enumerate(range(1, Nf)):
-        s = m * Nt
-        out[s : s + Nt, s : s + Nt] = diag[k]
-    for k, m in enumerate(range(1, Nf - 1)):
-        s = m * Nt
-        out[s : s + Nt, s + Nt : s + 2 * Nt] = offd[k]
-        out[s + Nt : s + 2 * Nt, s : s + Nt] = offd[k].T
-    return out
 
 
 # ---------------------------------------------------------------------------
@@ -730,7 +433,9 @@ def build_lambda_blocks_full_active(
     Nf, Nt : int
     dt : float
     noise : callable, 1D ndarray, or 2D ndarray
-        See :func:`build_lambda_blocks`.
+        The one-sided PSD: a callable ``f -> S_n(f)``, a 1D array on the
+        ``fftfreq`` (length ``N``) or ``rfftfreq`` (length ``N//2+1``) grid, or
+        a diagonal 2D array of either size.  Never pre-scaled.
     rtol : float, optional
 
     Returns
@@ -924,7 +629,7 @@ def build_K_full_active(
     return _slab_K(Nf, Nt, dt, sigma2_rfft)
 
 
-def lambda_to_psd_slab(
+def psd_from_K(
     K_diag: list[CArray],
     Nf: int,
     Nt: int,
@@ -961,9 +666,9 @@ def lambda_to_psd_slab(
     Cost: one length-$N_t$ FFT per band + bin assignment scan. Total
     $O(N \log N_t)$ — same as the forward :func:`build_K_full_active`
     and as :func:`apply_lambda_from_psd`. Compared with
-    :func:`lambda_to_psd` (operator form on stored blocks), this avoids
+    :func:`psd_from_lambda_blocks` (operator form on stored blocks), this avoids
     the $O(N_f N_t^2)$ block-tridiag matvec.  A few times faster than
-    :func:`lambda_to_psd` in practice -- short of the $N_t/\log N_t$ the
+    :func:`psd_from_lambda_blocks` in practice -- short of the $N_t/\log N_t$ the
     asymptotics alone suggest, because both routines are dominated by their
     FFTs at these sizes rather than by the matvec.  Run
     ``python tools/benchmark.py`` for the figure on your machine.
@@ -986,7 +691,7 @@ def lambda_to_psd_slab(
     while its window comes from the upper half of $\hat\phi$.  A unified loop
     using one index for both silently uses the wrong window on band 0; that
     was tried, and
-    ``test_lambda_to_psd_slab_dc_band_uses_the_offset_window`` now fails when
+    ``test_psd_from_K_dc_band_uses_the_offset_window`` now fails when
     it is tried again.
 
     Examples
@@ -994,7 +699,7 @@ def lambda_to_psd_slab(
     >>> import numpy as np, wdm
     >>> flat = lambda f: 1e-3 * np.ones_like(f)
     >>> K_diag, _ = wdm.stationary.build_K_full_active(8, 16, 1.0, flat)
-    >>> wdm.stationary.lambda_to_psd_slab(K_diag, 8, 16, 1.0).shape
+    >>> wdm.stationary.psd_from_K(K_diag, 8, 16, 1.0).shape
     (65,)
     """
     validate_grid(Nf, Nt)
@@ -1061,6 +766,8 @@ def apply_lambda_from_psd(
     Nt: int,
     dt: float,
     Sn_rfft: Array,
+    *,
+    be: Backend | None = None,
 ) -> Array:
     r"""Apply $\Lambda$ to a WDM vector via the operator-form forward.
 
@@ -1075,7 +782,7 @@ def apply_lambda_from_psd(
     i.e., inverse-WDM, pointwise scale each rfft bin by half the PSD,
     forward-WDM. No assembly of $\Lambda$ as a matrix is needed.
 
-    This is the operator dual of :func:`lambda_to_psd`: where the latter
+    This is the operator dual of :func:`psd_from_lambda_blocks`: where the latter
     extracts a PSD from a stored $\Lambda$ in one inverse-WDM call, this
     one applies a $\Lambda$ implied by a stored PSD to any vector in two
     WDM-transform calls.
@@ -1127,19 +834,24 @@ def apply_lambda_from_psd(
 
     validate_grid(Nf, Nt)
     validate_dt(dt)
-    Sn_rfft = sanitize_psd(Sn_rfft, "apply_lambda_from_psd")
+    be = be or get_backend(x_wmn, Sn_rfft)
+    # Host validation on concrete input only (a tracer has no values to check).
+    if is_tracer(Sn_rfft):
+        Sn_rfft = be.asarray(Sn_rfft)
+    else:
+        Sn_rfft = be.asarray(sanitize_psd(Sn_rfft, "apply_lambda_from_psd"))
     n_rfft = n_samples(Nf, Nt) // 2 + 1
     if Sn_rfft.shape != (n_rfft,):
         raise ValueError(
             f"apply_lambda_from_psd: Sn_rfft must have shape ({n_rfft},) -- the "
             f"np.fft.rfftfreq(N, dt) grid; got {Sn_rfft.shape}"
         )
-    y = _inverse(x_wmn, Nf, Nt, dt)
+    y = _inverse(x_wmn, Nf, Nt, dt, be=be)
     z = (Sn_rfft / 2.0) * y
-    return _forward(z, Nf, Nt, dt)
+    return _forward(z, Nf, Nt, dt, be=be)
 
 
-def lambda_to_psd(
+def psd_from_lambda_blocks(
     diag_blocks: list[Array],
     offd_blocks: list[Array],
     n_active: list[NDArray[np.integer]],
@@ -1197,7 +909,7 @@ def lambda_to_psd(
     >>> d, o, na = wdm.stationary.build_lambda_blocks_full_active(
     ...     8, 16, 1.0, flat
     ... )
-    >>> Sn = wdm.stationary.lambda_to_psd(d, o, na, 8, 16, 1.0)
+    >>> Sn = wdm.stationary.psd_from_lambda_blocks(d, o, na, 8, 16, 1.0)
     >>> Sn.shape
     (65,)
     """
