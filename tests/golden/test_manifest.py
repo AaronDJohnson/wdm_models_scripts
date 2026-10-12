@@ -33,7 +33,9 @@ def test_sinusoid_sources_and_tolerances():
     assert len(s["chains"]) == 45 and len(s["data"]) == 5
     assert set(s["lineages"]) == {"A", "B"}
     assert m["tolerances"]["sinusoid"]["file"] == "sinusoid/tolerances_measured.json"
-    assert m["tolerances"]["sinusoid"]["status"].startswith("PROPOSED")
+    assert m["tolerances"]["sinusoid"]["status"] == "APPROVED by the user 2026-10-12"     # Task F4
+    measured = read_json(GOLDEN / "sinusoid" / "tolerances_measured.json")
+    assert m["tolerances"]["sinusoid"]["approved"] == measured["approved"]
 
 
 @requires_legacy

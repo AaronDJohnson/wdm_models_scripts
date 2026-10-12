@@ -26,7 +26,8 @@ from scripts.golden.paths import GOLDEN, ROOT
 from scripts.golden.workers._common import runtime_fingerprint
 from tools import frozen_tree_hashes as fth
 
-#: family -> (capture(tier) -> MANIFEST "sources" block, measure() -> tolerance report with "file"/"status")
+#: family -> (capture(tier) -> MANIFEST "sources" block, measure() -> tolerance report with "file"/"status"
+#: [and "approval"/"approved"], summarised for the MANIFEST by ``measure_tolerances.manifest_summary``)
 FAMILIES: dict[str, tuple[Callable[[str], dict], Callable[[], dict]]] = {
     "sinusoid": (sinusoid_goldens.capture_all, measure_tolerances.measure_sinusoid),
 }
@@ -106,8 +107,10 @@ def capture(family: str, tier: str, *, replace: bool = False) -> dict:
     if guard_state() != before:
         raise FrozenTreeChanged("a frozen tree or a lineage __pycache__ changed during the capture")
     report = measure()
+    # The same tolerance summary as the measurement script's command line (file, status and, once
+    # approved, the approval and its gates), so a re-capture never downgrades the MANIFEST entry.
     return write_manifest(family=family, sources=sources,
-                          tolerances={"file": report["file"], "status": report["status"]}, replace=replace)
+                          tolerances=measure_tolerances.manifest_summary(report), replace=replace)
 
 
 def main(argv: list[str] | None = None) -> int:

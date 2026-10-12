@@ -3,10 +3,10 @@
   "gb_12mo/band_pad": {
    "exceeds_proposal_jax": false,
    "exceeds_proposal_numpy": true,
-   "gate_jax": 1e-08,
-   "gate_numpy": 4.674802767112851e-09,
    "observed_jax": 0.0,
    "observed_numpy": 4.674802767112851e-10,
+   "proposed_gate_jax": 1e-08,
+   "proposed_gate_numpy": 4.674802767112851e-09,
    "rows": 3,
    "runs": 1,
    "tiers": [
@@ -16,10 +16,10 @@
   "gb_12mo/band_raw": {
    "exceeds_proposal_jax": false,
    "exceeds_proposal_numpy": true,
-   "gate_jax": 1e-08,
-   "gate_numpy": 3.874447429552674e-09,
    "observed_jax": 0.0,
    "observed_numpy": 3.8744474295526743e-10,
+   "proposed_gate_jax": 1e-08,
+   "proposed_gate_numpy": 3.874447429552674e-09,
    "rows": 3,
    "runs": 1,
    "tiers": [
@@ -29,10 +29,10 @@
   "gb_12mo/exact": {
    "exceeds_proposal_jax": false,
    "exceeds_proposal_numpy": true,
-   "gate_jax": 1e-08,
-   "gate_numpy": 1.191438059322536e-09,
    "observed_jax": 0.0,
    "observed_numpy": 1.191438059322536e-10,
+   "proposed_gate_jax": 1e-08,
+   "proposed_gate_numpy": 1.191438059322536e-09,
    "rows": 3,
    "runs": 1,
    "tiers": [
@@ -42,10 +42,10 @@
   "gb_12mo/mid_pad": {
    "exceeds_proposal_jax": false,
    "exceeds_proposal_numpy": true,
-   "gate_jax": 1e-08,
-   "gate_numpy": 4.729372449219227e-09,
    "observed_jax": 0.0,
    "observed_numpy": 4.729372449219227e-10,
+   "proposed_gate_jax": 1e-08,
+   "proposed_gate_numpy": 4.729372449219227e-09,
    "rows": 3,
    "runs": 1,
    "tiers": [
@@ -55,10 +55,10 @@
   "gb_12mo/mid_raw": {
    "exceeds_proposal_jax": false,
    "exceeds_proposal_numpy": true,
-   "gate_jax": 1e-08,
-   "gate_numpy": 3.8835423765704036e-09,
    "observed_jax": 0.0,
    "observed_numpy": 3.8835423765704036e-10,
+   "proposed_gate_jax": 1e-08,
+   "proposed_gate_numpy": 3.8835423765704036e-09,
    "rows": 3,
    "runs": 1,
    "tiers": [
@@ -68,10 +68,10 @@
   "gb_12mo/tri_pad": {
    "exceeds_proposal_jax": false,
    "exceeds_proposal_numpy": true,
-   "gate_jax": 1e-08,
-   "gate_numpy": 7.021299097687006e-09,
    "observed_jax": 0.0,
    "observed_numpy": 7.021299097687006e-10,
+   "proposed_gate_jax": 1e-08,
+   "proposed_gate_numpy": 7.021299097687006e-09,
    "rows": 3,
    "runs": 1,
    "tiers": [
@@ -81,10 +81,10 @@
   "gb_12mo/tri_raw": {
    "exceeds_proposal_jax": false,
    "exceeds_proposal_numpy": false,
-   "gate_jax": 1e-08,
-   "gate_numpy": 1e-09,
    "observed_jax": 8.276401786133647e-11,
    "observed_numpy": 8.276401786133647e-11,
+   "proposed_gate_jax": 1e-08,
+   "proposed_gate_numpy": 1e-09,
    "rows": 3,
    "runs": 1,
    "tiers": [
@@ -94,10 +94,10 @@
   "gb_12mo/whittle_raw": {
    "exceeds_proposal_jax": false,
    "exceeds_proposal_numpy": true,
-   "gate_jax": 1e-08,
-   "gate_numpy": 5.197762220632285e-09,
    "observed_jax": 4.547473508864641e-13,
    "observed_numpy": 5.197762220632285e-10,
+   "proposed_gate_jax": 1e-08,
+   "proposed_gate_numpy": 5.197762220632285e-09,
    "rows": 3,
    "runs": 1,
    "tiers": [
@@ -107,10 +107,10 @@
   "gb_3mo/band_cut": {
    "exceeds_proposal_jax": false,
    "exceeds_proposal_numpy": false,
-   "gate_jax": 1e-08,
-   "gate_numpy": 1e-09,
    "observed_jax": 2.2737367544323206e-13,
    "observed_numpy": 2.2737367544323206e-13,
+   "proposed_gate_jax": 1e-08,
+   "proposed_gate_numpy": 1e-09,
    "rows": 3,
    "runs": 1,
    "tiers": [
@@ -120,10 +120,10 @@
   "gb_3mo/band_exact": {
    "exceeds_proposal_jax": false,
    "exceeds_proposal_numpy": false,
-   "gate_jax": 1e-08,
-   "gate_numpy": 1e-09,
    "observed_jax": 2.2737367544323206e-13,
    "observed_numpy": 4.547473508864641e-13,
+   "proposed_gate_jax": 1e-08,
+   "proposed_gate_numpy": 1e-09,
    "rows": 3,
    "runs": 1,
    "tiers": [
@@ -133,10 +133,10 @@
   "gb_3mo/band_pad": {
    "exceeds_proposal_jax": false,
    "exceeds_proposal_numpy": false,
-   "gate_jax": 1e-08,
-   "gate_numpy": 1e-09,
    "observed_jax": 0.0,
    "observed_numpy": 2.2737367544323206e-13,
+   "proposed_gate_jax": 1e-08,
+   "proposed_gate_numpy": 1e-09,
    "rows": 3,
    "runs": 1,
    "tiers": [
@@ -146,10 +146,10 @@
   "gb_3mo/band_raw": {
    "exceeds_proposal_jax": false,
    "exceeds_proposal_numpy": false,
-   "gate_jax": 1e-08,
-   "gate_numpy": 1e-09,
    "observed_jax": 0.0,
    "observed_numpy": 5.5933924159035087e-11,
+   "proposed_gate_jax": 1e-08,
+   "proposed_gate_numpy": 1e-09,
    "rows": 3,
    "runs": 1,
    "tiers": [
@@ -159,10 +159,10 @@
   "gb_3mo/exact": {
    "exceeds_proposal_jax": false,
    "exceeds_proposal_numpy": false,
-   "gate_jax": 1e-08,
-   "gate_numpy": 1e-09,
    "observed_jax": 0.0,
    "observed_numpy": 2.1259438653942198e-11,
+   "proposed_gate_jax": 1e-08,
+   "proposed_gate_numpy": 1e-09,
    "rows": 15,
    "runs": 5,
    "tiers": [
@@ -172,10 +172,10 @@
   "gb_3mo/mid_cut": {
    "exceeds_proposal_jax": false,
    "exceeds_proposal_numpy": false,
-   "gate_jax": 1e-08,
-   "gate_numpy": 1e-09,
    "observed_jax": 0.0,
    "observed_numpy": 1.8189894035458565e-12,
+   "proposed_gate_jax": 1e-08,
+   "proposed_gate_numpy": 1e-09,
    "rows": 3,
    "runs": 1,
    "tiers": [
@@ -185,10 +185,10 @@
   "gb_3mo/mid_exact": {
    "exceeds_proposal_jax": false,
    "exceeds_proposal_numpy": false,
-   "gate_jax": 1e-08,
-   "gate_numpy": 1e-09,
    "observed_jax": 2.2737367544323206e-13,
    "observed_numpy": 4.615685611497611e-11,
+   "proposed_gate_jax": 1e-08,
+   "proposed_gate_numpy": 1e-09,
    "rows": 3,
    "runs": 1,
    "tiers": [
@@ -198,10 +198,10 @@
   "gb_3mo/mid_pad": {
    "exceeds_proposal_jax": false,
    "exceeds_proposal_numpy": false,
-   "gate_jax": 1e-08,
-   "gate_numpy": 1e-09,
    "observed_jax": 0.0,
    "observed_numpy": 0.0,
+   "proposed_gate_jax": 1e-08,
+   "proposed_gate_numpy": 1e-09,
    "rows": 3,
    "runs": 1,
    "tiers": [
@@ -211,10 +211,10 @@
   "gb_3mo/mid_raw": {
    "exceeds_proposal_jax": false,
    "exceeds_proposal_numpy": false,
-   "gate_jax": 1e-08,
-   "gate_numpy": 1e-09,
    "observed_jax": 0.0,
    "observed_numpy": 1.6143530956469476e-11,
+   "proposed_gate_jax": 1e-08,
+   "proposed_gate_numpy": 1e-09,
    "rows": 3,
    "runs": 1,
    "tiers": [
@@ -224,10 +224,10 @@
   "gb_3mo/tri_cut": {
    "exceeds_proposal_jax": false,
    "exceeds_proposal_numpy": false,
-   "gate_jax": 1e-08,
-   "gate_numpy": 1e-09,
    "observed_jax": 2.2737367544323206e-13,
    "observed_numpy": 4.7975845518521965e-11,
+   "proposed_gate_jax": 1e-08,
+   "proposed_gate_numpy": 1e-09,
    "rows": 15,
    "runs": 5,
    "tiers": [
@@ -237,10 +237,10 @@
   "gb_3mo/tri_exact": {
    "exceeds_proposal_jax": false,
    "exceeds_proposal_numpy": false,
-   "gate_jax": 1e-08,
-   "gate_numpy": 1e-09,
    "observed_jax": 0.0,
    "observed_numpy": 2.9331204132176936e-11,
+   "proposed_gate_jax": 1e-08,
+   "proposed_gate_numpy": 1e-09,
    "rows": 15,
    "runs": 5,
    "tiers": [
@@ -250,10 +250,10 @@
   "gb_3mo/tri_pad": {
    "exceeds_proposal_jax": false,
    "exceeds_proposal_numpy": false,
-   "gate_jax": 1e-08,
-   "gate_numpy": 1e-09,
    "observed_jax": 0.0,
    "observed_numpy": 4.8203219193965197e-11,
+   "proposed_gate_jax": 1e-08,
+   "proposed_gate_numpy": 1e-09,
    "rows": 15,
    "runs": 5,
    "tiers": [
@@ -263,10 +263,10 @@
   "gb_3mo/tri_raw": {
    "exceeds_proposal_jax": false,
    "exceeds_proposal_numpy": false,
-   "gate_jax": 1e-08,
-   "gate_numpy": 1e-09,
    "observed_jax": 2.2737367544323206e-13,
    "observed_numpy": 5.002220859751105e-11,
+   "proposed_gate_jax": 1e-08,
+   "proposed_gate_numpy": 1e-09,
    "rows": 15,
    "runs": 5,
    "tiers": [
@@ -276,10 +276,10 @@
   "gb_3mo/whittle_cut": {
    "exceeds_proposal_jax": false,
    "exceeds_proposal_numpy": false,
-   "gate_jax": 1e-08,
-   "gate_numpy": 1e-09,
    "observed_jax": 0.0,
    "observed_numpy": 0.0,
+   "proposed_gate_jax": 1e-08,
+   "proposed_gate_numpy": 1e-09,
    "rows": 3,
    "runs": 1,
    "tiers": [
@@ -289,10 +289,10 @@
   "gb_3mo/whittle_raw": {
    "exceeds_proposal_jax": false,
    "exceeds_proposal_numpy": false,
-   "gate_jax": 1e-08,
-   "gate_numpy": 1e-09,
    "observed_jax": 1.1368683772161603e-13,
    "observed_numpy": 2.1600499167107046e-11,
+   "proposed_gate_jax": 1e-08,
+   "proposed_gate_numpy": 1e-09,
    "rows": 3,
    "runs": 1,
    "tiers": [
@@ -302,10 +302,10 @@
   "gb_6mo/band_cut": {
    "exceeds_proposal_jax": false,
    "exceeds_proposal_numpy": false,
-   "gate_jax": 1e-08,
-   "gate_numpy": 1e-09,
    "observed_jax": 0.0,
    "observed_numpy": 8.139977580867708e-11,
+   "proposed_gate_jax": 1e-08,
+   "proposed_gate_numpy": 1e-09,
    "rows": 3,
    "runs": 1,
    "tiers": [
@@ -315,10 +315,10 @@
   "gb_6mo/band_exact": {
    "exceeds_proposal_jax": false,
    "exceeds_proposal_numpy": false,
-   "gate_jax": 1e-08,
-   "gate_numpy": 1e-09,
    "observed_jax": 5.775291356258094e-11,
    "observed_numpy": 7.185008144006133e-11,
+   "proposed_gate_jax": 1e-08,
+   "proposed_gate_numpy": 1e-09,
    "rows": 3,
    "runs": 1,
    "tiers": [
@@ -328,10 +328,10 @@
   "gb_6mo/band_pad": {
    "exceeds_proposal_jax": false,
    "exceeds_proposal_numpy": false,
-   "gate_jax": 1e-08,
-   "gate_numpy": 1e-09,
    "observed_jax": 0.0,
    "observed_numpy": 5.502442945726216e-11,
+   "proposed_gate_jax": 1e-08,
+   "proposed_gate_numpy": 1e-09,
    "rows": 3,
    "runs": 1,
    "tiers": [
@@ -341,10 +341,10 @@
   "gb_6mo/band_raw": {
    "exceeds_proposal_jax": false,
    "exceeds_proposal_numpy": false,
-   "gate_jax": 1e-08,
-   "gate_numpy": 1e-09,
    "observed_jax": 0.0,
    "observed_numpy": 2.864908310584724e-11,
+   "proposed_gate_jax": 1e-08,
+   "proposed_gate_numpy": 1e-09,
    "rows": 3,
    "runs": 1,
    "tiers": [
@@ -354,10 +354,10 @@
   "gb_6mo/exact": {
    "exceeds_proposal_jax": false,
    "exceeds_proposal_numpy": false,
-   "gate_jax": 1e-08,
-   "gate_numpy": 1e-09,
    "observed_jax": 0.0,
    "observed_numpy": 8.526512829121202e-11,
+   "proposed_gate_jax": 1e-08,
+   "proposed_gate_numpy": 1e-09,
    "rows": 3,
    "runs": 1,
    "tiers": [
@@ -367,10 +367,10 @@
   "gb_6mo/mid_cut": {
    "exceeds_proposal_jax": false,
    "exceeds_proposal_numpy": false,
-   "gate_jax": 1e-08,
-   "gate_numpy": 1e-09,
    "observed_jax": 0.0,
    "observed_numpy": 7.639755494892597e-11,
+   "proposed_gate_jax": 1e-08,
+   "proposed_gate_numpy": 1e-09,
    "rows": 3,
    "runs": 1,
    "tiers": [
@@ -380,10 +380,10 @@
   "gb_6mo/mid_exact": {
    "exceeds_proposal_jax": false,
    "exceeds_proposal_numpy": true,
-   "gate_jax": 1e-08,
-   "gate_numpy": 1.6189005691558123e-09,
    "observed_jax": 4.547473508864641e-13,
    "observed_numpy": 1.6189005691558123e-10,
+   "proposed_gate_jax": 1e-08,
+   "proposed_gate_numpy": 1.6189005691558123e-09,
    "rows": 3,
    "runs": 1,
    "tiers": [
@@ -393,10 +393,10 @@
   "gb_6mo/mid_pad": {
    "exceeds_proposal_jax": false,
    "exceeds_proposal_numpy": true,
-   "gate_jax": 1e-08,
-   "gate_numpy": 2.0827428670600057e-09,
    "observed_jax": 0.0,
    "observed_numpy": 2.0827428670600057e-10,
+   "proposed_gate_jax": 1e-08,
+   "proposed_gate_numpy": 2.0827428670600057e-09,
    "rows": 3,
    "runs": 1,
    "tiers": [
@@ -406,10 +406,10 @@
   "gb_6mo/mid_raw": {
    "exceeds_proposal_jax": false,
    "exceeds_proposal_numpy": true,
-   "gate_jax": 1e-08,
-   "gate_numpy": 1.5006662579253316e-09,
    "observed_jax": 0.0,
    "observed_numpy": 1.5006662579253316e-10,
+   "proposed_gate_jax": 1e-08,
+   "proposed_gate_numpy": 1.5006662579253316e-09,
    "rows": 3,
    "runs": 1,
    "tiers": [
@@ -419,10 +419,10 @@
   "gb_6mo/tri_cut": {
    "exceeds_proposal_jax": false,
    "exceeds_proposal_numpy": false,
-   "gate_jax": 1e-08,
-   "gate_numpy": 1e-09,
    "observed_jax": 0.0,
    "observed_numpy": 7.73070496506989e-11,
+   "proposed_gate_jax": 1e-08,
+   "proposed_gate_numpy": 1e-09,
    "rows": 3,
    "runs": 1,
    "tiers": [
@@ -432,10 +432,10 @@
   "gb_6mo/tri_exact": {
    "exceeds_proposal_jax": false,
    "exceeds_proposal_numpy": true,
-   "gate_jax": 1e-08,
-   "gate_numpy": 2.864908310584724e-09,
    "observed_jax": 0.0,
    "observed_numpy": 2.864908310584724e-10,
+   "proposed_gate_jax": 1e-08,
+   "proposed_gate_numpy": 2.864908310584724e-09,
    "rows": 3,
    "runs": 1,
    "tiers": [
@@ -445,10 +445,10 @@
   "gb_6mo/tri_pad": {
    "exceeds_proposal_jax": false,
    "exceeds_proposal_numpy": true,
-   "gate_jax": 1e-08,
-   "gate_numpy": 1.8144419300369918e-09,
    "observed_jax": 0.0,
    "observed_numpy": 1.8144419300369918e-10,
+   "proposed_gate_jax": 1e-08,
+   "proposed_gate_numpy": 1.8144419300369918e-09,
    "rows": 3,
    "runs": 1,
    "tiers": [
@@ -458,10 +458,10 @@
   "gb_6mo/tri_raw": {
    "exceeds_proposal_jax": false,
    "exceeds_proposal_numpy": true,
-   "gate_jax": 1e-08,
-   "gate_numpy": 1.0595613275654614e-09,
    "observed_jax": 3.228706191293895e-11,
    "observed_numpy": 1.0595613275654614e-10,
+   "proposed_gate_jax": 1e-08,
+   "proposed_gate_numpy": 1.0595613275654614e-09,
    "rows": 3,
    "runs": 1,
    "tiers": [
@@ -471,10 +471,10 @@
   "gb_6mo/whittle_cut": {
    "exceeds_proposal_jax": false,
    "exceeds_proposal_numpy": false,
-   "gate_jax": 1e-08,
-   "gate_numpy": 1e-09,
    "observed_jax": 0.0,
    "observed_numpy": 9.140421752817929e-11,
+   "proposed_gate_jax": 1e-08,
+   "proposed_gate_numpy": 1e-09,
    "rows": 3,
    "runs": 1,
    "tiers": [
@@ -484,10 +484,10 @@
   "gb_6mo/whittle_raw": {
    "exceeds_proposal_jax": false,
    "exceeds_proposal_numpy": true,
-   "gate_jax": 1e-08,
-   "gate_numpy": 1.532498572487384e-09,
    "observed_jax": 0.0,
    "observed_numpy": 1.532498572487384e-10,
+   "proposed_gate_jax": 1e-08,
+   "proposed_gate_numpy": 1.532498572487384e-09,
    "rows": 3,
    "runs": 1,
    "tiers": [
@@ -499,39 +499,6 @@
   "cache_within_numpy_gate": true,
   "condition_scaled_cache_max": 6.890986078788315e-07,
   "condition_scaled_jax_max": 0.003501546589350664,
-  "gate_jax_well_conditioned": 8.321876521222293e-08,
-  "gate_jax_well_conditioned_per_target": {
-   "gb_3mo/band_cut/fast": 1e-10,
-   "gb_3mo/band_exact/fast": 5.4569682106375694e-09,
-   "gb_3mo/band_pad/fast": 1e-10,
-   "gb_3mo/band_raw/fast": 1e-10,
-   "gb_3mo/exact/fast": 2.6575435185804963e-08,
-   "gb_3mo/mid_cut/fast": 1e-10,
-   "gb_3mo/mid_exact/fast": 5.4569682106375694e-09,
-   "gb_3mo/mid_pad/fast": 1e-10,
-   "gb_3mo/mid_raw/fast": 1e-10,
-   "gb_3mo/tri_cut/fast": 1e-10,
-   "gb_3mo/tri_exact/fast": 1e-10,
-   "gb_3mo/tri_pad/fast": 1e-10,
-   "gb_3mo/tri_raw/fast": 1e-10,
-   "gb_3mo/whittle_cut/fast": 1e-10,
-   "gb_3mo/whittle_raw/fast": 1e-10,
-   "gb_6mo/band_cut/fast": 1e-10,
-   "gb_6mo/band_exact/fast": 1.7644197214394808e-09,
-   "gb_6mo/band_pad/fast": 1e-10,
-   "gb_6mo/band_raw/fast": 1e-10,
-   "gb_6mo/exact/fast": 8.321876521222293e-08,
-   "gb_6mo/mid_cut/fast": 1e-10,
-   "gb_6mo/mid_exact/fast": 1.7826096154749393e-09,
-   "gb_6mo/mid_pad/fast": 1e-10,
-   "gb_6mo/mid_raw/fast": 1e-10,
-   "gb_6mo/tri_cut/fast": 1e-10,
-   "gb_6mo/tri_exact/fast": 1e-10,
-   "gb_6mo/tri_pad/fast": 1e-10,
-   "gb_6mo/tri_raw/fast": 1e-10,
-   "gb_6mo/whittle_cut/fast": 1e-10,
-   "gb_6mo/whittle_raw/fast": 1e-10
-  },
   "mask_mismatches": [],
   "observed_cache_well_conditioned": 1.8189894035458565e-12,
   "observed_jax_well_conditioned": 8.321876521222293e-09,
@@ -896,6 +863,186 @@
     "marginal_threshold": 1e-10,
     "points": 11
    }
+  },
+  "proposed_gate_jax_well_conditioned": 8.321876521222293e-08,
+  "proposed_gate_jax_well_conditioned_per_target": {
+   "gb_3mo/band_cut/fast": 1e-10,
+   "gb_3mo/band_exact/fast": 5.4569682106375694e-09,
+   "gb_3mo/band_pad/fast": 1e-10,
+   "gb_3mo/band_raw/fast": 1e-10,
+   "gb_3mo/exact/fast": 2.6575435185804963e-08,
+   "gb_3mo/mid_cut/fast": 1e-10,
+   "gb_3mo/mid_exact/fast": 5.4569682106375694e-09,
+   "gb_3mo/mid_pad/fast": 1e-10,
+   "gb_3mo/mid_raw/fast": 1e-10,
+   "gb_3mo/tri_cut/fast": 1e-10,
+   "gb_3mo/tri_exact/fast": 1e-10,
+   "gb_3mo/tri_pad/fast": 1e-10,
+   "gb_3mo/tri_raw/fast": 1e-10,
+   "gb_3mo/whittle_cut/fast": 1e-10,
+   "gb_3mo/whittle_raw/fast": 1e-10,
+   "gb_6mo/band_cut/fast": 1e-10,
+   "gb_6mo/band_exact/fast": 1.7644197214394808e-09,
+   "gb_6mo/band_pad/fast": 1e-10,
+   "gb_6mo/band_raw/fast": 1e-10,
+   "gb_6mo/exact/fast": 8.321876521222293e-08,
+   "gb_6mo/mid_cut/fast": 1e-10,
+   "gb_6mo/mid_exact/fast": 1.7826096154749393e-09,
+   "gb_6mo/mid_pad/fast": 1e-10,
+   "gb_6mo/mid_raw/fast": 1e-10,
+   "gb_6mo/tri_cut/fast": 1e-10,
+   "gb_6mo/tri_exact/fast": 1e-10,
+   "gb_6mo/tri_pad/fast": 1e-10,
+   "gb_6mo/tri_raw/fast": 1e-10,
+   "gb_6mo/whittle_cut/fast": 1e-10,
+   "gb_6mo/whittle_raw/fast": 1e-10
+  }
+ },
+ "approval": {
+  "date": "2026-10-12",
+  "decisions": {
+   "D2": {
+    "decision": "one NumPy G3 gate of 1e-8 for all 38 targets (replaces the spec's flat 1e-9 proposal and the per-target 10x values); G3 JAX stays 1e-8",
+    "gates": {
+     "G3_jax": 1e-08,
+     "G3_numpy": 1e-08
+    },
+    "label": "Uniform 1e-8"
+   },
+   "D3": {
+    "decision": "one JAX gate of 8.32e-8 for every target at well-conditioned points (PD margin >= 1e-6); ill-conditioned points (1e-10 <= margin < 1e-6) are reported (condition-scaled) but not gated; marginal points (< 1e-10) must only be finite or -inf with identical -inf masks. The NumPy-cache gate stays 1e-10 + 1e-12|lnL|. Per-target G4 values stay in the file as informational",
+    "gates": {
+     "G4_jax_well_conditioned": 8.32e-08,
+     "G4_numpy_cache_abs": 1e-10,
+     "G4_numpy_cache_rel": 1e-12
+    },
+    "label": "Pooled 8.3e-8, report the rest"
+   }
+  }
+ },
+ "approved": {
+  "G3": {
+   "jax": {
+    "gb_12mo/band_pad": 1e-08,
+    "gb_12mo/band_raw": 1e-08,
+    "gb_12mo/exact": 1e-08,
+    "gb_12mo/mid_pad": 1e-08,
+    "gb_12mo/mid_raw": 1e-08,
+    "gb_12mo/tri_pad": 1e-08,
+    "gb_12mo/tri_raw": 1e-08,
+    "gb_12mo/whittle_raw": 1e-08,
+    "gb_3mo/band_cut": 1e-08,
+    "gb_3mo/band_exact": 1e-08,
+    "gb_3mo/band_pad": 1e-08,
+    "gb_3mo/band_raw": 1e-08,
+    "gb_3mo/exact": 1e-08,
+    "gb_3mo/mid_cut": 1e-08,
+    "gb_3mo/mid_exact": 1e-08,
+    "gb_3mo/mid_pad": 1e-08,
+    "gb_3mo/mid_raw": 1e-08,
+    "gb_3mo/tri_cut": 1e-08,
+    "gb_3mo/tri_exact": 1e-08,
+    "gb_3mo/tri_pad": 1e-08,
+    "gb_3mo/tri_raw": 1e-08,
+    "gb_3mo/whittle_cut": 1e-08,
+    "gb_3mo/whittle_raw": 1e-08,
+    "gb_6mo/band_cut": 1e-08,
+    "gb_6mo/band_exact": 1e-08,
+    "gb_6mo/band_pad": 1e-08,
+    "gb_6mo/band_raw": 1e-08,
+    "gb_6mo/exact": 1e-08,
+    "gb_6mo/mid_cut": 1e-08,
+    "gb_6mo/mid_exact": 1e-08,
+    "gb_6mo/mid_pad": 1e-08,
+    "gb_6mo/mid_raw": 1e-08,
+    "gb_6mo/tri_cut": 1e-08,
+    "gb_6mo/tri_exact": 1e-08,
+    "gb_6mo/tri_pad": 1e-08,
+    "gb_6mo/tri_raw": 1e-08,
+    "gb_6mo/whittle_cut": 1e-08,
+    "gb_6mo/whittle_raw": 1e-08
+   },
+   "numpy": {
+    "gb_12mo/band_pad": 1e-08,
+    "gb_12mo/band_raw": 1e-08,
+    "gb_12mo/exact": 1e-08,
+    "gb_12mo/mid_pad": 1e-08,
+    "gb_12mo/mid_raw": 1e-08,
+    "gb_12mo/tri_pad": 1e-08,
+    "gb_12mo/tri_raw": 1e-08,
+    "gb_12mo/whittle_raw": 1e-08,
+    "gb_3mo/band_cut": 1e-08,
+    "gb_3mo/band_exact": 1e-08,
+    "gb_3mo/band_pad": 1e-08,
+    "gb_3mo/band_raw": 1e-08,
+    "gb_3mo/exact": 1e-08,
+    "gb_3mo/mid_cut": 1e-08,
+    "gb_3mo/mid_exact": 1e-08,
+    "gb_3mo/mid_pad": 1e-08,
+    "gb_3mo/mid_raw": 1e-08,
+    "gb_3mo/tri_cut": 1e-08,
+    "gb_3mo/tri_exact": 1e-08,
+    "gb_3mo/tri_pad": 1e-08,
+    "gb_3mo/tri_raw": 1e-08,
+    "gb_3mo/whittle_cut": 1e-08,
+    "gb_3mo/whittle_raw": 1e-08,
+    "gb_6mo/band_cut": 1e-08,
+    "gb_6mo/band_exact": 1e-08,
+    "gb_6mo/band_pad": 1e-08,
+    "gb_6mo/band_raw": 1e-08,
+    "gb_6mo/exact": 1e-08,
+    "gb_6mo/mid_cut": 1e-08,
+    "gb_6mo/mid_exact": 1e-08,
+    "gb_6mo/mid_pad": 1e-08,
+    "gb_6mo/mid_raw": 1e-08,
+    "gb_6mo/tri_cut": 1e-08,
+    "gb_6mo/tri_exact": 1e-08,
+    "gb_6mo/tri_pad": 1e-08,
+    "gb_6mo/tri_raw": 1e-08,
+    "gb_6mo/whittle_cut": 1e-08,
+    "gb_6mo/whittle_raw": 1e-08
+   }
+  },
+  "G4": {
+   "ill_conditioned": "marginal threshold <= margin < 1e-6: reported condition-scaled (|delta| / (eps |lnL| / margin)), not gated",
+   "inf_mask": "identical; non-marginal points follow expected_neg_inf = source_out or margin < 0",
+   "jax_well_conditioned": 8.32e-08,
+   "jax_well_conditioned_per_target": {
+    "gb_3mo/band_cut": 8.32e-08,
+    "gb_3mo/band_exact": 8.32e-08,
+    "gb_3mo/band_pad": 8.32e-08,
+    "gb_3mo/band_raw": 8.32e-08,
+    "gb_3mo/exact": 8.32e-08,
+    "gb_3mo/mid_cut": 8.32e-08,
+    "gb_3mo/mid_exact": 8.32e-08,
+    "gb_3mo/mid_pad": 8.32e-08,
+    "gb_3mo/mid_raw": 8.32e-08,
+    "gb_3mo/tri_cut": 8.32e-08,
+    "gb_3mo/tri_exact": 8.32e-08,
+    "gb_3mo/tri_pad": 8.32e-08,
+    "gb_3mo/tri_raw": 8.32e-08,
+    "gb_3mo/whittle_cut": 8.32e-08,
+    "gb_3mo/whittle_raw": 8.32e-08,
+    "gb_6mo/band_cut": 8.32e-08,
+    "gb_6mo/band_exact": 8.32e-08,
+    "gb_6mo/band_pad": 8.32e-08,
+    "gb_6mo/band_raw": 8.32e-08,
+    "gb_6mo/exact": 8.32e-08,
+    "gb_6mo/mid_cut": 8.32e-08,
+    "gb_6mo/mid_exact": 8.32e-08,
+    "gb_6mo/mid_pad": 8.32e-08,
+    "gb_6mo/mid_raw": 8.32e-08,
+    "gb_6mo/tri_cut": 8.32e-08,
+    "gb_6mo/tri_exact": 8.32e-08,
+    "gb_6mo/tri_pad": 8.32e-08,
+    "gb_6mo/tri_raw": 8.32e-08,
+    "gb_6mo/whittle_cut": 8.32e-08,
+    "gb_6mo/whittle_raw": 8.32e-08
+   },
+   "marginal": "finite or -inf with identical -inf masks across evaluators; deltas not gated",
+   "numpy_cache_abs": 1e-10,
+   "numpy_cache_rel": 1e-12,
+   "well_conditioned_margin": 1e-06
   }
  },
  "floors": {
@@ -907,7 +1054,7 @@
   "G4_numpy_rel": 1e-12
  },
  "schema": 1,
- "status": "measured; pending user approval",
+ "status": "APPROVED by the user 2026-10-12",
  "summary": {
   "G3_exceeds_proposal_jax": [],
   "G3_exceeds_proposal_numpy": [
@@ -931,8 +1078,20 @@
   "G3_runs": 58,
   "G3_targets": 38,
   "G4_files": 30,
-  "G4_gate_jax_well_conditioned": 8.321876521222293e-08,
-  "G4_mask_mismatches": 0
+  "G4_mask_mismatches": 0,
+  "G4_proposed_gate_jax_well_conditioned": 8.321876521222293e-08,
+  "approved_gates": {
+   "G3_jax": 1e-08,
+   "G3_numpy": 1e-08,
+   "G4_jax_well_conditioned": 8.32e-08,
+   "G4_numpy_cache_abs": 1e-10,
+   "G4_numpy_cache_rel": 1e-12
+  },
+  "approved_on": "2026-10-12",
+  "decisions": {
+   "D2": "Uniform 1e-8",
+   "D3": "Pooled 8.3e-8, report the rest"
+  }
  },
  "well_conditioned_margin": 1e-06
 }

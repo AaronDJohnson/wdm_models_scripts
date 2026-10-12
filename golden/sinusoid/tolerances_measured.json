@@ -1,4 +1,284 @@
 {
+ "approval": {
+  "date": "2026-10-12",
+  "decisions": {
+   "D1": {
+    "applies_to": {
+     "backend": "numpy",
+     "kind": "references",
+     "models": [
+      "band_pad",
+      "mid_pad",
+      "tri_pad",
+      "exact"
+     ],
+     "rtol": 1e-12
+    },
+    "decision": "sinusoid pad/exact NumPy gates: keep atol 1e-9 ({band,mid,tri}_pad) and atol 1e-7 (exact) at near points, and add rtol 1e-12 (gate = atol + 1e-12*|lnL|) at stress points, like the edge-exact models",
+    "label": "Add rtol 1e-12 at stress"
+   },
+   "as_proposed": {
+    "decision": "all other measured sinusoid gates are approved as proposed (status PROPOSED -> APPROVED); each proposal equals its spec \u00a77.3 floor",
+    "label": "approved as proposed"
+   }
+  }
+ },
+ "approved": {
+  "jax": {
+   "chain_rows": {
+    "band_cut": {
+     "atol": 1e-05,
+     "rtol": 0.0
+    },
+    "band_exact": {
+     "atol": 1e-05,
+     "rtol": 0.0
+    },
+    "band_pad": {
+     "atol": 1e-05,
+     "rtol": 0.0
+    },
+    "band_raw": {
+     "atol": 1e-05,
+     "rtol": 0.0
+    },
+    "exact": {
+     "atol": 0.0001,
+     "rtol": 0.0
+    },
+    "mid_cut": {
+     "atol": 1e-05,
+     "rtol": 0.0
+    },
+    "mid_exact": {
+     "atol": 1e-05,
+     "rtol": 0.0
+    },
+    "mid_pad": {
+     "atol": 1e-05,
+     "rtol": 0.0
+    },
+    "mid_raw": {
+     "atol": 1e-05,
+     "rtol": 0.0
+    },
+    "tri_cut": {
+     "atol": 1e-05,
+     "rtol": 0.0
+    },
+    "tri_exact": {
+     "atol": 1e-05,
+     "rtol": 0.0
+    },
+    "tri_pad": {
+     "atol": 1e-05,
+     "rtol": 0.0
+    },
+    "tri_raw": {
+     "atol": 1e-05,
+     "rtol": 0.0
+    },
+    "whittle_cut": {
+     "atol": 1e-05,
+     "rtol": 0.0
+    },
+    "whittle_raw": {
+     "atol": 1e-05,
+     "rtol": 0.0
+    }
+   },
+   "inf_mask": "identical",
+   "references": {
+    "band_cut": {
+     "atol": 1e-05,
+     "rtol": 1e-08
+    },
+    "band_exact": {
+     "atol": 1e-05,
+     "rtol": 1e-08
+    },
+    "band_pad": {
+     "atol": 1e-05,
+     "rtol": 1e-08
+    },
+    "band_raw": {
+     "atol": 1e-05,
+     "rtol": 1e-08
+    },
+    "exact": {
+     "atol": 0.0001,
+     "rtol": 1e-08
+    },
+    "mid_cut": {
+     "atol": 1e-05,
+     "rtol": 1e-08
+    },
+    "mid_exact": {
+     "atol": 1e-05,
+     "rtol": 1e-08
+    },
+    "mid_pad": {
+     "atol": 1e-05,
+     "rtol": 1e-08
+    },
+    "mid_raw": {
+     "atol": 1e-05,
+     "rtol": 1e-08
+    },
+    "tri_cut": {
+     "atol": 1e-05,
+     "rtol": 1e-08
+    },
+    "tri_exact": {
+     "atol": 1e-05,
+     "rtol": 1e-08
+    },
+    "tri_pad": {
+     "atol": 1e-05,
+     "rtol": 1e-08
+    },
+    "tri_raw": {
+     "atol": 1e-05,
+     "rtol": 1e-08
+    },
+    "whittle_cut": {
+     "atol": 1e-05,
+     "rtol": 1e-08
+    },
+    "whittle_raw": {
+     "atol": 1e-05,
+     "rtol": 1e-08
+    }
+   }
+  },
+  "numpy": {
+   "chain_rows": {
+    "band_cut": {
+     "atol": 1e-05,
+     "rtol": 0.0
+    },
+    "band_exact": {
+     "atol": 1e-05,
+     "rtol": 0.0
+    },
+    "band_pad": {
+     "atol": 1e-05,
+     "rtol": 0.0
+    },
+    "band_raw": {
+     "atol": 1e-05,
+     "rtol": 0.0
+    },
+    "exact": {
+     "atol": 0.0001,
+     "rtol": 0.0
+    },
+    "mid_cut": {
+     "atol": 1e-05,
+     "rtol": 0.0
+    },
+    "mid_exact": {
+     "atol": 1e-05,
+     "rtol": 0.0
+    },
+    "mid_pad": {
+     "atol": 1e-05,
+     "rtol": 0.0
+    },
+    "mid_raw": {
+     "atol": 1e-05,
+     "rtol": 0.0
+    },
+    "tri_cut": {
+     "atol": 1e-05,
+     "rtol": 0.0
+    },
+    "tri_exact": {
+     "atol": 1e-05,
+     "rtol": 0.0
+    },
+    "tri_pad": {
+     "atol": 1e-05,
+     "rtol": 0.0
+    },
+    "tri_raw": {
+     "atol": 1e-05,
+     "rtol": 0.0
+    },
+    "whittle_cut": {
+     "atol": 1e-05,
+     "rtol": 0.0
+    },
+    "whittle_raw": {
+     "atol": 1e-05,
+     "rtol": 0.0
+    }
+   },
+   "inf_mask": "identical",
+   "references": {
+    "band_cut": {
+     "atol": 1e-09,
+     "rtol": 0.0
+    },
+    "band_exact": {
+     "atol": 1e-08,
+     "rtol": 1e-12
+    },
+    "band_pad": {
+     "atol": 1e-09,
+     "rtol": 1e-12
+    },
+    "band_raw": {
+     "atol": 1e-09,
+     "rtol": 0.0
+    },
+    "exact": {
+     "atol": 1e-07,
+     "rtol": 1e-12
+    },
+    "mid_cut": {
+     "atol": 1e-09,
+     "rtol": 0.0
+    },
+    "mid_exact": {
+     "atol": 1e-08,
+     "rtol": 1e-12
+    },
+    "mid_pad": {
+     "atol": 1e-09,
+     "rtol": 1e-12
+    },
+    "mid_raw": {
+     "atol": 1e-09,
+     "rtol": 0.0
+    },
+    "tri_cut": {
+     "atol": 1e-09,
+     "rtol": 0.0
+    },
+    "tri_exact": {
+     "atol": 1e-08,
+     "rtol": 1e-12
+    },
+    "tri_pad": {
+     "atol": 1e-09,
+     "rtol": 1e-12
+    },
+    "tri_raw": {
+     "atol": 1e-09,
+     "rtol": 0.0
+    },
+    "whittle_cut": {
+     "atol": 1e-09,
+     "rtol": 0.0
+    },
+    "whittle_raw": {
+     "atol": 1e-09,
+     "rtol": 0.0
+    }
+   }
+  }
+ },
  "factor": 10.0,
  "family": "sinusoid",
  "file": "sinusoid/tolerances_measured.json",
@@ -797,5 +1077,5 @@
   "B_chain_rows_fast"
  ],
  "schema": 1,
- "status": "PROPOSED - pending user approval (spec \u00a77.3, \u00a79 'Still open')"
+ "status": "APPROVED by the user 2026-10-12"
 }

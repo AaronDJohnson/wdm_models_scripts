@@ -1,21 +1,39 @@
-"""P0 measurement of the sinusoid gates (spec §7.3; Task A10).
+"""P0 measurement of the sinusoid gates (spec §7.3; Tasks A10, F4).
 
-    $PY -m scripts.golden.measure_tolerances --family sinusoid
+    $PY -m scripts.golden.measure_tolerances --family sinusoid [--replace]
 
 Reads golden/sinusoid/legacy_eval/{A,B}_{references,chain_rows}_<tier>.json. Gates are split
 like toy_models/sinusoid/gpu/run.py::validate_reference: near points |delta| <= atol;
-stress points |delta| <= atol + rtol |lnL_ref|; -inf masks identical. Proposed gate =
-max(FACTOR x observed, floor) with the spec §7.3 floors. Writes
-golden/sinusoid/tolerances_measured.json with status PROPOSED: the user approves the gates
-(spec §9 "Still open").
+stress points |delta| <= atol + rtol |lnL_ref|; -inf masks identical.
+
+Writes golden/sinusoid/tolerances_measured.json with three separate records:
+
+* ``observed``: the measured maxima per lineage/backend;
+* ``proposed``: the original P0 proposal, max(FACTOR x observed, floor) with the spec §7.3 floors
+  (every proposal equals its floor);
+* ``approved``: the OPERATIVE gates, the ones every later part reads. The user approved them on
+  2026-10-12 (``DECISIONS``): every proposed gate as proposed, plus D1 ("Add rtol 1e-12 at
+  stress"), which gives the NumPy reference gates of {band,mid,tri}_pad and exact rtol 1e-12 at
+  stress points (atol unchanged at near points), like the edge-exact models.
+
+Each gate, proposed or approved, must pass its own data; otherwise nothing is written
+(``AssertionError``). The decisions live here, never in hand-edited JSON.
+
+The command line measures, renders and hashes in memory first and refuses (``SystemExit``, nothing
+written) when golden/MANIFEST.json records other bytes for the file, unless ``--replace``; it then
+writes the file and merges ``manifest_summary`` into ``MANIFEST["tolerances"]["sinusoid"]``.
+``measure_sinusoid()`` (the capture hook, ``capture.FAMILIES``) writes the file only; capture pins it.
 """
 from __future__ import annotations
 
 import argparse
+import hashlib
+import json
 import math
 import sys
 
-from scripts.golden.goldens_io import read_json, to_float, write_json
+from scripts.golden import manifest_merge
+from scripts.golden.goldens_io import jsonable, read_json, to_float
 from scripts.golden.sinusoid_goldens import EVAL, GS, MODELS
 
 FACTOR = 10.0
@@ -32,13 +50,48 @@ FLOORS = {
             "exact": {"atol": 1e-4, "rtol": 1e-8}},
 }
 BACKEND = {"A": "numpy", "B": "jax"}
-STATUS = "PROPOSED - pending user approval (spec §7.3, §9 'Still open')"
 OUT = GS / "tolerances_measured.json"
+
+# --- the user's approval (spec §7.3 "Approved by the user on 2026-10-12") ------------------------
+
+APPROVED_ON = "2026-10-12"
+STATUS = f"APPROVED by the user {APPROVED_ON}"
+#: D1 scope and value: the NumPy reference gates of these models gain rtol 1e-12 at stress points.
+D1_MODELS = PADS + ("exact",)
+D1_RTOL = 1e-12
+#: The decisions, verbatim labels first. Rendered into the file as ``approval``.
+DECISIONS = {
+    "D1": {"label": "Add rtol 1e-12 at stress",
+           "decision": "sinusoid pad/exact NumPy gates: keep atol 1e-9 ({band,mid,tri}_pad) and atol "
+                       "1e-7 (exact) at near points, and add rtol 1e-12 (gate = atol + 1e-12*|lnL|) at "
+                       "stress points, like the edge-exact models",
+           "applies_to": {"backend": "numpy", "kind": "references", "models": list(D1_MODELS),
+                          "rtol": D1_RTOL}},
+    "as_proposed": {"label": "approved as proposed",
+                    "decision": "all other measured sinusoid gates are approved as proposed (status "
+                                "PROPOSED -> APPROVED); each proposal equals its spec §7.3 floor"},
+}
 
 
 def propose(observed: dict, floor: dict) -> dict:
     return {"atol": max(FACTOR * observed["near_max_abs"], floor["atol"]),
             "rtol": max(FACTOR * observed["stress_max_rel"], floor["rtol"])}
+
+
+def approved_gates() -> dict:
+    """The operative gates (``DECISIONS``): the proposal as presented on 2026-10-12, where every gate
+    equals its floor (chain rows: the JAX floor's atol, rtol 0), with D1's stress rtol on top. Fixed
+    values, not a function of the measurement: a re-capture cannot move an approved gate."""
+    out = {}
+    for backend in ("numpy", "jax"):
+        refs = {m: dict(FLOORS[backend][m]) for m in MODELS}
+        if backend == DECISIONS["D1"]["applies_to"]["backend"]:
+            for m in D1_MODELS:
+                refs[m]["rtol"] = D1_RTOL
+        out[backend] = {"references": refs,
+                        "chain_rows": {m: {"atol": FLOORS["jax"][m]["atol"], "rtol": 0.0} for m in MODELS},
+                        "inf_mask": "identical"}
+    return out
 
 
 def violations(points: dict, gates: dict) -> list[str]:
@@ -75,9 +128,12 @@ def _reports(lineage: str, kind: str) -> list[dict]:
     return reps
 
 
-def measure_sinusoid() -> dict:
+def build_sinusoid() -> dict:
+    """The measured, proposed and approved gates (nothing written); raises when a gate fails its data."""
+    approved = approved_gates()
     out = {"schema": 1, "family": "sinusoid", "status": STATUS, "factor": FACTOR, "floors": FLOORS,
-           "file": OUT.relative_to(GS.parent).as_posix(), "reports": [], "observed": {}, "proposed": {}}
+           "file": OUT.relative_to(GS.parent).as_posix(), "reports": [], "observed": {}, "proposed": {},
+           "approval": {"date": APPROVED_ON, "decisions": DECISIONS}, "approved": approved}
     for lineage, backend in BACKEND.items():
         refs, rows = _reports(lineage, "references"), _reports(lineage, "chain_rows")
         obs = {m: {"near_max_abs": 0.0, "stress_max_abs": 0.0, "stress_max_rel": 0.0,
@@ -113,25 +169,77 @@ def measure_sinusoid() -> dict:
         problems += [v for rep in rows for v in violations(rep["points"], chain_gates)]
         if problems:
             raise AssertionError("a proposed gate fails its own data:\n" + "\n".join(problems[:10]))
+        problems = [v for rep in refs for v in violations(rep["points"], approved[backend]["references"])]
+        problems += [v for rep in rows for v in violations(rep["points"], approved[backend]["chain_rows"])]
+        if problems:
+            raise AssertionError(f"an approved gate fails its own data ({backend}, lineage {lineage}; S0 "
+                                 "fails, report to the user):\n" + "\n".join(problems[:10]))
         out["observed"][backend] = {"lineage": lineage, "references": obs, "chain_rows": cobs}
         out["proposed"][backend] = {"references": gates, "chain_rows": chain_gates, "inf_mask": "identical"}
-    write_json(OUT, out)
-    print(f"{OUT.relative_to(GS.parent.parent)}: {STATUS}")
-    for backend, p in out["proposed"].items():
+    return out
+
+
+def render(result: dict) -> bytes:
+    """The exact bytes of ``tolerances_measured.json`` (``goldens_io.write_json``'s format)."""
+    return (json.dumps(jsonable(result), indent=1, sort_keys=True, allow_nan=False) + "\n").encode("utf-8")
+
+
+def manifest_summary(result: dict) -> dict:
+    """``MANIFEST["tolerances"]["sinusoid"]``: file, status and the approval (date, decision labels,
+    the approved gates). Shared by the command line and ``capture.capture``."""
+    out = {"file": result["file"], "status": result["status"]}
+    if "approval" in result:
+        out.update(approved_on=result["approval"]["date"],
+                   decisions={k: d["label"] for k, d in result["approval"]["decisions"].items()},
+                   approved=result["approved"])
+    return out
+
+
+def _report(result: dict) -> None:
+    print(f"{OUT.relative_to(GS.parent.parent)}: {result['status']}")
+    for backend, p in result["approved"].items():
         for model in MODELS:
             g = p["references"][model]
             print(f"  {backend:5s} {model:12s} atol={g['atol']:.1e} rtol={g['rtol']:.1e} "
                   f"chain_atol={p['chain_rows'][model]['atol']:.1e}")
+
+
+def measure_sinusoid() -> dict:
+    """Measure and write ``OUT`` (no MANIFEST change: ``capture.capture`` pins it)."""
+    out = build_sinusoid()
+    OUT.write_bytes(render(out))
+    _report(out)
     return out
 
 
 def main(argv: list[str] | None = None) -> int:
     if not sys.flags.safe_path:          # spec §1 guard 5: no cwd injection
         raise SystemExit("run with python -P or PYTHONSAFEPATH=1 (source env/activate.sh)")
+    return cli(argv)
+
+
+def cli(argv: list[str] | None = None) -> int:
+    """``main`` without the safe-path guard (the tests call it in-process)."""
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("--family", choices=("sinusoid",), default="sinusoid")
-    ap.parse_args(argv)
-    measure_sinusoid()
+    ap.add_argument("--replace", action="store_true",
+                    help="re-pin the file in golden/MANIFEST.json when its recorded bytes differ")
+    a = ap.parse_args(argv)
+    # Measured, serialised and hashed in memory; nothing is written until the manifest check passed.
+    result = build_sinusoid()
+    data = render(result)
+    manifest = GS.parent / "MANIFEST.json"
+    files = {result["file"]: hashlib.sha256(data).hexdigest()}
+    bad = manifest_merge.conflicts(manifest_merge.load(manifest), files)
+    if bad and not a.replace:
+        raise SystemExit(f"golden/MANIFEST.json holds other bytes for {bad}; nothing written; "
+                         "rerun with --replace only if the change is intended")
+    OUT.write_bytes(data)
+    if manifest_merge.sha256_file(OUT) != files[result["file"]]:
+        raise RuntimeError(f"{OUT}: written bytes differ from the measurement")
+    manifest_merge.merge_entries(manifest, files, tolerances={"sinusoid": manifest_summary(result)},
+                                 replace=a.replace)
+    _report(result)
     return 0
 
 

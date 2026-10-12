@@ -30,6 +30,12 @@ CACHED = {"exact": "FullCache", "band_exact": "EdgeSchurCache", "mid_exact": "Ed
 WELL_CONDITIONED = 1e-6
 
 
+def _approved_g4() -> dict:
+    """The operative G4 gates the user approved on 2026-10-12 (D3), as rendered by
+    ``measure_tolerances_gb`` into ``tolerances_measured.json["approved"]["G4"]``."""
+    return json.loads((GOLDEN / "galactic_binary" / "tolerances_measured.json").read_text())["approved"]["G4"]
+
+
 def _load(case, model):
     return json.loads((STRESS / case / f"{model}.fast.json").read_text())
 
@@ -44,6 +50,9 @@ def test_stress_fast_tier(case, model):
     rel = f"galactic_binary/stress/{case}/{model}.fast.json"
     assert rel in json.loads((GOLDEN / "MANIFEST.json").read_text())["files"]
     r = _load(case, model)
+    approved = _approved_g4()
+    assert approved["well_conditioned_margin"] == WELL_CONDITIONED
+    jax_gate = approved["jax_well_conditioned_per_target"][f"{case}/{model}"]     # 8.32e-8 for every target
     names = WHITTLE_NAMES if model.startswith("whittle") else ENVELOPE_NAMES
     assert [p["name"] for p in r["points"]] == names and r["n_points"] == 11
     assert r["cache_class"] == CACHED.get(model)
@@ -60,16 +69,18 @@ def test_stress_fast_tier(case, model):
         if p["source_out"]:
             assert p["lnl_ref"] == -math.inf and p["lnl_jax"] == -math.inf
             assert p.get("lnl_cache", -math.inf) == -math.inf
-        if p["marginal"]:
-            continue
+        # Identical -inf masks at every point, marginal ones included (D3, approved 2026-10-12).
         if "lnl_cache" in p:
-            assert _same_mask(p["lnl_ref"], p["lnl_cache"])
-        assert _same_mask(p["lnl_ref"], p["lnl_jax"])
+            assert _same_mask(p["lnl_ref"], p["lnl_cache"]), f"{p['name']}: lnl_cache mask"
+        assert _same_mask(p["lnl_ref"], p["lnl_jax"]), f"{p['name']}: lnl_jax mask"
+        if p["marginal"]:                               # deltas not gated
+            continue
+        # Ill-conditioned points (1e-10 <= margin < 1e-6) are reported by measure_tolerances_gb, not gated.
         if math.isfinite(p["lnl_ref"]) and p["pd_margin"] >= WELL_CONDITIONED:
-            tol = 1e-10 + 1e-12 * abs(p["lnl_ref"])    # spec §7.3 G4 NumPy cache gate (measured)
+            tol = approved["numpy_cache_abs"] + approved["numpy_cache_rel"] * abs(p["lnl_ref"])
             if "lnl_cache" in p:
                 assert abs(p["lnl_cache"] - p["lnl_ref"]) <= tol, p["name"]
-            assert abs(p["lnl_jax"] - p["lnl_ref"]) <= 1e-6, p["name"]
+            assert abs(p["lnl_jax"] - p["lnl_ref"]) <= jax_gate, p["name"]
     if r["counters_cache"] is not None:
         c = r["counters_cache"]
         distinct = len({tuple(p["theta"][8:]) for p in pts})
@@ -111,6 +122,40 @@ def test_marginal_point_must_be_finite_or_neg_inf(monkeypatch, name, value):
     marginal[0][name] = value
     monkeypatch.setitem(globals(), "_load", lambda case, model: r)
     with pytest.raises(AssertionError, match=f"{marginal[0]['name']}: {name} = {value}"):
+        test_stress_fast_tier("gb_3mo", "exact")
+
+
+def _finite_marginal_point(r):
+    return next(p for p in r["points"] if p["marginal"] and math.isfinite(p["lnl_ref"]) and "lnl_cache" in p)
+
+
+@pytest.mark.parametrize("name", ["lnl_cache", "lnl_jax"])
+def test_marginal_point_mask_must_be_identical(monkeypatch, name):
+    """D3 (approved 2026-10-12): a marginal point is finite or -inf WITH identical -inf masks."""
+    r = _load("gb_3mo", "exact")
+    p = _finite_marginal_point(r)
+    p[name] = -math.inf
+    monkeypatch.setitem(globals(), "_load", lambda case, model: r)
+    with pytest.raises(AssertionError, match=f"{p['name']}: {name} mask"):
+        test_stress_fast_tier("gb_3mo", "exact")
+
+
+def test_marginal_point_delta_is_not_gated(monkeypatch):
+    r = _load("gb_3mo", "exact")
+    p = _finite_marginal_point(r)
+    p["lnl_jax"] = p["lnl_ref"] + 50.0
+    monkeypatch.setitem(globals(), "_load", lambda case, model: r)
+    test_stress_fast_tier("gb_3mo", "exact")
+
+
+def test_well_conditioned_jax_point_uses_the_approved_gate(monkeypatch):
+    """D3: 8.32e-8 at margin >= 1e-6 (was the 1e-6 ceiling): 9e-8 off the reference fails."""
+    r = _load("gb_3mo", "exact")
+    p = next(p for p in r["points"] if p["pd_margin"] >= WELL_CONDITIONED and math.isfinite(p["lnl_ref"]))
+    assert _approved_g4()["jax_well_conditioned_per_target"]["gb_3mo/exact"] == 8.32e-8
+    p["lnl_jax"] = p["lnl_ref"] + 9e-8
+    monkeypatch.setitem(globals(), "_load", lambda case, model: r)
+    with pytest.raises(AssertionError, match=p["name"]):
         test_stress_fast_tier("gb_3mo", "exact")
 
 

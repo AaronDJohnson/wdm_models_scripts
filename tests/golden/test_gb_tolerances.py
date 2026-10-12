@@ -1,4 +1,5 @@
-"""B8: measured galactic-binary tolerances (G3 rows, G4 stress) and their MANIFEST summary."""
+"""B8: measured galactic-binary tolerances (G3 rows, G4 stress) and their MANIFEST summary;
+F4: the gates the user approved on 2026-10-12 (spec 7.3), rendered by the measurement script."""
 
 from __future__ import annotations
 
@@ -26,16 +27,25 @@ def test_manifest_summary(measured):
     m = json.loads((GOLDEN / "MANIFEST.json").read_text())
     assert "galactic_binary/tolerances_measured.json" in m["files"]
     summary = m["tolerances"]["galactic_binary"]
-    assert summary["status"] == measured["status"] == "measured; pending user approval"
+    assert summary["status"] == measured["status"] == "APPROVED by the user 2026-10-12"
     assert summary["G3_targets"] == 38 and summary["G3_runs"] == 58
+    assert summary == dict(measured["summary"], status=measured["status"], file=OUT)
+    assert summary["approved_on"] == "2026-10-12"
+    assert summary["decisions"] == {"D2": "Uniform 1e-8", "D3": "Pooled 8.3e-8, report the rest"}
+    assert summary["approved_gates"] == {"G3_numpy": 1e-8, "G3_jax": 1e-8, "G4_jax_well_conditioned": 8.32e-8,
+                                         "G4_numpy_cache_abs": 1e-10, "G4_numpy_cache_rel": 1e-12}
+    assert summary["G4_proposed_gate_jax_well_conditioned"] == measured["G4"]["proposed_gate_jax_well_conditioned"]
+    assert "G4_gate_jax_well_conditioned" not in summary          # the proposal is never read as the gate
 
 
-def test_g3_gates_cover_observations(measured):
+def test_g3_proposals_cover_observations(measured):
+    """The original B8 proposals (10 x observed, floors 1e-9 / 1e-8) stay recorded, informational."""
     for target, t in measured["G3"].items():
         assert t["rows"] >= 3 * t["runs"], target
-        assert t["gate_numpy"] >= max(10 * t["observed_numpy"], 1e-9)
-        assert t["gate_jax"] >= max(10 * t["observed_jax"], 1e-8)
+        assert t["proposed_gate_numpy"] >= max(10 * t["observed_numpy"], 1e-9)
+        assert t["proposed_gate_jax"] >= max(10 * t["observed_jax"], 1e-8)
         assert t["observed_numpy"] <= 1e-6 and t["observed_jax"] <= 1e-6
+        assert "gate_numpy" not in t and "gate_jax" not in t      # never mistaken for the approved gate
 
 
 def test_g3_observations_recomputed_from_rows(measured):
@@ -50,21 +60,22 @@ def test_g4_masks_and_gates(measured):
     g4 = measured["G4"]
     assert g4["mask_mismatches"] == [] and measured["summary"]["G4_mask_mismatches"] == 0
     assert g4["cache_within_numpy_gate"]
-    assert g4["gate_jax_well_conditioned"] <= 1e-6                     # spec 7.3 ceiling
-    assert g4["gate_jax_well_conditioned"] >= max(10 * g4["observed_jax_well_conditioned"], 1e-10)
-    assert measured["summary"]["G4_gate_jax_well_conditioned"] == g4["gate_jax_well_conditioned"]
+    assert g4["proposed_gate_jax_well_conditioned"] <= 1e-6            # spec 7.3 ceiling
+    assert g4["proposed_gate_jax_well_conditioned"] >= max(10 * g4["observed_jax_well_conditioned"], 1e-10)
+    assert (measured["summary"]["G4_proposed_gate_jax_well_conditioned"]
+            == g4["proposed_gate_jax_well_conditioned"])
     assert len(g4["per_target"]) >= 30
 
 
-def test_g4_per_target_jax_gates(measured):
-    """Per-target G4 JAX gates max(10 x observed, 1e-10) next to the pooled one (review harness F9);
-    the pooled gate is the largest of them."""
+def test_g4_per_target_jax_proposals(measured):
+    """Per-target G4 JAX proposals max(10 x observed, 1e-10) next to the pooled one (review harness
+    F9), kept as informational (D3); the pooled proposal is the largest of them."""
     g4 = measured["G4"]
-    per = g4["gate_jax_well_conditioned_per_target"]
+    per = g4["proposed_gate_jax_well_conditioned_per_target"]
     assert sorted(per) == sorted(g4["per_target"])
     for target, gate in per.items():
         assert gate == max(10 * g4["per_target"][target]["jax_well"], 1e-10), target
-    assert max(per.values()) == g4["gate_jax_well_conditioned"] <= 1e-6
+    assert max(per.values()) == g4["proposed_gate_jax_well_conditioned"] <= 1e-6
 
 
 def test_g4_marginal_threshold_from_each_file(measured):
@@ -154,7 +165,7 @@ def test_synthetic_clean_inputs_measure(tmp_path):
     m = mt.measure(tmp_path)
     assert m["G3"]["gb_3mo/exact"]["observed_numpy"] == 1e-12
     assert m["G4"]["mask_mismatches"] == [] and m["G4"]["observed_jax_well_conditioned"] == pytest.approx(1e-9)
-    assert m["G4"]["gate_jax_well_conditioned"] == 10 * m["G4"]["observed_jax_well_conditioned"]
+    assert m["G4"]["proposed_gate_jax_well_conditioned"] == 10 * m["G4"]["observed_jax_well_conditioned"]
 
 
 @pytest.mark.parametrize("delta", [1e-6, 5e-7, 3e-6])
@@ -167,10 +178,11 @@ def test_synthetic_jax_gate_above_ceiling_raises(tmp_path, delta):
 
 
 def test_synthetic_jax_gate_at_ceiling_and_ill_conditioned(tmp_path):
+    """The proposal rule alone (``measure_stress``): 1e-7 observed would fail the approved 8.32e-8."""
     _row_file(tmp_path)
     _stress_file(tmp_path, lnl_ref=0.0, lnl_cache=0.0, lnl_jax=-1e-7)    # 10 x observed == 1e-6
-    g4 = mt.measure(tmp_path)["G4"]
-    assert g4["observed_jax_well_conditioned"] == 1e-7 and g4["gate_jax_well_conditioned"] == 1e-6
+    g4 = mt.measure_stress(tmp_path / "galactic_binary")
+    assert g4["observed_jax_well_conditioned"] == 1e-7 and g4["proposed_gate_jax_well_conditioned"] == 1e-6
     _stress_file(tmp_path, pd_margin=1e-8, lnl_jax=-100.0 + 1e-6)      # condition-scaled, not gated
     g4 = mt.measure(tmp_path)["G4"]
     assert g4["observed_jax_well_conditioned"] == 0.0 and g4["condition_scaled_jax_max"] > 0.0
@@ -306,13 +318,29 @@ def test_synthetic_marginal_point_nan_or_pos_inf_raises(tmp_path, name, value):
         mt.measure(tmp_path)
 
 
-@pytest.mark.parametrize("value", [-math.inf, -1e3])
-def test_synthetic_marginal_point_finite_or_neg_inf_is_counted(tmp_path, value):
+@pytest.mark.parametrize("values", [(-math.inf, -math.inf, -math.inf), (-1e3, -5.0, -7.0e3)])
+def test_synthetic_marginal_point_finite_or_neg_inf_is_counted(tmp_path, values):
+    """Identical -inf masks, any deltas (D3: marginal points are not gated)."""
     _row_file(tmp_path)
-    _stress_file(tmp_path, marginal=True, pd_margin=-1e-12, lnl_ref=value, lnl_cache=-math.inf,
-                 lnl_jax=-5.0)
+    ref, cache, jax = values
+    _stress_file(tmp_path, marginal=True, pd_margin=-1e-12, lnl_ref=ref, lnl_cache=cache, lnl_jax=jax)
     g4 = mt.measure(tmp_path)["G4"]
     assert g4["per_target"]["gb_3mo/exact/fast"]["marginal"] == 1 and g4["mask_mismatches"] == []
+    assert g4["observed_jax_well_conditioned"] == 0.0 and g4["condition_scaled_jax_max"] == 0.0
+
+
+@pytest.mark.parametrize("ref,cache,jax,bad", [(-1e3, -math.inf, -5.0, ["lnl_cache"]),
+                                               (-math.inf, -math.inf, -5.0, ["lnl_jax"]),
+                                               (-1e3, -math.inf, -math.inf, ["lnl_cache", "lnl_jax"])])
+def test_synthetic_marginal_point_mask_must_be_identical(tmp_path, ref, cache, jax, bad):
+    """D3 (approved 2026-10-12): marginal points are finite or -inf WITH identical -inf masks; an
+    evaluator whose mask differs from the reference's is a mismatch (S0 fails)."""
+    _row_file(tmp_path)
+    _stress_file(tmp_path, marginal=True, pd_margin=1e-12, lnl_ref=ref, lnl_cache=cache, lnl_jax=jax)
+    m = mt.measure(tmp_path)
+    assert m["G4"]["mask_mismatches"] == [
+        f"gb_3mo/exact/fast:anchor:{name} -inf mask differs from lnl_ref at a marginal point" for name in bad]
+    assert m["summary"]["G4_mask_mismatches"] == len(bad)
 
 
 def test_synthetic_marginal_threshold_is_read_from_the_file(tmp_path):
@@ -357,4 +385,99 @@ def test_synthetic_stored_flags_disagree_with_their_rule_raises(tmp_path, point,
     _row_file(tmp_path)
     _stress_file(tmp_path, **point)
     with pytest.raises(ValueError, match=match):
+        mt.measure(tmp_path)
+
+
+# --- the user's approval of 2026-10-12 (spec 7.3; Task F4) ---------------------------------------
+
+def test_decision_table_is_explicit_and_dated(measured):
+    assert mt.APPROVED_ON == "2026-10-12" and mt.STATUS == "APPROVED by the user 2026-10-12"
+    assert {k: d["label"] for k, d in mt.DECISIONS.items()} == {"D2": "Uniform 1e-8",
+                                                                "D3": "Pooled 8.3e-8, report the rest"}
+    assert mt.APPROVED == {"G3_numpy": 1e-8, "G3_jax": 1e-8, "G4_jax_well_conditioned": 8.32e-8,
+                           "G4_numpy_cache_abs": 1e-10, "G4_numpy_cache_rel": 1e-12}
+    assert measured["approval"] == {"date": "2026-10-12", "decisions": mt.DECISIONS}
+    assert measured["status"] == mt.STATUS
+    # D3 keeps the NumPy-cache gate as proposed; D2 keeps the G3 JAX gate at its 1e-8 floor
+    assert (mt.FLOOR["G4_numpy_abs"], mt.FLOOR["G4_numpy_rel"]) == (mt.APPROVED["G4_numpy_cache_abs"],
+                                                                  mt.APPROVED["G4_numpy_cache_rel"])
+    assert mt.FLOOR["G3_jax"] == mt.APPROVED["G3_jax"]
+
+
+def test_d2_uniform_g3_gate_for_all_38_targets(measured):
+    """One NumPy G3 gate of 1e-8 for every target (the flat 1e-9 proposal and the per-target
+    10 x values are withdrawn); JAX stays 1e-8. Every stored row passes it."""
+    g3 = measured["approved"]["G3"]
+    assert sorted(g3["numpy"]) == sorted(g3["jax"]) == sorted(measured["G3"]) and len(g3["numpy"]) == 38
+    assert set(g3["numpy"].values()) == {1e-8} and set(g3["jax"].values()) == {1e-8}
+    n = 0
+    for path in (GOLDEN / "galactic_binary" / "chain_rows").glob("*/*.json"):
+        if path.name == "index.json":
+            continue
+        r = json.loads(path.read_text())
+        target = f"{r['case']}/{r['model']}"
+        for row in r["rows"]:
+            assert row["abs_delta_numpy"] <= g3["numpy"][target] and row["abs_delta_jax"] <= g3["jax"][target]
+            n += 1
+    assert n == sum(t["rows"] for t in measured["G3"].values()) >= 3 * 58
+
+
+def test_d3_pooled_g4_gate_applies_to_every_target(measured):
+    """One JAX gate of 8.32e-8 at well-conditioned points (PD margin >= 1e-6) for every stress
+    target; the per-target proposals stay in the file as informational values."""
+    g4 = measured["approved"]["G4"]
+    targets = sorted({k.rsplit("/", 1)[0] for k in measured["G4"]["per_target"]})
+    assert len(targets) == 30
+    assert g4["jax_well_conditioned"] == 8.32e-8 and g4["well_conditioned_margin"] == 1e-6
+    assert g4["jax_well_conditioned_per_target"] == {t: 8.32e-8 for t in targets}
+    assert (g4["numpy_cache_abs"], g4["numpy_cache_rel"]) == (1e-10, 1e-12)
+    per = measured["G4"]["proposed_gate_jax_well_conditioned_per_target"]
+    assert min(per.values()) < 8.32e-8                   # informational only: not the operative gate
+    n = 0
+    for path in (GOLDEN / "galactic_binary" / "stress").glob("*/*.json"):
+        r = json.loads(path.read_text())
+        gate = g4["jax_well_conditioned_per_target"][f"{r['case']}/{r['model']}"]
+        for p in r["points"]:
+            if not p["marginal"] and p["pd_margin"] >= 1e-6 and math.isfinite(p["lnl_ref"]):
+                assert abs(p["lnl_jax"] - p["lnl_ref"]) <= gate, (path.name, p["name"])
+                n += 1
+    assert n > 0
+
+
+def test_d3_ill_conditioned_points_are_reported_not_gated(measured):
+    """1e-10 <= margin < 1e-6: condition-scaled and reported (3-mo exact edge_h3 differs by ~5e-6,
+    far above 8.32e-8), never gated."""
+    assert "not gated" in measured["approved"]["G4"]["ill_conditioned"]
+    assert measured["G4"]["condition_scaled_jax_max"] > 0.0
+    worst = 0.0
+    for path in (GOLDEN / "galactic_binary" / "stress").glob("*/*.json"):
+        for p in json.loads(path.read_text())["points"]:
+            if not p["marginal"] and 1e-10 <= p["pd_margin"] < 1e-6 and math.isfinite(p["lnl_ref"]):
+                worst = max(worst, abs(p["lnl_jax"] - p["lnl_ref"]))
+    assert worst > 8.32e-8
+
+
+def test_d3_marginal_rule_is_recorded(measured):
+    assert measured["approved"]["G4"]["marginal"] == (
+        "finite or -inf with identical -inf masks across evaluators; deltas not gated")
+
+
+def test_synthetic_ill_conditioned_point_is_never_gated(tmp_path):
+    _row_file(tmp_path)
+    _stress_file(tmp_path, pd_margin=1e-8, lnl_jax=-100.0 + 1e-3, lnl_cache=-100.0 + 1e-3)
+    g4 = mt.measure(tmp_path)["G4"]                     # no raise: reported, condition-scaled
+    assert g4["observed_jax_well_conditioned"] == 0.0 and g4["condition_scaled_jax_max"] > 0.0
+
+
+@pytest.mark.parametrize("row,point,match", [
+    ({"abs_delta_numpy": 1.5e-8}, {}, r"G3 gb_3mo/exact: observed numpy 1.500e-08 > approved 1e-08"),
+    ({"abs_delta_jax": 1.5e-8}, {}, r"G3 gb_3mo/exact: observed jax 1.500e-08 > approved 1e-08"),
+    ({}, {"lnl_jax": -100.0 + 9e-8},
+     r"G4 gb_3mo/exact/fast: observed JAX 9.\d+e-08 > approved 8.32e-08"),
+    ({}, {"lnl_cache": -100.0 + 3e-10}, r"G4 NumPy cache .* 1e-10 \+ 1e-12\|lnL\|")])
+def test_synthetic_data_failing_an_approved_gate_raise(tmp_path, row, point, match):
+    """Inside the 10 x proposal rule (and the 1e-6 ceiling) but above the approved gate: S0 fails."""
+    _row_file(tmp_path, **row)
+    _stress_file(tmp_path, **point)
+    with pytest.raises(ValueError, match="an approved gate fails its own data.*" + match):
         mt.measure(tmp_path)

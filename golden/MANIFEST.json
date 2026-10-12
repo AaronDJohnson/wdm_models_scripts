@@ -164,7 +164,7 @@
   "galactic_binary/stress/gb_6mo/tri_raw.fast.json": "50111cde2c5a70cfb995f9866f16ccbd61fa52678048821eb32f7af9fddd30ab",
   "galactic_binary/stress/gb_6mo/whittle_cut.fast.json": "8186ebe6164cd88d7d5eae86391700bf6165df0e96911422319d8db150a82509",
   "galactic_binary/stress/gb_6mo/whittle_raw.fast.json": "ec926198ffa8a99b9a042d60abc9cb744c3fb44d63b4ec4c83e7476ca2c6c86c",
-  "galactic_binary/tolerances_measured.json": "981bfd8d2f3ac8a9ba2f4c6e6d9bfa4b968e39f05a9a5fe5ff791f7f015c4fee",
+  "galactic_binary/tolerances_measured.json": "6e8d8bfc5320725e09b4eb0c3beef82e363e49bc93e4aa356727794690ab4cf5",
   "sinusoid/chain_rows/INDEX.json": "8216fd4aeb0a229340da0e51f9255179c5b6ad36f4a71a5eebf68e45a2ef881a",
   "sinusoid/chain_rows/manuscript_high_band_cut.npz": "67d42255e92ceecb9a0713aeef2255e9a1a7f78c06a05c1e13cc8d5837b618b3",
   "sinusoid/chain_rows/manuscript_high_band_exact.npz": "65def8c8fa510c6ae00e0a6a63c94c976ee2e0bc423e32c3eacb4683a760752d",
@@ -263,7 +263,7 @@
   "sinusoid/references/manuscript_mid_tri_raw_reference.npz": "13d86095d9fe8ea38204633ee054ede708bedbd7d3f7eb971a9600903493fbdc",
   "sinusoid/references/manuscript_mid_whittle_cut_reference.npz": "3a82077976544262b7ce38f22e6dcf2a8088818c40b99b64ffcbc9454f9d0e0b",
   "sinusoid/references/manuscript_mid_whittle_raw_reference.npz": "92a8de78a7907fc5878250f4b710dadbfb85543e3997ae5c45cbe3821ab56746",
-  "sinusoid/tolerances_measured.json": "8ce014c5c71807d6bdaa7cd7f691e8d16f8e43ba3ac1377b914032d89917b1bb",
+  "sinusoid/tolerances_measured.json": "f6c79f4b1979fb6886ea38a2d1dc578db4cab96edcfbde8aec443c0c64faf01f",
   "wdm/alg4_reference.json": "10ad9d8ec957410d35cb561b99688206d0b39649ee2e83d3134209fc3eb5ec89",
   "wdm/alg4_reference.npz": "74ea5b700721691ef32f8b7ea03dc8e9a50b0d02f158c9661d06769bb4f6f7a9",
   "wdm/paper_june_alg12.npz": "a8076126ce3c958ac6019e803af38f3a6b097b8b4e13839d8710f4b87425619a"
@@ -4671,14 +4671,287 @@
    "G3_runs": 58,
    "G3_targets": 38,
    "G4_files": 30,
-   "G4_gate_jax_well_conditioned": 8.321876521222293e-08,
    "G4_mask_mismatches": 0,
+   "G4_proposed_gate_jax_well_conditioned": 8.321876521222293e-08,
+   "approved_gates": {
+    "G3_jax": 1e-08,
+    "G3_numpy": 1e-08,
+    "G4_jax_well_conditioned": 8.32e-08,
+    "G4_numpy_cache_abs": 1e-10,
+    "G4_numpy_cache_rel": 1e-12
+   },
+   "approved_on": "2026-10-12",
+   "decisions": {
+    "D2": "Uniform 1e-8",
+    "D3": "Pooled 8.3e-8, report the rest"
+   },
    "file": "galactic_binary/tolerances_measured.json",
-   "status": "measured; pending user approval"
+   "status": "APPROVED by the user 2026-10-12"
   },
   "sinusoid": {
+   "approved": {
+    "jax": {
+     "chain_rows": {
+      "band_cut": {
+       "atol": 1e-05,
+       "rtol": 0.0
+      },
+      "band_exact": {
+       "atol": 1e-05,
+       "rtol": 0.0
+      },
+      "band_pad": {
+       "atol": 1e-05,
+       "rtol": 0.0
+      },
+      "band_raw": {
+       "atol": 1e-05,
+       "rtol": 0.0
+      },
+      "exact": {
+       "atol": 0.0001,
+       "rtol": 0.0
+      },
+      "mid_cut": {
+       "atol": 1e-05,
+       "rtol": 0.0
+      },
+      "mid_exact": {
+       "atol": 1e-05,
+       "rtol": 0.0
+      },
+      "mid_pad": {
+       "atol": 1e-05,
+       "rtol": 0.0
+      },
+      "mid_raw": {
+       "atol": 1e-05,
+       "rtol": 0.0
+      },
+      "tri_cut": {
+       "atol": 1e-05,
+       "rtol": 0.0
+      },
+      "tri_exact": {
+       "atol": 1e-05,
+       "rtol": 0.0
+      },
+      "tri_pad": {
+       "atol": 1e-05,
+       "rtol": 0.0
+      },
+      "tri_raw": {
+       "atol": 1e-05,
+       "rtol": 0.0
+      },
+      "whittle_cut": {
+       "atol": 1e-05,
+       "rtol": 0.0
+      },
+      "whittle_raw": {
+       "atol": 1e-05,
+       "rtol": 0.0
+      }
+     },
+     "inf_mask": "identical",
+     "references": {
+      "band_cut": {
+       "atol": 1e-05,
+       "rtol": 1e-08
+      },
+      "band_exact": {
+       "atol": 1e-05,
+       "rtol": 1e-08
+      },
+      "band_pad": {
+       "atol": 1e-05,
+       "rtol": 1e-08
+      },
+      "band_raw": {
+       "atol": 1e-05,
+       "rtol": 1e-08
+      },
+      "exact": {
+       "atol": 0.0001,
+       "rtol": 1e-08
+      },
+      "mid_cut": {
+       "atol": 1e-05,
+       "rtol": 1e-08
+      },
+      "mid_exact": {
+       "atol": 1e-05,
+       "rtol": 1e-08
+      },
+      "mid_pad": {
+       "atol": 1e-05,
+       "rtol": 1e-08
+      },
+      "mid_raw": {
+       "atol": 1e-05,
+       "rtol": 1e-08
+      },
+      "tri_cut": {
+       "atol": 1e-05,
+       "rtol": 1e-08
+      },
+      "tri_exact": {
+       "atol": 1e-05,
+       "rtol": 1e-08
+      },
+      "tri_pad": {
+       "atol": 1e-05,
+       "rtol": 1e-08
+      },
+      "tri_raw": {
+       "atol": 1e-05,
+       "rtol": 1e-08
+      },
+      "whittle_cut": {
+       "atol": 1e-05,
+       "rtol": 1e-08
+      },
+      "whittle_raw": {
+       "atol": 1e-05,
+       "rtol": 1e-08
+      }
+     }
+    },
+    "numpy": {
+     "chain_rows": {
+      "band_cut": {
+       "atol": 1e-05,
+       "rtol": 0.0
+      },
+      "band_exact": {
+       "atol": 1e-05,
+       "rtol": 0.0
+      },
+      "band_pad": {
+       "atol": 1e-05,
+       "rtol": 0.0
+      },
+      "band_raw": {
+       "atol": 1e-05,
+       "rtol": 0.0
+      },
+      "exact": {
+       "atol": 0.0001,
+       "rtol": 0.0
+      },
+      "mid_cut": {
+       "atol": 1e-05,
+       "rtol": 0.0
+      },
+      "mid_exact": {
+       "atol": 1e-05,
+       "rtol": 0.0
+      },
+      "mid_pad": {
+       "atol": 1e-05,
+       "rtol": 0.0
+      },
+      "mid_raw": {
+       "atol": 1e-05,
+       "rtol": 0.0
+      },
+      "tri_cut": {
+       "atol": 1e-05,
+       "rtol": 0.0
+      },
+      "tri_exact": {
+       "atol": 1e-05,
+       "rtol": 0.0
+      },
+      "tri_pad": {
+       "atol": 1e-05,
+       "rtol": 0.0
+      },
+      "tri_raw": {
+       "atol": 1e-05,
+       "rtol": 0.0
+      },
+      "whittle_cut": {
+       "atol": 1e-05,
+       "rtol": 0.0
+      },
+      "whittle_raw": {
+       "atol": 1e-05,
+       "rtol": 0.0
+      }
+     },
+     "inf_mask": "identical",
+     "references": {
+      "band_cut": {
+       "atol": 1e-09,
+       "rtol": 0.0
+      },
+      "band_exact": {
+       "atol": 1e-08,
+       "rtol": 1e-12
+      },
+      "band_pad": {
+       "atol": 1e-09,
+       "rtol": 1e-12
+      },
+      "band_raw": {
+       "atol": 1e-09,
+       "rtol": 0.0
+      },
+      "exact": {
+       "atol": 1e-07,
+       "rtol": 1e-12
+      },
+      "mid_cut": {
+       "atol": 1e-09,
+       "rtol": 0.0
+      },
+      "mid_exact": {
+       "atol": 1e-08,
+       "rtol": 1e-12
+      },
+      "mid_pad": {
+       "atol": 1e-09,
+       "rtol": 1e-12
+      },
+      "mid_raw": {
+       "atol": 1e-09,
+       "rtol": 0.0
+      },
+      "tri_cut": {
+       "atol": 1e-09,
+       "rtol": 0.0
+      },
+      "tri_exact": {
+       "atol": 1e-08,
+       "rtol": 1e-12
+      },
+      "tri_pad": {
+       "atol": 1e-09,
+       "rtol": 1e-12
+      },
+      "tri_raw": {
+       "atol": 1e-09,
+       "rtol": 0.0
+      },
+      "whittle_cut": {
+       "atol": 1e-09,
+       "rtol": 0.0
+      },
+      "whittle_raw": {
+       "atol": 1e-09,
+       "rtol": 0.0
+      }
+     }
+    }
+   },
+   "approved_on": "2026-10-12",
+   "decisions": {
+    "D1": "Add rtol 1e-12 at stress",
+    "as_proposed": "approved as proposed"
+   },
    "file": "sinusoid/tolerances_measured.json",
-   "status": "PROPOSED - pending user approval (spec \u00a77.3, \u00a79 'Still open')"
+   "status": "APPROVED by the user 2026-10-12"
   }
  }
 }

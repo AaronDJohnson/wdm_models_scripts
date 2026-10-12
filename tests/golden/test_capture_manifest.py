@@ -15,7 +15,7 @@ from pathlib import Path
 
 import pytest
 
-from scripts.golden import capture
+from scripts.golden import capture, measure_tolerances
 from scripts.golden.goldens_io import golden_files
 from scripts.golden.paths import GOLDEN, REL
 from scripts.golden.workers._common import runtime_fingerprint
@@ -132,6 +132,22 @@ def test_family_capture_refuses_before_the_family_runs(scratch, monkeypatch):
         capture.capture("sinusoid", "fast")
     assert calls == []
     assert (scratch / "MANIFEST.json").read_bytes() == before
+
+
+def test_family_capture_keeps_the_approved_tolerance_summary(scratch, monkeypatch):
+    """A sinusoid re-capture writes the same MANIFEST tolerance summary as the measurement script's
+    own command line (status, approval date, decision labels and the approved gates; Task F4), not
+    just ``{"file", "status"}``."""
+    old = _manifest(scratch)
+    report = json.loads((scratch / SIN_FILE).read_text())
+    monkeypatch.setitem(capture.FAMILIES, "sinusoid", (lambda tier: old["sources"]["sinusoid"], lambda: report))
+    monkeypatch.setattr(capture.fth, "verify", lambda *a, **k: [])
+    monkeypatch.setattr(capture, "guard_state", lambda: ())
+    capture.capture("sinusoid", "fast")
+    after = _manifest(scratch)
+    assert after["tolerances"]["sinusoid"] == measure_tolerances.manifest_summary(report)
+    assert after["tolerances"]["sinusoid"] == old["tolerances"]["sinusoid"]
+    assert after["tolerances"]["sinusoid"]["approved"] == report["approved"]
 
 
 def test_replace_reapproves_everything_and_restamps_build(scratch):

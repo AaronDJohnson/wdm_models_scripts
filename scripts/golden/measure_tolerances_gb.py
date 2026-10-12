@@ -1,30 +1,49 @@
-"""P0 measurement of the galactic-binary gates (spec 7.3) from the captured G3/G4 goldens.
+"""P0 measurement of the galactic-binary gates (spec 7.3) from the captured G3/G4 goldens, and
+the gates the user approved on 2026-10-12 (Task F4).
 
     $PY -m scripts.golden.measure_tolerances_gb [--replace]
 
 Reads ``golden/galactic_binary/chain_rows/**`` and ``golden/galactic_binary/stress/**`` (every
 tier present), writes ``golden/galactic_binary/tolerances_measured.json`` and merges a summary
-into ``golden/MANIFEST.json["tolerances"]["galactic_binary"]`` with status
-``"measured; pending user approval"``. ``measure(golden_dir)`` is the hook for Section A's
+into ``golden/MANIFEST.json["tolerances"]["galactic_binary"]`` with status ``STATUS``
+(``"APPROVED by the user 2026-10-12"``). ``measure(golden_dir)`` is the hook for Section A's
 ``measure_tolerances.py``.
 
-Rules (each gate = max(10 x observed, floor), floors from spec 7.3):
+The file keeps three records apart:
 
-* G3 rows, NumPy: observed |lineage-C NumPy - stored| per target; floor 1e-9 (the proposal).
+* the observations (``G3[target]["observed_*"]``, ``G4["per_target"]``, ``G4["observed_*"]``);
+* the original B8 proposals (``proposed_*`` keys, below), kept as informational values;
+* ``approved``: the OPERATIVE gates every later part reads, from the decision table ``DECISIONS``
+  / ``APPROVED`` (never hand-edited JSON):
+
+  - D2 "Uniform 1e-8": one NumPy G3 gate of 1e-8 for every target (replaces the flat 1e-9
+    proposal and the per-target 10 x values); G3 JAX stays 1e-8.
+  - D3 "Pooled 8.3e-8, report the rest": one JAX gate of 8.32e-8 for every target at
+    well-conditioned points (PD margin >= 1e-6); ill-conditioned points (marginal threshold <=
+    margin < 1e-6) are reported condition-scaled, not gated; marginal points must only be finite or
+    -inf with identical -inf masks across evaluators; the NumPy-cache gate stays
+    1e-10 + 1e-12 |lnL|.
+
+  ``measure`` raises ``ValueError`` (S0 fails, nothing written) when an approved gate fails its
+  own data.
+
+Proposal rules (each proposed gate = max(10 x observed, floor), floors from spec 7.3):
+
+* G3 rows, NumPy: observed |lineage-C NumPy - stored| per target; floor 1e-9 (the B8 proposal).
 * G3 rows, JAX (CPU): observed |lineage-C JAX - stored| per target; floor 1e-8.
-* G4 stress, well-conditioned finite points (PD margin >= 1e-6): |JAX - NumPy reference|, gate
-  max(10 x observed, 1e-10), pooled over all targets (``gate_jax_well_conditioned``) and per
-  target (``gate_jax_well_conditioned_per_target``). The 1e-6 ceiling (spec 7.3, today's
-  ``test_jax``) is a spec limit, not a clamp: if 10 x observed exceeds it, the gate cannot be both
-  >= 10 x observed and <= 1e-6, so ``measure`` raises ``ValueError`` (S0 fails, nothing written)
-  instead of capping the gate below its own data. |NumPy cache (expanded) - reference| against
-  1e-10 + 1e-12 |lnL|.
+* G4 stress, well-conditioned finite points (PD margin >= 1e-6): |JAX - NumPy reference|, proposal
+  max(10 x observed, 1e-10), pooled over all targets (``proposed_gate_jax_well_conditioned``) and
+  per target (``proposed_gate_jax_well_conditioned_per_target``). The 1e-6 ceiling (spec 7.3,
+  today's ``test_jax``) is a spec limit, not a clamp: if 10 x observed exceeds it, the gate cannot
+  be both >= 10 x observed and <= 1e-6, so ``measure`` raises ``ValueError`` (S0 fails, nothing
+  written) instead of capping the gate below its own data. |NumPy cache (expanded) - reference|
+  against 1e-10 + 1e-12 |lnL|.
 * Marginal points are those with ``|margin| < marginal_threshold``, the threshold each stress file
   records (the worker's ``MARGINAL``, 1e-10 in every capture). The PD margin is the worker's
   (gbw_stress ``_margin``): ``lambda_min / max|lambda|`` for a dense covariance, 1.0 for a diagonal
   one with every entry > 0, else ``min / max|.|``.
 * G4 stress, ill-conditioned non-marginal points (threshold <= margin < 1e-6): reported in units of
-  ``eps |lnL| / margin`` (condition-scaled), a proposal for the user, not a gate yet.
+  ``eps |lnL| / margin`` (condition-scaled): reported, not gated (D3).
 * -inf masks on non-marginal points must match the worker's ``expected_neg_inf = source_out or
   margin < 0``: -inf when the covariance is not PD (margin <= -threshold) or the source is outside
   the GLASS box, finite otherwise. Every evaluator is checked, the NumPy reference included; each
@@ -39,9 +58,10 @@ be finite, and every stress file must record a finite positive ``marginal_thresh
 stress point, marginal or not, must carry ``lnl_jax`` (and ``lnl_cache`` when the target has a
 cache class), ``source_out``, ``expected_neg_inf`` and a finite PD margin, and its stored flags
 must follow their rules: ``marginal == (|margin| < marginal_threshold)`` and ``expected_neg_inf ==
-(source_out or margin < 0)``. A marginal point is exempt from the mask and delta checks only: its
-lnL values must still be finite or exactly -inf (spec G4). Otherwise ``measure`` raises
-``ValueError``.
+(source_out or margin < 0)``. A marginal point is exempt from the expected-mask and delta checks
+only: its lnL values must still be finite or exactly -inf (spec G4), else ``measure`` raises
+``ValueError``, and their -inf masks must be identical across evaluators (D3): an evaluator whose
+mask differs from the reference's is recorded as a mask mismatch (S0 fails).
 ``main`` builds and hashes the output in memory and refuses (``SystemExit``, nothing written) when
 ``golden/MANIFEST.json`` records other bytes for it, unless ``--replace``.
 """
@@ -59,9 +79,35 @@ from scripts.golden import manifest_merge
 from scripts.golden.paths import GOLDEN
 
 EPS = 2.220446049250313e-16
+#: The B8 proposal floors (the proposals stay recorded; the operative gates are ``APPROVED``).
 FLOOR = {"G3_numpy": 1e-9, "G3_jax": 1e-8, "G4_jax_floor": 1e-10, "G4_jax_ceiling": 1e-6,
          "G4_numpy_abs": 1e-10, "G4_numpy_rel": 1e-12}
 WELL_CONDITIONED = 1e-6
+
+# --- the user's approval (spec 7.3 "Approved by the user on 2026-10-12") -------------------------
+
+APPROVED_ON = "2026-10-12"
+STATUS = f"APPROVED by the user {APPROVED_ON}"
+#: The operative gates. Fixed values, not functions of the measurement: a re-capture cannot move
+#: them, and ``measure`` raises when the data fail one.
+APPROVED = {"G3_numpy": 1e-8, "G3_jax": 1e-8, "G4_jax_well_conditioned": 8.32e-8,
+            "G4_numpy_cache_abs": 1e-10, "G4_numpy_cache_rel": 1e-12}
+#: The decisions, verbatim labels first. Rendered into the file as ``approval``.
+DECISIONS = {
+    "D2": {"label": "Uniform 1e-8",
+           "decision": "one NumPy G3 gate of 1e-8 for all 38 targets (replaces the spec's flat 1e-9 "
+                       "proposal and the per-target 10x values); G3 JAX stays 1e-8",
+           "gates": {"G3_numpy": APPROVED["G3_numpy"], "G3_jax": APPROVED["G3_jax"]}},
+    "D3": {"label": "Pooled 8.3e-8, report the rest",
+           "decision": "one JAX gate of 8.32e-8 for every target at well-conditioned points (PD margin "
+                       ">= 1e-6); ill-conditioned points (1e-10 <= margin < 1e-6) are reported "
+                       "(condition-scaled) but not gated; marginal points (< 1e-10) must only be finite "
+                       "or -inf with identical -inf masks. The NumPy-cache gate stays 1e-10 + "
+                       "1e-12|lnL|. Per-target G4 values stay in the file as informational",
+           "gates": {"G4_jax_well_conditioned": APPROVED["G4_jax_well_conditioned"],
+                     "G4_numpy_cache_abs": APPROVED["G4_numpy_cache_abs"],
+                     "G4_numpy_cache_rel": APPROVED["G4_numpy_cache_rel"]}},
+}
 #: Every G3/G4 gate is per backend, so a capture that skipped one cannot be measured.
 BACKENDS = ("numpy", "jax")
 #: The only valid lnL values; NaN or +inf at a compared point is a mismatch.
@@ -111,8 +157,8 @@ def measure_rows(gb: Path) -> dict:
     for k, t in sorted(per.items()):
         out[k] = {"runs": len(t["runs"]), "rows": t["rows"], "tiers": sorted(t["tiers"]),
                   "observed_numpy": t["numpy"], "observed_jax": t["jax"],
-                  "gate_numpy": _gate(t["numpy"], FLOOR["G3_numpy"]),
-                  "gate_jax": _gate(t["jax"], FLOOR["G3_jax"]),
+                  "proposed_gate_numpy": _gate(t["numpy"], FLOOR["G3_numpy"]),
+                  "proposed_gate_jax": _gate(t["jax"], FLOOR["G3_jax"]),
                   "exceeds_proposal_numpy": 10.0 * t["numpy"] > FLOOR["G3_numpy"],
                   "exceeds_proposal_jax": 10.0 * t["jax"] > FLOOR["G3_jax"]}
     return out
@@ -178,8 +224,12 @@ def measure_stress(gb: Path) -> dict:
             if bad := _point_problems(p, needed, thr):
                 problems += [f"{where}: point {p['name']} {b}" for b in bad]
                 continue
-            if p["marginal"]:               # exempt from the mask and delta checks only
+            if p["marginal"]:               # no delta and no expected-mask check (D3) ...
                 t["marginal"] += 1
+                neg_ref = p["lnl_ref"] == -math.inf  # ... but identical -inf masks (values finite or -inf)
+                mismatches += [f"{key}:{p['name']}:{name} -inf mask differs from lnl_ref at a marginal point"
+                               for name in ("lnl_cache", "lnl_jax")
+                               if name in p and (p[name] == -math.inf) != neg_ref]
                 continue
             margin = p["pd_margin"]
             # The worker's mask (gbw_stress: expected_neg_inf = source_out or margin < 0). Every
@@ -213,8 +263,8 @@ def measure_stress(gb: Path) -> dict:
                     t[f"{tag}_well"] = max(t[f"{tag}_well"], d)
                     if tag == "cache":
                         t["cache_well_rel"] = max(t["cache_well_rel"], d / max(1.0, abs(ref)))
-                        t["cache_within_numpy_gate"] &= (
-                            d <= FLOOR["G4_numpy_abs"] + FLOOR["G4_numpy_rel"] * abs(ref))
+                        t["cache_within_numpy_gate"] &= (    # the gate D3 keeps (= the proposal)
+                            d <= APPROVED["G4_numpy_cache_abs"] + APPROVED["G4_numpy_cache_rel"] * abs(ref))
                 elif thr <= margin < WELL_CONDITIONED:
                     t[f"{tag}_cond"] = max(t[f"{tag}_cond"], d / (EPS * abs(ref) / margin))
                 else:                                  # unreachable: expected finite => margin >= thr
@@ -235,21 +285,52 @@ def measure_stress(gb: Path) -> dict:
     assert gate_jax <= FLOOR["G4_jax_ceiling"]
     return {"per_target": per, "mask_mismatches": mismatches,
             "observed_jax_well_conditioned": jax_well,
-            "gate_jax_well_conditioned": gate_jax,
-            "gate_jax_well_conditioned_per_target": {k: _gate(t["jax_well"], FLOOR["G4_jax_floor"])
-                                                     for k, t in per.items()},
+            "proposed_gate_jax_well_conditioned": gate_jax,
+            "proposed_gate_jax_well_conditioned_per_target": {k: _gate(t["jax_well"], FLOOR["G4_jax_floor"])
+                                                              for k, t in per.items()},
             "observed_cache_well_conditioned": max((t["cache_well"] for t in per.values()), default=0.0),
             "cache_within_numpy_gate": all(t["cache_within_numpy_gate"] for t in per.values()),
             "condition_scaled_jax_max": max((t["jax_cond"] for t in per.values()), default=0.0),
             "condition_scaled_cache_max": max((t["cache_cond"] for t in per.values()), default=0.0)}
 
 
+def approve(rows: dict, stress: dict) -> dict:
+    """The operative ``approved`` gates (``APPROVED``) for every measured target. Raises
+    ``ValueError`` when the data fail one: S0 fails, nothing is written."""
+    problems = [f"G3 {k}: observed {b} {v[f'observed_{b}']:.3e} > approved {APPROVED[f'G3_{b}']:g}"
+                for k, v in rows.items() for b in BACKENDS if v[f"observed_{b}"] > APPROVED[f"G3_{b}"]]
+    problems += [f"G4 {k}: observed JAX {t['jax_well']:.3e} > approved {APPROVED['G4_jax_well_conditioned']:g}"
+                 for k, t in stress["per_target"].items() if t["jax_well"] > APPROVED["G4_jax_well_conditioned"]]
+    problems += [f"G4 NumPy cache {k}: |cache - reference| above the approved "
+                 f"{APPROVED['G4_numpy_cache_abs']:g} + {APPROVED['G4_numpy_cache_rel']:g}|lnL|"
+                 for k, t in stress["per_target"].items() if not t["cache_within_numpy_gate"]]
+    _fail("an approved gate fails its own data (S0 fails; report to the user)", problems)
+    targets = sorted({k.rsplit("/", 1)[0] for k in stress["per_target"]})      # case/model/tier -> target
+    return {"G3": {"numpy": {k: APPROVED["G3_numpy"] for k in rows},
+                   "jax": {k: APPROVED["G3_jax"] for k in rows}},
+            "G4": {"jax_well_conditioned": APPROVED["G4_jax_well_conditioned"],
+                   "jax_well_conditioned_per_target": {k: APPROVED["G4_jax_well_conditioned"] for k in targets},
+                   "well_conditioned_margin": WELL_CONDITIONED,
+                   "numpy_cache_abs": APPROVED["G4_numpy_cache_abs"],
+                   "numpy_cache_rel": APPROVED["G4_numpy_cache_rel"],
+                   "ill_conditioned": "marginal threshold <= margin < 1e-6: reported condition-scaled "
+                                      "(|delta| / (eps |lnL| / margin)), not gated",
+                   "marginal": "finite or -inf with identical -inf masks across evaluators; deltas not gated",
+                   "inf_mask": "identical; non-marginal points follow expected_neg_inf = source_out or "
+                               "margin < 0"}}
+
+
 def measure(golden_dir: Path = GOLDEN) -> dict:
     gb = Path(golden_dir) / "galactic_binary"
     rows, stress = measure_rows(gb), measure_stress(gb)
-    return {"schema": 1, "status": "measured; pending user approval", "floors": FLOOR,
+    approved = approve(rows, stress)
+    return {"schema": 1, "status": STATUS, "floors": FLOOR,
             "well_conditioned_margin": WELL_CONDITIONED, "G3": rows, "G4": stress,
+            "approval": {"date": APPROVED_ON, "decisions": DECISIONS}, "approved": approved,
             "summary": {
+                "approved_on": APPROVED_ON,
+                "decisions": {k: d["label"] for k, d in DECISIONS.items()},
+                "approved_gates": dict(APPROVED),
                 "G3_targets": len(rows),
                 "G3_runs": sum(v["runs"] for v in rows.values()),
                 "G3_max_observed_numpy": max(v["observed_numpy"] for v in rows.values()),
@@ -259,7 +340,7 @@ def measure(golden_dir: Path = GOLDEN) -> dict:
                 "G3_exceeds_proposal_jax": sorted(k for k, v in rows.items() if v["exceeds_proposal_jax"]),
                 "G4_files": len(stress["per_target"]),
                 "G4_mask_mismatches": len(stress["mask_mismatches"]),
-                "G4_gate_jax_well_conditioned": stress["gate_jax_well_conditioned"]}}
+                "G4_proposed_gate_jax_well_conditioned": stress["proposed_gate_jax_well_conditioned"]}}
 
 
 def render(result: dict) -> bytes:

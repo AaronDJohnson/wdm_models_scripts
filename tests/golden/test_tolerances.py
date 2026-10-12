@@ -1,7 +1,10 @@
-"""P0 tolerance measurement (spec §7.3; Task A10)."""
+"""P0 tolerance measurement (spec §7.3; Task A10) and the user's approval of 2026-10-12 (Task F4)."""
 from __future__ import annotations
 
+import hashlib
+import json
 import math
+import shutil
 
 import pytest
 
@@ -123,7 +126,7 @@ def test_floors_cover_every_model():
 
 def test_measured_file_proposes_a_gate_for_every_model_and_backend():
     t = read_json(MT.OUT)
-    assert t["status"] == MT.STATUS
+    assert t["status"] == MT.STATUS == "APPROVED by the user 2026-10-12"
     for backend in ("numpy", "jax"):
         p = t["proposed"][backend]
         assert p["inf_mask"] == "identical"
@@ -134,7 +137,9 @@ def test_measured_file_proposes_a_gate_for_every_model_and_backend():
             assert t["observed"][backend]["references"][m]["inf_mismatch"] == 0
 
 
-def test_every_recorded_point_passes_its_proposed_gate():
+@pytest.mark.parametrize("section", ["proposed", "approved"])
+def test_every_recorded_point_passes_its_gate(section):
+    """Both the original proposal and the operative approved gates hold on every recorded point."""
     t = read_json(MT.OUT)
     for lineage, backend in MT.BACKEND.items():
         for kind in ("references", "chain_rows"):
@@ -143,6 +148,127 @@ def test_every_recorded_point_passes_its_proposed_gate():
             for path in paths:
                 points = read_json(path)["points"]
                 assert points, path
-                assert MT.violations(points, t["proposed"][backend][kind]) == [], path
+                assert MT.violations(points, t[section][backend][kind]) == [], path
                 if kind == "references":        # the real data exercise the -inf mask branch too
                     assert any(MT.to_float(r) == -math.inf for p in points.values() for r in p["reference"]), path
+
+
+# --- the user's approval of 2026-10-12 (spec §7.3; Task F4) ---------------------------------------
+
+#: D1 ("Add rtol 1e-12 at stress"): the NumPy reference gates of these models gain rtol 1e-12.
+D1 = {"band_pad": 1e-9, "mid_pad": 1e-9, "tri_pad": 1e-9, "exact": 1e-7}
+
+
+def test_decision_table_is_explicit_and_dated():
+    assert MT.APPROVED_ON == "2026-10-12"
+    assert MT.STATUS == "APPROVED by the user 2026-10-12"
+    assert MT.DECISIONS["D1"]["label"] == "Add rtol 1e-12 at stress"
+    assert MT.DECISIONS["as_proposed"]["label"] == "approved as proposed"
+    t = read_json(MT.OUT)
+    assert t["approval"] == {"date": "2026-10-12", "decisions": MT.DECISIONS}
+
+
+def test_d1_pad_and_exact_numpy_reference_gates_gain_rtol_1e12():
+    """atol unchanged at near points (1e-9 pad, 1e-7 exact); stress gate = atol + 1e-12 |lnL|."""
+    t = read_json(MT.OUT)
+    for model, atol in D1.items():
+        assert t["approved"]["numpy"]["references"][model] == {"atol": atol, "rtol": 1e-12}, model
+        assert t["proposed"]["numpy"]["references"][model] == {"atol": atol, "rtol": 0.0}, model
+    assert MT.approved_gates() == t["approved"]
+
+
+def test_every_other_gate_is_approved_as_proposed():
+    t = read_json(MT.OUT)
+    for backend in ("numpy", "jax"):
+        assert t["approved"][backend]["inf_mask"] == t["proposed"][backend]["inf_mask"] == "identical"
+        for kind in ("references", "chain_rows"):
+            assert set(t["approved"][backend][kind]) == set(MODELS)
+            for m in MODELS:
+                if (backend, kind) == ("numpy", "references") and m in D1:
+                    continue
+                assert t["approved"][backend][kind][m] == t["proposed"][backend][kind][m], (backend, kind, m)
+
+
+def test_d1_rtol_applies_at_stress_points_only():
+    approved = MT.approved_gates()["numpy"]["references"]
+    proposed = {m: {"atol": a, "rtol": 0.0} for m, a in D1.items()}
+    for model, atol in D1.items():
+        ref = -36817.455302
+        d = atol + 0.5e-12 * abs(ref)                     # inside atol + 1e-12 |lnL|, above atol
+        stress = {"t": {"model": model, "abs_delta": [d], "reference": [ref], "value": [ref + d],
+                        "near": [False]}}
+        assert MT.violations(stress, approved) == [], model
+        assert len(MT.violations(stress, proposed)) == 1, model
+        near = {"t": dict(stress["t"], near=[True])}     # near points keep the bare atol
+        assert len(MT.violations(near, approved)) == 1, model
+
+
+def test_measure_sinusoid_refuses_data_that_fail_an_approved_gate(scratch_gs):
+    """A delta inside its 10 x observed proposal but above the approved gate fails S0."""
+    _synthetic_reports(scratch_gs / "legacy_eval")
+    path = scratch_gs / "legacy_eval" / "A_references_fast.json"
+    rep = read_json(path)
+    rep["models"]["band_raw"]["near_max_abs"] = 1e-8          # proposal 1e-7; approved 1e-9
+    rep["points"] = {"t": {"model": "band_raw", "abs_delta": [1e-8], "reference": [-5.0e4],
+                           "value": [-5.0e4 + 1e-8], "near": [True]}}
+    write_json(path, rep)
+    with pytest.raises(AssertionError, match="an approved gate fails its own data"):
+        MT.measure_sinusoid()
+    assert not (scratch_gs / "tolerances_measured.json").exists()
+
+
+# --- the command line: refusal before any write, then MANIFEST merge (Task F4) -------------------
+
+REL_OUT = "sinusoid/tolerances_measured.json"
+
+
+@pytest.fixture
+def scratch_golden(tmp_path, monkeypatch):
+    golden = tmp_path / "golden"
+    shutil.copytree(EVAL, golden / "sinusoid" / "legacy_eval")
+    (golden / REL_OUT).write_bytes((GS / "tolerances_measured.json").read_bytes())
+    (golden / "MANIFEST.json").write_bytes((GS.parent / "MANIFEST.json").read_bytes())
+    monkeypatch.setattr(MT, "GS", golden / "sinusoid")
+    monkeypatch.setattr(MT, "EVAL", golden / "sinusoid" / "legacy_eval")
+    monkeypatch.setattr(MT, "OUT", golden / REL_OUT)
+    return golden
+
+
+def _snapshot(golden):
+    return {p.relative_to(golden).as_posix(): p.read_bytes() for p in golden.rglob("*") if p.is_file()}
+
+
+def test_cli_rewrites_identical_bytes_when_nothing_changed(scratch_golden):
+    before = _snapshot(scratch_golden)
+    assert MT.cli([]) == 0
+    assert _snapshot(scratch_golden) == before
+
+
+def test_cli_refuses_other_bytes_without_replace(scratch_golden):
+    manifest = json.loads((scratch_golden / "MANIFEST.json").read_text())
+    manifest["files"][REL_OUT] = "0" * 64                     # a previously pinned, different file
+    manifest["tolerances"]["sinusoid"] = {"file": REL_OUT, "status": "stale"}
+    (scratch_golden / "MANIFEST.json").write_text(json.dumps(manifest, indent=1, sort_keys=True) + "\n")
+    (scratch_golden / REL_OUT).write_text("{}\n")
+    before = _snapshot(scratch_golden)
+    with pytest.raises(SystemExit, match="--replace"):
+        MT.cli([])
+    assert _snapshot(scratch_golden) == before                 # nothing written
+    assert MT.cli(["--replace"]) == 0
+    data = (scratch_golden / REL_OUT).read_bytes()
+    assert data == (GS / "tolerances_measured.json").read_bytes()
+    after = json.loads((scratch_golden / "MANIFEST.json").read_text())
+    assert after["files"][REL_OUT] == hashlib.sha256(data).hexdigest()
+    assert after["tolerances"]["sinusoid"] == MT.manifest_summary(json.loads(data))
+    assert {k: v for k, v in after["files"].items() if k != REL_OUT} == \
+        {k: v for k, v in manifest["files"].items() if k != REL_OUT}
+    assert after["build"] == manifest["build"]
+
+
+def test_manifest_summary_reflects_the_approved_gates():
+    t = read_json(MT.OUT)
+    summary = MT.manifest_summary(t)
+    assert summary == {"file": REL_OUT, "status": "APPROVED by the user 2026-10-12", "approved_on": "2026-10-12",
+                       "decisions": {"D1": "Add rtol 1e-12 at stress", "as_proposed": "approved as proposed"},
+                       "approved": t["approved"]}
+    assert read_json(GS.parent / "MANIFEST.json")["tolerances"]["sinusoid"] == summary
