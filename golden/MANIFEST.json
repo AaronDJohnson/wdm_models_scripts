@@ -4310,6 +4310,14 @@
  },
  "schema": 1,
  "sources": {
+  "external": {
+   "sangria_h5": {
+    "bytes": 3082321484,
+    "path": "/Users/aaron/Documents/lisa/project-catalog/LDC2_sangria_training_v2.h5",
+    "sha256": "f54ca61355d0c6208fbea5fc1b2dcce7332025de264fef33ebe87dea657c7ee6",
+    "used_by": "toy_models/galactic_binary/build_segments.py::RAW_H5"
+   }
+  },
   "frozen_trees": {
    "listing": "frozen_trees_files.tsv.gz",
    "summary": "frozen_trees.json"
