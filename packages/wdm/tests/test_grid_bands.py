@@ -191,5 +191,67 @@ def test_inverse_bands_is_the_adjoint(backend, rng):
         band_atoms([0, 1], Nf, Nt, dt)
 
 
+def test_forward_bands_rejects_non_finite_bins(backend):
+    Nf, Nt, dt = 8, 16, 1.0
+    bands = np.array([2, 3])
+    z = np.ones(40, complex)
+    z[10] = np.nan
+    with pytest.raises(ValueError, match="forward_bands: z: .* not finite"):
+        forward_bands(backend.asarray(z), 0, bands, Nf, Nt, dt)
+    z[10] = np.inf
+    with pytest.raises(ValueError, match="forward_bands: z: .* not finite"):
+        forward_bands(backend.asarray(z), 0, bands, Nf, Nt, dt)
+
+
+def test_inverse_bands_rejects_complex_and_non_finite_cells(backend):
+    Nf, Nt, dt = 8, 16, 1.0
+    bands = np.array([2, 3])
+    w = np.ones((bands.size, Nt))
+    with pytest.raises(ValueError, match="w must be real"):
+        inverse_bands(backend.asarray(w + 1j), 0, 40, bands, Nf, Nt, dt)
+    w[1, 4] = np.nan
+    with pytest.raises(ValueError, match="inverse_bands: w: .* not finite"):
+        inverse_bands(backend.asarray(w), 0, 40, bands, Nf, Nt, dt)
+
+
+def test_band_analysis_checks_are_skipped_under_jit(jax_be, rng):
+    """The host-side checks see tracers under jit and must not break tracing."""
+    import jax
+
+    Nf, Nt, dt = 8, 16, 1.0
+    bands = np.array([2, 3])
+    z = rng.standard_normal(40) + 1j * rng.standard_normal(40)
+    w = rng.standard_normal((bands.size, Nt))
+    fwd = jax.jit(lambda z: forward_bands(z, 0, bands, Nf, Nt, dt))
+    inv = jax.jit(lambda w: inverse_bands(w, 0, 40, bands, Nf, Nt, dt))
+    assert np.allclose(np.asarray(fwd(jax_be.asarray(z))),
+                       forward_bands(z, 0, bands, Nf, Nt, dt), rtol=0, atol=1e-12)
+    assert np.allclose(np.asarray(inv(jax_be.asarray(w))),
+                       inverse_bands(w, 0, 40, bands, Nf, Nt, dt), rtol=0, atol=1e-12)
+
+
+def test_atom_spectrum_rejects_out_of_range_n_and_foreign_base():
+    Nf, Nt, dt = 8, 16, 1.0
+    base = base_atom_spectra(Nf, Nt, dt)
+    ref = atom_spectrum(3, 5, Nf, Nt, dt)               # base built internally
+    assert np.array_equal(atom_spectrum(3, 5, Nf, Nt, dt, base=base), ref)
+    # n outside 0..Nt-1 used to wrap silently onto another cell's atom
+    for n in (Nt, Nt + 1, -1, 100):
+        with pytest.raises(ValueError, match=r"n must lie in 0\.\.15"):
+            atom_spectrum(3, n, Nf, Nt, dt, base=base)
+    for m in (-1, Nf + 1):
+        with pytest.raises(ValueError, match="not an active cell"):
+            atom_spectrum(m, 4, Nf, Nt, dt, base=base)
+    # a base built for another grid: same N with another Nf, another N, another dt
+    for other, match in (((16, 8, dt), "base does not hold"),
+                         ((4, 8, dt), "base does not hold"),
+                         ((8, 32, dt), "base does not hold"),
+                         ((Nf, Nt, 2.0), "not built for dt=1.0"),
+                         ((Nf, Nt, 0.5), "not built for dt=1.0")):
+        foreign = base_atom_spectra(*other)
+        with pytest.raises(ValueError, match=match):
+            atom_spectrum(3, 5, Nf, Nt, dt, base=foreign)
+
+
 def test_time_pixel_centers_doctest_value():
     assert wdm.time_pixel_centers(8, 4, 1.0).tolist() == [0.0, 8.0, 16.0, 24.0]

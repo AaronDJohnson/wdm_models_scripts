@@ -880,16 +880,49 @@ def base_atom_spectra(Nf: int, Nt: int, dt: float) -> dict[tuple[int, int], CArr
     return out
 
 
+def _check_base_spectrum(base: dict[tuple[int, int], CArray], G: CArray, Nf: int, Nt: int,
+                         dt: float) -> None:
+    """Reject a ``base`` that :func:`base_atom_spectra` did not build for ``(Nf, Nt, dt)``.
+
+    Host-side fingerprint, ``O(N)`` like the phase ramp it guards: ``2 Nf``
+    entries pins ``Nf``; the length ``N//2+1`` of ``G`` then pins ``Nt``; the
+    energy of the atom pins ``dt``, because every active atom has energy
+    exactly ``dt`` (``W_a W_a^T = dt I``; measured to <= 5e-16 relative).
+    ``N = Nf Nt`` is even, so the last bin is the Nyquist bin.
+    """
+    N = n_samples(Nf, Nt)
+    if len(base) != 2 * Nf or np.shape(G) != (N // 2 + 1,):
+        raise ValueError(
+            f"base does not hold the base atoms of the ({Nf}, {Nt}) grid: "
+            f"{len(base)} entries of shape {np.shape(G)}, expected {2 * Nf} of "
+            f"shape ({N // 2 + 1},); build it with base_atom_spectra({Nf}, {Nt}, dt)"
+        )
+    G = np.asarray(G)
+    energy = (2.0 * np.vdot(G, G).real - abs(G[0]) ** 2 - abs(G[-1]) ** 2) / N
+    if not abs(energy - dt) <= 1e-9 * dt:
+        raise ValueError(
+            f"base was not built for dt={dt}: its atoms have energy {energy:.17g}, "
+            f"and every atom of base_atom_spectra({Nf}, {Nt}, dt) has energy dt"
+        )
+
+
 def atom_spectrum(m: int, n: int, Nf: int, Nt: int, dt: float, *,
                   base: dict[tuple[int, int], CArray] | None = None) -> CArray:
     """rfft of the atom of the active cell ``(m, n)`` (length ``N//2+1``).
 
-    Pass ``base`` (:func:`base_atom_spectra`) to avoid recomputing it.
+    Pass ``base`` (:func:`base_atom_spectra`) to avoid recomputing it.  ``n``
+    must lie in ``0..Nt-1`` (no wrap-around), and a ``base`` built for another
+    ``(Nf, Nt, dt)`` is rejected.
     """
+    validate_grid(Nf, Nt)
+    validate_dt(dt)
+    if not 0 <= n < Nt:
+        raise ValueError(f"n must lie in 0..{Nt - 1} on the ({Nf}, {Nt}) grid; got {n}")
     base = base_atom_spectra(Nf, Nt, dt) if base is None else base
     a = n % 2
     if (m, a) not in base:
         raise ValueError(f"({m}, {n}) is not an active cell of the ({Nf}, {Nt}) grid")
+    _check_base_spectrum(base, base[m, a], Nf, Nt, dt)
     k = np.arange(n_samples(Nf, Nt) // 2 + 1)
     return base[m, a] * np.exp(-2j * np.pi * k * (n - a) / Nt)
 
@@ -958,6 +991,9 @@ def forward_bands(z: CArray, k0: int, bands: NDArray[np.integer], Nf: int, Nt: i
     ``wdm_full.analyse``): ``Re(phase * ifft(phi * z[window]))``.  It agrees
     with the dense ``Re(band_atoms @ z)`` to ~1e-15 (not bitwise).  Interior
     bands only.  Cost ``O(nb Nt log Nt)`` against ``O(nb Nt^2)`` dense.
+    A non-finite ``z`` is rejected (as in :func:`forward`): one ``nan`` bin
+    would otherwise make every cell of each band whose window covers it
+    ``nan``, without a warning.
     """
     validate_grid(Nf, Nt)
     validate_dt(dt)
@@ -965,6 +1001,7 @@ def forward_bands(z: CArray, k0: int, bands: NDArray[np.integer], Nf: int, Nt: i
     bands = _check_interior_bands(bands, Nf)
     z = be.asarray(z)
     ell = _band_windows(bands, k0, z.shape[-1], Nt)
+    _check_finite(z, "forward_bands: z")
     phi = phi_centered(Nf, Nt, dt)
     phase = _band_phase(bands, Nt, phi)
     Y = be.fft.ifft(phi * z[..., ell], axis=-1)
@@ -982,15 +1019,22 @@ def inverse_bands(w: Array, k0: int, n_bins: int, bands: NDArray[np.integer], Nf
     ``sum_n w[b, n] conj(atom[b, n, s])`` from every band window covering it
     (``phi * fft(conj(phase) * w) / Nt``, scattered band by band).  It is the
     map that pushes cell-space vectors back onto bins (GB congruences); it is
-    not a left inverse of :func:`forward_bands`.
+    not a left inverse of :func:`forward_bands`.  ``w`` must be real and
+    finite (as in :func:`inverse`).
     """
     validate_grid(Nf, Nt)
     validate_dt(dt)
     be = be or get_backend(w)
     bands = _check_interior_bands(bands, Nf)
     w = be.asarray(w)
+    if be.xp.iscomplexobj(w):
+        raise ValueError(
+            "w must be real; the adjoint identity holds only for real cells, so a "
+            "complex w would give a complex result that is not the adjoint of any cells"
+        )
     if w.shape[-2:] != (bands.size, Nt):
         raise ValueError(f"w must end in ({bands.size}, {Nt}); got {w.shape}")
+    _check_finite(w, "inverse_bands: w")
     ell = _band_windows(bands, k0, n_bins, Nt)
     phi = phi_centered(Nf, Nt, dt)
     phase = _band_phase(bands, Nt, phi)
