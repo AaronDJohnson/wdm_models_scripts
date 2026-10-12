@@ -56,7 +56,7 @@ def test_stress_fast_tier(case, model):
             assert _same_mask(p["lnl_ref"], p["lnl_cache"])
         assert _same_mask(p["lnl_ref"], p["lnl_jax"])
         if math.isfinite(p["lnl_ref"]) and p["pd_margin"] >= WELL_CONDITIONED:
-            tol = 1e-9 + 1e-12 * abs(p["lnl_ref"])
+            tol = 1e-10 + 1e-12 * abs(p["lnl_ref"])    # spec §7.3 G4 NumPy cache gate (measured)
             if "lnl_cache" in p:
                 assert abs(p["lnl_cache"] - p["lnl_ref"]) <= tol, p["name"]
             assert abs(p["lnl_jax"] - p["lnl_ref"]) <= 1e-6, p["name"]
