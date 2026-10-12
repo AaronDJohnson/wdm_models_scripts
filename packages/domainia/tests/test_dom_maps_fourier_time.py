@@ -29,6 +29,9 @@ def test_sinusoid_whittle_raw_bins_are_bitwise():
     assert 2 * F.dst.n == 16256                        # spec §4.6: 16256 kept, 128 discarded
     R = F.apply(d)
     assert np.array_equal(R, np.fft.rfft(d)[_oracle_keep(N, SIN_FMIN)])
+    # rows reduce k j mod N exactly: 8e-16 here (the unreduced phase gives 1.1e-13)
+    idx = np.array([0, 17, 1000, F.dst.n - 1])
+    assert np.max(np.abs(F.rows(idx) @ d - R[idx])) <= 1e-14 * np.max(np.abs(R))
 
 
 def test_sinusoid_whittle_cut_crop_and_bins_are_bitwise():
@@ -42,6 +45,8 @@ def test_sinusoid_whittle_cut_crop_and_bins_are_bitwise():
     R = W.apply(d)
     assert np.array_equal(R, np.fft.rfft(d[slice(lo, hi)])[_oracle_keep(15680, SIN_FMIN)])
     assert (F.dst.k0, F.dst.n) == (62, 7778)
+    with pytest.raises(ValueError, match="last axis"):    # the uncropped record is refused
+        F.apply(d)
 
 
 def test_fourier_rows_adjoint_and_orthonormal_coordinates():
@@ -83,8 +88,14 @@ def test_crop_and_zero_pad_adjoints():
     assert C.dst.t0 == 1.0 + 10 * 0.25
     with pytest.raises(ValueError, match="not inside"):
         CropTime(td, 80, 40)
+    with pytest.raises(TypeError):
+        CropTime(td, 10.0, 40)
+    with pytest.raises(ValueError, match="last axis"):
+        C.apply(x[:, :60])
     Z = ZeroPadTime(td, 32)
     assert Z.dst == TimeDomain(128, 0.25, 1.0)
+    with pytest.raises(ValueError, match=">= 0"):
+        ZeroPadTime(td, -5)
     z = Z.apply(x)
     assert np.array_equal(z[:, :96], x) and np.all(z[:, 96:] == 0)
     w = rng.standard_normal((2, 128))

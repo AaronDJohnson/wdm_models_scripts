@@ -8,6 +8,7 @@ bitwise: ``TimeToWDM.apply(d) == forward_time(d)[mask][keep]``.
 
 from __future__ import annotations
 
+import operator
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -28,6 +29,12 @@ def _check_grid(time: TimeDomain, dom: WDMDomain) -> wdm.Grid:
         raise ValueError(f"time domain (N={time.N}, dt={time.dt}) does not match the cells' grid "
                          f"(N={g.N}, dt={g.dt})")
     return g
+
+
+def _last_axis(x: Any, n: int, what: str) -> None:
+    """Refuse a vector whose last axis is not ``n`` long (shapes are static under ``jit``)."""
+    if np.shape(x)[-1:] != (n,):
+        raise ValueError(f"{what}: last axis must have length {n}; got shape {np.shape(x)}")
 
 
 def _flat(x: Any, N: int) -> tuple[Any, tuple[int, ...]]:
@@ -179,18 +186,21 @@ class TimeToFourier(LinearMap):
             object.__setattr__(self, "dst", FourierDomain(self.src.N, self.src.dt, k0, n, "rfft"))
 
     def apply(self, x, be=None):
+        _last_axis(x, self.src.N, "TimeToFourier.apply")
         be = self._be(x, be)
         k0, n = self.dst.k0, self.dst.n
         return be.fft.rfft(be.asarray(x), axis=-1)[..., k0:k0 + n]
 
     def apply_complex(self, x, be=None):
         """``F x`` for a complex series (``fft``, the kept bins)."""
+        _last_axis(x, self.src.N, "TimeToFourier.apply_complex")
         be = self._be(x, be)
         k0, n = self.dst.k0, self.dst.n
         return be.fft.fft(be.asarray(x), axis=-1)[..., k0:k0 + n]
 
     def adjoint(self, y, be=None):
         """``Re(F^H y)``: the real-inner-product adjoint, ``(N/2) irfft`` of the kept bins."""
+        _last_axis(y, self.dst.n, "TimeToFourier.adjoint")
         be = self._be(y, be)
         y = be.asarray(y)
         N, k0, n = self.src.N, self.dst.k0, self.dst.n
@@ -199,10 +209,13 @@ class TimeToFourier(LinearMap):
         return (N / 2.0) * be.fft.irfft(spec, n=N, axis=-1)
 
     def rows(self, idx):
+        """``exp(-2 pi i k j / N)`` with ``k j`` reduced mod ``N`` in exact int64 arithmetic
+        first: the phase stays in ``[0, 2 pi)``, so the rows are good to ~1e-16 at any ``N``
+        (unreduced, ``k j`` reaches 1.3e8 at ``N = 16384`` and the phase error 6e-12)."""
         idx = np.atleast_1d(np.asarray(idx, dtype=np.int64))
         k = self.dst.k0 + idx
-        j = np.arange(self.src.N)
-        return np.exp(-2j * np.pi * np.outer(k, j) / self.src.N)
+        j = np.arange(self.src.N, dtype=np.int64)
+        return np.exp(-2j * np.pi * ((np.outer(k, j) % self.src.N) / self.src.N))
 
     def orthonormal_rows(self) -> np.ndarray:
         """``(2 n, N)`` real orthonormal rows, bin by bin ``sqrt(2/N) (cos, sin)``: the
@@ -226,6 +239,8 @@ class CropTime(LinearMap):
     n: int
 
     def __post_init__(self) -> None:
+        object.__setattr__(self, "start", operator.index(self.start))
+        object.__setattr__(self, "n", operator.index(self.n))
         if not 0 <= self.start < self.start + self.n <= self.src.N:
             raise ValueError(f"[{self.start}, {self.start + self.n}) is not inside [0, {self.src.N})")
 
@@ -234,9 +249,11 @@ class CropTime(LinearMap):
         return TimeDomain(self.n, self.src.dt, self.src.t0 + self.start * self.src.dt)
 
     def apply(self, x, be=None):
+        _last_axis(x, self.src.N, "CropTime.apply")
         return x[..., self.start:self.start + self.n]
 
     def adjoint(self, y, be=None):
+        _last_axis(y, self.n, "CropTime.adjoint")
         be = self._be(y, be)
         out = be.xp.zeros((*y.shape[:-1], self.src.N), dtype=y.dtype)
         return be.set(out, (..., slice(self.start, self.start + self.n)), y, copy=False)
@@ -251,15 +268,22 @@ class ZeroPadTime(LinearMap):
     src: TimeDomain
     n_extra: int
 
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "n_extra", operator.index(self.n_extra))
+        if self.n_extra < 0:
+            raise ValueError(f"n_extra must be >= 0; got {self.n_extra}")
+
     @property
     def dst(self) -> TimeDomain:
         return TimeDomain(self.src.N + self.n_extra, self.src.dt, self.src.t0)
 
     def apply(self, x, be=None):
+        _last_axis(x, self.src.N, "ZeroPadTime.apply")
         be = self._be(x, be)
         x = be.asarray(x)
         out = be.xp.zeros((*x.shape[:-1], self.src.N + self.n_extra), dtype=x.dtype)
         return be.set(out, (..., slice(0, self.src.N)), x, copy=False)
 
     def adjoint(self, y, be=None):
+        _last_axis(y, self.src.N + self.n_extra, "ZeroPadTime.adjoint")
         return y[..., :self.src.N]
