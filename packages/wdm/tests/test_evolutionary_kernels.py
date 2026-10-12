@@ -237,6 +237,106 @@ def test_eq45_kernels_on_jax(jax_be):
     assert np.max(np.abs(np.asarray(xu) - nu)) <= 1e-13 * scale
 
 
+# -- Eq. (45) plans are pytrees: pass them to jit as ARGUMENTS ------------------------
+
+SIN_NF, SIN_NT, SIN_DT = 64, 256, 2.0**-10        # the sinusoid grid
+SIN_T_OBS = SIN_NF * SIN_NT * SIN_DT
+HLO_LIMIT = 5_000_000      # chars; measured 0.2 MB (gram) and 2.5 MB (cheb) with the plan as
+                           # an argument, 102 MB and 404 MB with the plan closed over
+
+
+def _L_sin(f):
+    """The sinusoid toy's log-frequency, L = log(max(f, 4 Hz) / 1 Hz)."""
+    return np.log(np.maximum(np.asarray(f, dtype=float), 4.0) / 1.0)
+
+
+@pytest.fixture(scope="module")
+def sin_plans():
+    """Raw (Nt = 256) and padded (Nt = 272, t_max = 272/256 T_obs) plans on the sinusoid
+    grid, with their Gram plans and r = t_max / T_obs (built once: ~4 s)."""
+    out = {}
+    for tag, Nt in (("raw", SIN_NT), ("pad", 272)):
+        plan = E.eq45_plan(SIN_NF, Nt, SIN_DT, t_max=Nt * SIN_NF * SIN_DT)
+        out[tag] = (plan, E.eq45_gram_plan(plan), Nt / SIN_NT)
+    return out
+
+
+def test_eq45_plans_are_pytrees(jax_be):
+    """Array fields are leaves; ints, floats and the per-block band indices (m, m2) are
+    static -- in the treedef, so part of the jit cache key and never traced."""
+    import jax
+
+    plan = E.eq45_plan(NF, NT, DT)
+    gp = E.eq45_gram_plan(plan)
+    for p in (plan, gp, plan.specs[0]):
+        leaves, tree = jax.tree_util.tree_flatten(p)
+        assert len(leaves) > 1 and all(isinstance(x, np.ndarray) for x in leaves), type(p)
+        back = jax.tree_util.tree_unflatten(tree, leaves)
+        assert type(back) is type(p)
+    # Equal plans built twice have equal treedefs (a jit cache hit); array-valued
+    # static fields would make this comparison raise instead.
+    assert jax.tree_util.tree_structure(plan) == jax.tree_util.tree_structure(E.eq45_plan(NF, NT, DT))
+    assert jax.tree_util.tree_structure(gp) == jax.tree_util.tree_structure(E.eq45_gram_plan(plan))
+    seen = {}
+
+    @jax.jit
+    def probe(p, g):
+        seen["plan"] = (p.Nf, p.Nt, p.dt, p.N, p.T, p.K, p.P, p.t_max, p.fold_has_duplicates)
+        seen["blocks"] = [(s.m, s.m2) for s in p.specs]
+        seen["gram"] = (g.nb, g.B, g.Kb)
+        seen["traced"] = isinstance(p.Tp, jax.core.Tracer) and isinstance(g.gG, jax.core.Tracer)
+        return p.Tp.sum() + g.gW.sum()
+
+    probe(plan, gp)
+    assert seen["plan"] == (plan.Nf, plan.Nt, plan.dt, plan.N, plan.T, plan.K, plan.P,
+                            plan.t_max, plan.fold_has_duplicates)
+    assert all(type(v) in (int, float, bool) for v in seen["plan"])
+    assert seen["blocks"] == [(s.m, s.m2) for s in plan.specs]
+    assert all(type(m) is int and type(m2) is int for m, m2 in seen["blocks"])
+    assert seen["gram"] == (gp.nb, gp.B, gp.Kb) and seen["traced"]
+
+
+def _rel_gap(got, ref):
+    """max |got - ref| over every block, over max |ref| over every block."""
+    return (max(np.max(np.abs(np.asarray(g) - r)) for g, r in zip(got, ref, strict=True))
+            / max(np.max(np.abs(r)) for r in ref))
+
+
+def test_eq45_gram_jits_with_the_plan_as_an_argument(jax_be, sin_plans):
+    """64 x 256: the Gram plan as a jit ARGUMENT -- a small program, NumPy's numbers."""
+    import jax
+
+    _, gp, _ = sin_plans["raw"]
+    gL = E.eq45_gram_gather(gp, _L_sin(sin_plans["raw"][0].f))
+    alpha = 0.0 + 1.2 * (gp.gT / SIN_T_OBS - 0.5)
+    ref = E.eq45_blocks_gram(gp, alpha, gL)
+    lowered = jax.jit(lambda p, a: E.eq45_blocks_gram(p, a, gL)).lower(gp, alpha)
+    assert len(lowered.as_text()) < HLO_LIMIT
+    got = lowered.compile()(gp, jax_be.asarray(alpha))
+    assert all(isinstance(b, jax.Array) for b in got)
+    assert _rel_gap(got, ref) <= 1e-13
+
+
+def test_eq45_cheb_jits_with_the_plan_as_an_argument(jax_be, sin_plans):
+    """64 x 256: the Chebyshev plan as a jit ARGUMENT, coefficients from traced alphas."""
+    import jax
+
+    plan, _, r = sin_plans["raw"]
+    L = _L_sin(plan.f)
+    ac, ad = 0.0, 1.2
+    ref_d, ref_u = E.eq45_blocks_cheb(plan, E.eq45_coeffs_bessel(L, ac, ad, plan.P, r=r))
+
+    def blocks(p, a, L):
+        return E.eq45_blocks_cheb(p, E.eq45_coeffs_bessel(L, a[0], a[1], p.P, r=r))
+
+    alpha = np.array([ac, ad])
+    lowered = jax.jit(blocks).lower(plan, alpha, L)
+    assert len(lowered.as_text()) < HLO_LIMIT
+    got_d, got_u = lowered.compile()(plan, jax_be.asarray(alpha), jax_be.asarray(L))
+    assert all(isinstance(b, jax.Array) for b in got_d + got_u)
+    assert _rel_gap(got_d + got_u, ref_d + ref_u) <= 1e-13
+
+
 def test_separable_kernels_and_assembly(backend, rng):
     P, G = 12, 20
     U = rng.standard_normal((P, G)) + 1j * rng.standard_normal((P, G))

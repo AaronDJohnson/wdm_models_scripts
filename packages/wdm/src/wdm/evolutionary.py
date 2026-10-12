@@ -46,7 +46,7 @@ from typing import Any
 import numpy as np
 from numpy.typing import NDArray
 
-from .backend import NUMPY, Backend, get_backend
+from .backend import NUMPY, Backend, get_backend, pytree_dataclass
 from .grid import (
     active_mask,
     delta_T,
@@ -69,6 +69,7 @@ type IntArray = NDArray[np.integer]
 type PsdFtFunc = Callable[[Array, Array], Array]
 
 __all__ = [
+    "Eq45BlockSpec",
     "Eq45GramPlan",
     "Eq45Plan",
     "apply_time_mask",
@@ -247,15 +248,56 @@ def exact_covariance(Nf: int, Nt: int, dt: float, Sn: PsdFtFunc) -> Array:
 # ---------------------------------------------------------------------------
 
 
+@pytree_dataclass(data=("R", "C", "combo", "d", "s", "B"), meta=("m", "m2"))
+@dataclass(frozen=True, eq=False)
+class Eq45BlockSpec:
+    """One band block ``(m, m2)``, ``m2 in {m, m+1}``, of an :class:`Eq45Plan`.
+
+    ``R``/``C`` (row/column packed cells), ``combo = 2a + b`` (base-atom parities),
+    ``d`` (circular column lag), ``s = n + n'`` (mid-time index; ``t_bar = s dT/2``)
+    and ``B = {combo: (k, eta_k G_ma(k) G*_m2b(k) / T)}`` over the support bins:
+    the entries of WT ``TriCovariance._block_spec``'s dict, as fields.
+
+    A JAX pytree: the band indices ``m``/``m2`` are static (they pick the block's
+    slot and whether it is symmetrised); every array is a leaf.  ``R``/``C`` are
+    leaves too, because JAX rejects arrays as static fields; only their shapes,
+    which stay static under tracing, matter to a kernel.
+    """
+
+    m: int
+    m2: int
+    R: IntArray
+    C: IntArray
+    combo: IntArray
+    d: IntArray
+    s: IntArray
+    B: dict[int, tuple[IntArray, CArray]]
+
+
+@pytree_dataclass(
+    data=("f", "eta", "m", "n", "t", "base", "keep", "cells", "pos", "band_cells", "Tp",
+          "specs", "k_used"),
+    meta=("Nf", "Nt", "dt", "N", "T", "K", "P", "t_max", "fold_has_duplicates"),
+)
 @dataclass(frozen=True, eq=False)
 class Eq45Plan:
     """Host (NumPy float64) constants of Eq. (45) on the kept cells of one grid.
 
-    ``specs`` holds one entry per band block ``(m, m2)``, ``m2 in {m, m+1}``:
-    ``R``/``C`` (row/column packed cells), ``combo = 2a + b`` (base-atom parities),
-    ``d`` (circular column lag), ``s = n + n'`` (mid-time index; ``t_bar = s dT/2``)
-    and ``B = {combo: (k, eta_k G_ma(k) G*_m2b(k) / T)}`` over the support bins.
-    Mirrors WT ``TriCovariance.__init__``/``_block_spec`` line for line.
+    ``specs`` holds one :class:`Eq45BlockSpec` per band block ``(m, m2)``,
+    ``m2 in {m, m+1}``.  Mirrors WT ``TriCovariance.__init__``/``_block_spec``
+    line for line.
+
+    A JAX pytree: the grid scalars (``Nf, Nt, dt, N, T, K, P, t_max``) and
+    ``fold_has_duplicates`` are static; every array is a leaf.
+
+    .. warning::
+       Under ``jax.jit`` pass the plan as an **argument**
+       (``jax.jit(lambda plan, c: eq45_blocks_cheb(plan, c))(plan, coeffs)``);
+       never close over it.  A closed-over plan bakes every array (219 MB at
+       64 x 256) into the compiled program: 404 MB of HLO text and ~25 s to
+       lower and compile, against 2.5 MB and ~4 s as an argument (measured,
+       CPU).  ``jax.device_put(plan)`` once keeps the arrays on the device
+       between calls.
     """
 
     Nf: int
@@ -277,7 +319,7 @@ class Eq45Plan:
     pos: IntArray = field(repr=False)
     band_cells: list[IntArray] = field(repr=False)
     Tp: Array = field(repr=False)
-    specs: list[dict[str, Any]] = field(repr=False)
+    specs: list[Eq45BlockSpec] = field(repr=False)
     k_used: IntArray = field(repr=False)
     fold_has_duplicates: bool = False
 
@@ -349,11 +391,11 @@ def eq45_plan(Nf: int, Nt: int, dt: float, keep: BoolArray | None = None, *,
         Tp[1] = u
     for q in range(2, P):
         Tp[q] = 2 * u * Tp[q - 1] - Tp[q - 2]
-    specs = [_block_spec(Nf, Nt, T, n, eta, base, band_cells, mm, m2)
+    specs = [Eq45BlockSpec(**_block_spec(Nf, Nt, T, n, eta, base, band_cells, mm, m2))
              for mm in range(Nf + 1) for m2 in (mm, mm + 1) if m2 <= Nf]
-    k_all = [k for spec in specs for (k, _) in spec["B"].values()]
+    k_all = [k for spec in specs for (k, _) in spec.B.values()]
     k_used = np.unique(np.concatenate(k_all)) if k_all else np.zeros(0, int)
-    dup = any(np.unique(k % Nt).size != k.size for spec in specs for (k, _) in spec["B"].values())
+    dup = any(np.unique(k % Nt).size != k.size for spec in specs for (k, _) in spec.B.values())
     return Eq45Plan(Nf, Nt, dt, N, T, K, P, t_max, f, eta, m, n, t, base, keep, cells, pos,
                     band_cells, Tp, specs, k_used, dup)
 
@@ -417,9 +459,13 @@ def eq45_blocks_cheb(plan: Eq45Plan, coeffs: Array | Callable[[IntArray], Array]
     one length-``Nt`` FFT per order.  The NumPy path is WT ``TriCovariance.blocks``
     / wdm_dev ``TriCovariance.blocks`` line for line (``np.add.at`` fold).
     Returns ragged lists (``diag[m]``: kept cells of band ``m`` squared).
+
+    Under ``jax.jit`` pass ``plan`` as an argument (see :class:`Eq45Plan`) and
+    ``coeffs`` as the ``(P, K)`` array (a callable would index host arrays with
+    the traced ``k``).  The backend follows ``coeffs`` and the plan's arrays.
     """
     if be is None:
-        be = NUMPY if callable(coeffs) else get_backend(coeffs)
+        be = get_backend(plan.Tp) if callable(coeffs) else get_backend(coeffs, plan.Tp)
     xp = be.xp
     P, Nt = plan.P, plan.Nt
     Tp = be.asarray(plan.Tp)
@@ -427,19 +473,19 @@ def eq45_blocks_cheb(plan: Eq45Plan, coeffs: Array | Callable[[IntArray], Array]
     up: list[Array] = [None] * plan.Nf  # type: ignore[list-item]
     for spec in plan.specs:
         F = xp.zeros((4, P, Nt), complex)
-        for cb, (k, Bk) in spec["B"].items():
+        for cb, (k, Bk) in spec.B.items():
             Ck = coeffs(k) if callable(coeffs) else coeffs[:, k]
             V = Ck * Bk[None, :]                                        # (P, |k|)
             folded = xp.zeros((P, Nt), complex)
             folded = be.add_at(folded, (slice(None), k % Nt), V, copy=False)
             F = be.set(F, cb, be.fft.fft(folded, axis=1), copy=False)   # F_p(d)
-        Fg = F[spec["combo"], :, spec["d"]]                             # (nR, nC, P)
-        Tg = Tp[:, spec["s"]]                                           # (P, nR, nC)
+        Fg = F[spec.combo, :, spec.d]                                   # (nR, nC, P)
+        Tg = Tp[:, spec.s]                                              # (P, nR, nC)
         blk = xp.real(xp.einsum("ijp,pij->ij", Fg, Tg))
-        if spec["m2"] == spec["m"]:
-            diag[spec["m"]] = 0.5 * (blk + blk.T)
+        if spec.m2 == spec.m:
+            diag[spec.m] = 0.5 * (blk + blk.T)
         else:
-            up[spec["m"]] = blk
+            up[spec.m] = blk
     return diag, up
 
 
@@ -448,6 +494,8 @@ def eq45_blocks_cheb(plan: Eq45Plan, coeffs: Array | Callable[[IntArray], Array]
 # ---------------------------------------------------------------------------
 
 
+@pytree_dataclass(data=("sup", "slot", "gG", "gW", "gT", "uI1", "uI2", "uW"),
+                  meta=("nb", "B", "Kb"))
 @dataclass(frozen=True, eq=False)
 class Eq45GramPlan:
     """Host constants of the Gram form, bands laid out ``(nb, B)`` with dummy slots.
@@ -456,6 +504,16 @@ class Eq45GramPlan:
     a dummy); ``gG`` the cells' atom spectra on their band's support bins
     ``sup[m]``; ``gW = eta/T``; ``gT`` the cell times; ``uI1``/``uI2``/``uW`` the
     overlap bins of adjacent bands.  WG ``MatrixGPU._gram_setup`` line for line.
+
+    A JAX pytree: the layout sizes ``nb``, ``B``, ``Kb`` are static; every array
+    is a leaf.
+
+    .. warning::
+       Under ``jax.jit`` pass the plan as an **argument**
+       (``jax.jit(lambda gp, a: eq45_blocks_gram(gp, a, gL))(gplan, alpha_cells)``);
+       never close over it.  A closed-over plan bakes ``gG`` (51 MB at 64 x 256)
+       into the compiled program: 102 MB of HLO text, against 0.2 MB as an
+       argument (measured, CPU).
     """
 
     nb: int
@@ -527,8 +585,10 @@ def eq45_blocks_gram(gplan: Eq45GramPlan, alpha_cells: Array, gL: Array, *,
     from ``gplan.gT`` with the **data record's** ``T_obs`` (WG:
     ``ac + ad * (gT / T_obs - 0.5)``).  ``gL`` is :func:`eq45_gram_gather` of
     ``L(f)``.  Dummy slots give zero rows and columns.  WG ``_tri_blocks`` verbatim.
+    Under ``jax.jit`` pass ``gplan`` as an argument (see :class:`Eq45GramPlan`).
+    The backend follows ``alpha_cells``, ``gL`` and the plan's arrays.
     """
-    be = be or get_backend(alpha_cells)
+    be = be or get_backend(alpha_cells, gL, gplan.gG)
     xp = be.xp
     gG, gW = be.asarray(gplan.gG), be.asarray(gplan.gW)
     uI1, uI2, uW = be.asarray(gplan.uI1), be.asarray(gplan.uI2), be.asarray(gplan.uW)
