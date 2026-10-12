@@ -8,10 +8,13 @@ Modules: ``base`` (protocol, factors, ``Covariance``), ``diagonal``, ``dense``,
 """
 
 from .base import CholFactor, Covariance, DiagFactor, Evaluator, Factor, QuadForm, as_evaluator, quad_form
+from .blocktri import BlockTriCovFactor, BlockTridiagonalCovariance
 from .dense import DenseCovariance, dense_factor
 from .diagonal import DiagonalCovariance
 
 __all__ = [
+    "BlockTriCovFactor",
+    "BlockTridiagonalCovariance",
     "CholFactor",
     "Covariance",
     "DenseCovariance",
