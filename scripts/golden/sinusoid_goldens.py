@@ -99,6 +99,53 @@ def ship_data(argv: list[str]) -> dict:
     return provenance
 
 
+# --- G1: the 45 CPU reference files (Task A5) ---------------------------------------------
+
+def fast_indices(loglike) -> list[int]:
+    """Fast tier of one reference file: the truth (0), the first tight point (1), the first
+    wide point (2), then the first -inf point (edge-exact: 4) or else the first stress
+    corner (1 + N_REF = 25)."""
+    loglike = np.asarray(loglike, dtype=float)
+    inf = np.flatnonzero(loglike == -np.inf)
+    return [0, 1, 2, int(inf[0]) if inf.size else 1 + N_REF]
+
+
+@command("g1")
+def g1(argv: list[str]) -> dict:
+    """Extract prepared/<case>_<model>_reference.npz of the 15 paper models from the Colab
+    bundle; each sha256 must equal asset_sha256.reference of its sinusoid_final run."""
+    argparse.ArgumentParser(prog="sinusoid_goldens g1").parse_args(argv)
+    manifest = read_json(SINUSOID_FINAL / "manifest.json")
+    REFS.mkdir(parents=True, exist_ok=True)
+    files = {}
+    with zipfile.ZipFile(BUNDLE) as bundle:
+        for case in CASES:
+            for model in MODELS:
+                name = f"{case}_{model}_reference.npz"
+                body = bundle.read(f"{BUNDLE_ROOT}/prepared/{name}")
+                sha = sha256_bytes(body)
+                run = manifest["runs"][case][model]
+                target = read_json(SINUSOID_FINAL / run / "run_meta.json")["target"]
+                if (target["case"], target["model"]) != (case, model):
+                    raise ValueError(f"{run}: run_meta target is {target['case']}/{target['model']}")
+                if target["asset_sha256"]["reference"] != sha:
+                    raise ValueError(f"{name}: sha256 {sha} != run_meta {target['asset_sha256']['reference']}")
+                (REFS / name).write_bytes(body)
+                with np.load(io.BytesIO(body), allow_pickle=False) as z:
+                    theta, loglike, near = z["theta"], z["loglike"], z["near"]
+                files[name] = {"case": case, "model": model, "run": run, "sha256": sha, "bytes": len(body),
+                               "n_points": int(len(loglike)), "ndim": int(theta.shape[1]),
+                               "near_index": np.flatnonzero(near).tolist(),
+                               "neg_inf_index": np.flatnonzero(loglike == -np.inf).tolist(),
+                               "truth_lnlike": float(loglike[0]), "fast_index": fast_indices(loglike)}
+    write_json(REFS / "INDEX.json", {
+        "schema": 1, "bundle": {"path": BUNDLE_REL, "sha256": sha256_file(BUNDLE)},
+        "sinusoid_final_manifest_sha256": sha256_file(SINUSOID_FINAL / "manifest.json"),
+        "files": files})
+    print(f"G1: {len(files)} reference files verified against sinusoid_final run_meta -> {REFS}")
+    return files
+
+
 def main(argv: list[str] | None = None) -> int:
     if not sys.flags.safe_path:          # spec §1 guard 5: no cwd injection
         raise SystemExit("run with python -P or PYTHONSAFEPATH=1 (source env/activate.sh)")
