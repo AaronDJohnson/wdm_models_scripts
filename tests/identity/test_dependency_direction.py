@@ -3,9 +3,11 @@
 Each package is imported -- with every submodule -- in a fresh ``python -P`` subprocess
 whose meta path refuses the downstream packages, and the sources are scanned (AST) for
 upward imports.  A negative control plants an upward import in a scratch package and
-checks that both guards catch it.  ``wdm_models`` arrives in S3/S5; this file then gains
-its own probe.  (domainia's import identity, sentinel refusal, metadata and the root
-``testpaths`` entry are D-A1's tests.)
+checks that both guards catch it.  ``wdm_models`` joined in S3 (task E-A1): it may import
+``wdm`` and ``domainia`` but never ``scripts``/``tools``, and its NumPy-first sinusoid
+layer imports no JAX (S5's galactic binary revisits that for binary_galactica).
+(Import identity, sentinel refusals, metadata and the root ``testpaths`` entries are
+D-A1's and E-A1's package tests.)
 """
 
 from __future__ import annotations
@@ -20,10 +22,12 @@ from pathlib import Path
 import pytest
 
 REL = Path(__file__).resolve().parents[2]
-SRC = {"wdm": REL / "packages" / "wdm" / "src", "domainia": REL / "packages" / "domainia" / "src"}
+SRC = {"wdm": REL / "packages" / "wdm" / "src", "domainia": REL / "packages" / "domainia" / "src",
+       "wdm_models": REL / "packages" / "wdm_models" / "src"}
 #: What each package must never import (its downstream packages and the release harness).
 DOWNSTREAM = {"wdm": ("domainia", "wdm_models", "scripts", "tools"),
-              "domainia": ("wdm_models", "scripts", "tools")}
+              "domainia": ("wdm_models", "scripts", "tools"),
+              "wdm_models": ("scripts", "tools")}
 
 _PROBE = '''
 import importlib, importlib.abc, json, pkgutil, sys
@@ -54,12 +58,13 @@ def _run_probe(package: str, hidden: tuple[str, ...], pythonpath: str,
 
 def _import_all(package: str) -> dict:
     out = _run_probe(package, DOWNSTREAM[package],
-                     os.pathsep.join(str(SRC[p]) for p in ("domainia", "wdm")), REL.parent)
+                     os.pathsep.join(str(SRC[p]) for p in ("wdm_models", "domainia", "wdm")),
+                     REL.parent)
     assert out.returncode == 0, out.stderr
     return json.loads(out.stdout.strip().splitlines()[-1])
 
 
-@pytest.mark.parametrize("package", ["wdm", "domainia"])
+@pytest.mark.parametrize("package", ["wdm", "domainia", "wdm_models"])
 def test_every_module_imports_with_its_downstream_hidden(package):
     info = _import_all(package)
     assert Path(info["file"]).resolve().is_relative_to(SRC[package].resolve())
@@ -79,7 +84,7 @@ def _imports(path: Path) -> set[str]:
     return names
 
 
-@pytest.mark.parametrize("package", ["wdm", "domainia"])
+@pytest.mark.parametrize("package", ["wdm", "domainia", "wdm_models"])
 def test_no_source_file_imports_downstream(package):
     files = sorted((SRC[package] / package).rglob("*.py"))
     assert files

@@ -1,7 +1,7 @@
 """Release-level import identity (spec section 1, guard 6).
 
-S1 covers ``wdm``; S2 adds ``domainia`` (task D-A1); S5 adds ``wdm_models`` and the
-binary_galactica version/normalisation probe.  Every probe runs in a fresh
+S1 covers ``wdm``; S2 adds ``domainia`` (task D-A1); S3 adds ``wdm_models`` (task E-A1);
+S5 adds the binary_galactica version/normalisation probe.  Every probe runs in a fresh
 ``python -P`` subprocess so nothing this pytest session imported can mask the
 answer.
 """
@@ -21,6 +21,7 @@ import pytest
 REL = Path(__file__).resolve().parents[2]             # wdm_models_scripts/ (scripts.golden.paths.REL)
 WDM_SRC = REL / "packages" / "wdm" / "src"
 DOMAINIA_SRC = REL / "packages" / "domainia" / "src"
+WDM_MODELS_SRC = REL / "packages" / "wdm_models" / "src"
 WORKSPACE = REL.parent                                # holds the June wdm/ tree (paths.ROOT)
 
 
@@ -112,11 +113,38 @@ def test_domainia_is_the_release_on_the_release_wdm():
 
 
 def test_root_pytest_ini_collects_the_domainia_package_tests():
-    """S2 appends packages/domainia/tests to the root testpaths (its tests/ has no
-    __init__.py, so packages/wdm/tests keeps the top-level name ``tests``)."""
+    """S2 appends packages/domainia/tests to the root testpaths and S3 (E-A1)
+    packages/wdm_models/tests (neither tests/ has an __init__.py, so packages/wdm/tests
+    keeps the top-level name ``tests``)."""
     cfg = configparser.ConfigParser(interpolation=None)
     cfg.read(REL / "pytest.ini")
     assert cfg["pytest"]["testpaths"].split() == ["tests", "packages/wdm/tests",
-                                                  "packages/domainia/tests"]
+                                                  "packages/domainia/tests",
+                                                  "packages/wdm_models/tests"]
     assert "packages/domainia/src" in cfg["pytest"]["pythonpath"].split()
     assert not (REL / "packages" / "domainia" / "tests" / "__init__.py").exists()
+
+
+_WDM_MODELS = ("import json, sys, wdm_models, domainia, wdm\n"
+               "print(json.dumps({'file': wdm_models.__file__, 'domainia': domainia.__file__,"
+               " 'wdm': wdm.__file__, 'version': wdm_models.__version__, 'jax': 'jax' in sys.modules}))")
+
+
+def test_wdm_models_is_the_release_on_the_release_domainia_and_wdm():
+    info = _probe(_WDM_MODELS, pythonpath=os.pathsep.join([str(WDM_MODELS_SRC), str(DOMAINIA_SRC),
+                                                           str(WDM_SRC)]))
+    assert Path(info["file"]).resolve().is_relative_to(WDM_MODELS_SRC.resolve())
+    assert Path(info["domainia"]).resolve().is_relative_to(DOMAINIA_SRC.resolve())
+    assert Path(info["wdm"]).resolve().is_relative_to(WDM_SRC.resolve())
+    assert info["version"] == "1.0.0"
+    assert info["jax"] is False                       # `import wdm_models` never imports jax
+
+
+def test_root_pytest_ini_collects_the_wdm_models_package_tests():
+    """S3 (E-A1): packages/wdm_models/tests is a root testpath, its src is on the root
+    pythonpath, and its tests/ is not a package."""
+    cfg = configparser.ConfigParser(interpolation=None)
+    cfg.read(REL / "pytest.ini")
+    assert "packages/wdm_models/tests" in cfg["pytest"]["testpaths"].split()
+    assert "packages/wdm_models/src" in cfg["pytest"]["pythonpath"].split()
+    assert not (REL / "packages" / "wdm_models" / "tests" / "__init__.py").exists()

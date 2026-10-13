@@ -1,0 +1,43 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "wdm-models"
+version = "1.0.0"
+description = "The WDM Paper II toy models (sinusoid, galactic binary): configurations, priors, shipped data and the 15-model registry (paper release)."
+readme = "README.md"
+requires-python = ">=3.12"
+license = "MIT"
+license-files = ["LICENSE"]
+authors = [{ name = "Aaron Johnson" }]
+dependencies = [
+    "domainia==1.0.0",
+    "jax>=0.9",
+]
+
+[project.optional-dependencies]
+gb = ["binary_galactica>=0.5.0"]
+pipeline = ["h5py"]
+sampling = ["impulse-mcmc"]
+test = ["pytest>=8,<9"]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/wdm_models"]
+
+[tool.pytest.ini_options]
+# Any pytest invocation whose arguments lie inside packages/wdm_models (from here or from
+# the release root) picks THIS file as its config, not the root pytest.ini; so it carries
+# its own import path (wdm_models + the sibling domainia and wdm releases), never writes
+# .pytest_cache and skips the opt-in `slow` tier.  tests/ has no __init__.py:
+# packages/wdm/tests already owns the top-level name ``tests`` in a root run, so every
+# file here is test_wm_*.py.
+testpaths = ["tests"]
+pythonpath = ["src", "../domainia/src", "../wdm/src"]
+addopts = "-ra -p no:cacheprovider -m \"not slow\""
+xfail_strict = true
+markers = [
+    "jax: needs jax; skipped when jax is not importable",
+    "golden: reads the release goldens (golden/) or shipped data (data/)",
+    "slow: heavy checks (opt-in: -m slow)",
+]
