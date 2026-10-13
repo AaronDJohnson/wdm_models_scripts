@@ -1,7 +1,6 @@
 # WDM Paper I + II code release
 
-The release has four parts (design: `docs/superpowers/specs/2026-10-11-wdm-code-release-design.md`
-in the parent `wdm_test` workspace):
+The release has four parts:
 
 | part | what | where |
 |---|---|---|
@@ -10,7 +9,11 @@ in the parent `wdm_test` workspace):
 | `wdm_models` | the sinusoid and galactic-binary toy models, model registry, sampling glue | `packages/wdm_models` |
 | `wdm_models_scripts` | this repository: runners, golden harness, shipped data, goldens, tests | `scripts/`, `data/`, `golden/`, `tests/` |
 
-Status: sub-project S0 (golden harness, captured from the frozen legacy code) in progress.
+Status (v0.9.0, preprint snapshot): `wdm`, `domainia` and the golden harness are complete and
+verified against the papers' frozen code; the sinusoid model layer is in progress, and the
+galactic-binary model layer, sampling runners and documentation follow in v1.0.0.
+
+License: MIT (see `LICENSE`). Citation: see `CITATION.cff`.
 
 Environment: `conda env create -f env/environment-cpu.yml -n wdmrel`, then `source env/activate.sh`
 from this directory. Tests: `$PY -m pytest` (fast tier; `-m golden_full` / `-m slow` are opt-in).

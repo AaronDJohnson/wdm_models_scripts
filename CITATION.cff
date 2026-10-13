@@ -1,0 +1,49 @@
+cff-version: 1.2.0
+message: "If you use this software, please cite it using the metadata below, together with the WDM papers listed under references."
+title: "wdm_models_scripts: code release for the WDM time-frequency transform papers I and II"
+abstract: >-
+  Code release accompanying "The WDM Time-Frequency Transform in Gravitational-Wave
+  Data Analysis" Papers I (Formalism) and II (evolutionary spectra). It contains three
+  Python packages: wdm (distribution wdm-paper; the WDM transforms, Paper I algorithms
+  and stateless Paper II kernels), domainia (time, frequency and WDM data vectors,
+  covariance operators and likelihoods; dual NumPy/JAX) and wdm_models (the sinusoid
+  and galactic-binary toy models), together with the scripts, shipped input data and
+  golden reference values that reproduce the papers' toy-model results.
+type: software
+version: 0.9.0
+license: MIT
+repository-code: "https://github.com/AaronDJohnson/wdm_models_scripts"
+authors:
+  - family-names: Johnson
+    given-names: Aaron D.
+  - family-names: Chatziioannou
+    given-names: Katerina
+  - family-names: Summers
+    given-names: Jake
+  - family-names: Rosati
+    given-names: Robert
+keywords:
+  - gravitational waves
+  - LISA
+  - time-frequency analysis
+  - Wilson-Daubechies-Meyer transform
+  - nonstationary noise
+references:
+  - type: article
+    title: "The WDM Time-Frequency Transform in Gravitational-Wave Data Analysis I: Formalism"
+    authors:
+      - family-names: Johnson
+        given-names: Aaron D.
+      - family-names: Chatziioannou
+        given-names: Katerina
+      - family-names: Summers
+        given-names: Jake
+  - type: article
+    title: "The WDM time-frequency transform in gravitational-wave data analysis II: evolutionary spectra"
+    authors:
+      - family-names: Johnson
+        given-names: Aaron D.
+      - family-names: Chatziioannou
+        given-names: Katerina
+      - family-names: Rosati
+        given-names: Robert
