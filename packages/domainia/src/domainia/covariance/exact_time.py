@@ -170,8 +170,14 @@ class ExactTimeCovariance(Covariance):
 
     def at(self, nu: Any) -> "ExactTimeAt":
         """``Sigma~(nu)`` at a fixed noise state as ``maps.SupportsMatvec`` (section D-B), so
-        ``TimeToWDM(time, cells).push(cov.at(nu)).rows(e)`` is the exact rows (spec §4.2)."""
-        return ExactTimeAt(self, np.array(nu, dtype=float))
+        ``TimeToWDM(time, cells).push(cov.at(nu)).rows(e)`` is the exact rows (spec §4.2).
+        ``nu = (alpha_c, alpha_d)`` must be concrete; the operator form only (as ``PushedRows``)."""
+        if self.form != "operator":
+            raise ValueError("at() needs form='operator' (its matvec is the Chebyshev operator)")
+        nu = np.array(nu, dtype=float)
+        if nu.shape != (2,):
+            raise ValueError(f"nu must be (alpha_c, alpha_d); got shape {nu.shape}")
+        return ExactTimeAt(self, nu)
 
     # -- dense forms (WT noise.py) ----------------------------------------------------
     def sigma_tilde(self, nu: Any) -> np.ndarray:
@@ -235,8 +241,12 @@ class ExactTimeAt:
     nu: np.ndarray
 
     def matvec(self, X: Any, be: Backend | None = None) -> Any:
+        """``X Sigma~`` row by row, ``(..., N) -> (..., N)`` (``SupportsMatvec``)."""
         be = be or get_backend(X)
+        X = be.asarray(X)
+        N = self.cov.N
+        if X.ndim < 1 or X.shape[-1] != N:
+            raise ValueError(f"matvec: last axis must have length {N}; got shape {X.shape}")
         op = self.cov.operator(self.cov.constants(be), self.nu[0], self.nu[1], be)
-        X2 = be.asarray(X if X.ndim == 2 else X[None, :])
-        Y = be.map(lambda x: op(x, be), X2)
-        return Y if X.ndim == 2 else Y[0]
+        Y = be.map(lambda x: op(x, be), X.reshape(-1, N))
+        return Y.reshape(X.shape)

@@ -37,6 +37,14 @@ def test_time_push_of_the_exact_covariance_is_pushed_rows():
     assert np.max(np.abs(got - dense[e])) < 1e-9 * np.max(np.abs(dense))
     x = np.random.default_rng(1).standard_normal(N)
     assert np.array_equal(exact.at(NU).matvec(x), exact.at(NU).matvec(x[None, :])[0])
+    X3 = np.random.default_rng(2).standard_normal((2, 3, N))
+    assert np.array_equal(exact.at(NU).matvec(X3), exact.at(NU).matvec(X3.reshape(6, N)).reshape(2, 3, N))
+    with pytest.raises(ValueError, match="last axis"):
+        exact.at(NU).matvec(np.zeros(1))
+    with pytest.raises(ValueError, match="alpha_c, alpha_d"):
+        exact.at(NU[:1])
+    with pytest.raises(ValueError, match="form='operator'"):
+        ExactTimeCovariance(PSD, N, DT, form="dense").at(NU)
 
 
 def test_fourier_push_of_mprime_is_pushed_rows():
@@ -49,6 +57,8 @@ def test_fourier_push_of_mprime_is_pushed_rows():
         want = np.asarray(rows.evaluate(rows.host_constants(), c.mu[ch], NUMPY))
         got = np.asarray(fmap.push(ex.at(c.mu[ch])).rows(rows.e))
         assert got.shape == (27, len(c.cells.m)) and np.array_equal(got, want), ch
+        with pytest.raises(ValueError, match="coefficients"):
+            ex.at(c.mu[ch][:1])
 
 
 @pytest.mark.jax

@@ -74,8 +74,13 @@ class ExactFourierCovariance:
     def at(self, mu: Any) -> "ExactFourierAt":
         """``M'(mu)`` at a fixed noise state as ``maps.SupportsDense`` (section D-B), so
         ``FourierToWDM(bins, cells, restrict=True).push(cov.at(mu)).rows(e)`` is the exact
-        cell rows ``0.5 Re(U_E M' U^H)`` (spec §4.2)."""
-        return ExactFourierAt(self, np.array(mu, dtype=float))
+        cell rows ``0.5 Re(U_E M' U^H)`` (spec §4.2).  ``mu`` (``n_env`` envelope
+        coefficients of this channel) must be concrete."""
+        mu = np.array(mu, dtype=float)
+        n_env = int(np.shape(self.envelope.basis_L)[0])
+        if mu.shape != (n_env,):
+            raise ValueError(f"mu must hold the envelope's {n_env} coefficients; got shape {mu.shape}")
+        return ExactFourierAt(self, mu)
 
     def ghat(self, mu: Any, lags: np.ndarray, be: Backend | None = None) -> Any:
         """``ghat`` at ``lags`` (``|lags| <= L/2``, checked)."""
@@ -89,18 +94,22 @@ class ExactFourierCovariance:
 
 @dataclass(frozen=True, eq=False)
 class ExactFourierAt:
-    """:meth:`ExactFourierCovariance.at`: ``dense(be)`` is ``M'(mu)`` (GB ``full_covariance``),
-    the host constants moved once to a JAX backend (``require_x64``)."""
+    """:meth:`ExactFourierCovariance.at`: ``dense(be)`` is ``M'(mu)`` (GB ``full_covariance``).
+    The covariance's host constants are built once per backend and cached on it (JAX:
+    ``require_x64()``, then one ``jax.device_put``), so every ``at(mu)`` shares them."""
 
     cov: ExactFourierCovariance
     mu: np.ndarray
 
     def dense(self, be: Backend | None = None) -> Any:
         be = be or NUMPY
-        C = self.cov.host_constants()
-        if be.name != "numpy":
-            require_x64()
-            import jax
+        cache = self.cov.__dict__.setdefault("_at_constants", {})
+        if be.name not in cache:
+            C = self.cov.host_constants()
+            if be.name != "numpy":
+                require_x64()
+                import jax
 
-            C = jax.device_put(C)
-        return self.cov.evaluate(C, be.asarray(self.mu), be)
+                C = jax.device_put(C)
+            cache[be.name] = C
+        return self.cov.evaluate(cache[be.name], be.asarray(self.mu), be)
