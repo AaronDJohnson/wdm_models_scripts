@@ -57,7 +57,8 @@ from .covariance.base import concrete_failure
 from .covariance.stack import ChannelStack
 from .density import ComplexGaussian, RealGaussian
 
-__all__ = ["COUNTERS", "STRATEGIES", "GaussianLikelihood", "NoiseState", "Params", "StaticSignal"]
+__all__ = ["COUNTERS", "STRATEGIES", "FourierWhittle", "GaussianLikelihood", "NoiseState",
+           "Params", "StaticSignal"]
 
 #: What every likelihood counts (``chain_stats.COUNTERS``, ``galactic_binary/fullcache.py:189``).
 COUNTERS = ("noise_states", "pd_failed_states", "pd_failed_rows", "evaluations")
@@ -478,6 +479,165 @@ class GaussianLikelihood(_CountersMixin):
                     continue
                 out[r] = float(self.evaluate(row, state))
         self.last_failed = failed
+        return out
+
+    lnlike = __call__
+
+
+# ---------------------------------------------------------------------------
+# stationary Whittle forms
+# ---------------------------------------------------------------------------
+
+
+@pytree_dataclass(data=("data", "L", "sI", "sG", "map", "signal"), meta=())
+class _WhittleParts:
+    data: Any
+    L: Any
+    sI: Any
+    sG: Any
+    map: Any
+    signal: Any
+
+
+class FourierWhittle(_CountersMixin):
+    """Stationary Whittle likelihoods in the two oracle forms (spec section 4.7).
+
+    ``form="real-orthonormal"`` (WT ``FreqWhittle`` with ``analysis_fmin > 0`` and
+    ``MatrixWhittle("whittle_cut")``; ``wdm_toys/likelihood.py:240-250``,
+    ``matrix.py:862-898``): ``data`` a ``TimeSeries``; ``crop=(start, stop)`` selects the
+    samples (``None``: the whole record) and the rfft grid is the crop's own; bins
+    ``fmin <= f < f_Nyq`` without DC/Nyquist are kept; ``psd.L(f)`` gives the log
+    frequency (``LogLinearPSD``); ``params.noise = (log10 A, alpha)``.  The rfft is taken
+    here, not through ``TimeToFourier``, because the oracle sums ``|R|^2`` over complex
+    bins (``2/N_c sum |R|^2 / lambda``) and the orthonormal real coordinates would round
+    differently.
+
+    ``form="complex"`` (GB ``lnl_frequency`` through ``likelihoods.make_lnlike`` /
+    ``matrix.make_lnlike``; ``galactic_binary/likelihoods.py:160-162``, ``matrix.py:895-902``):
+    ``data`` the store ``FourierBins``; ``map`` takes store bins to the analysed bins
+    (``BinSelect`` to the nominal bins, or ``FourierCrop``); ``sI``/``sG`` ``(C, n)`` on the
+    analysed bins, already times ``N_c / N`` for the crop; ``params.noise`` holds one
+    ``mu_c`` per channel; ``m = s_I + e^{mu_c} s_G``, lnL ``= sum_c (-sum|r|^2/m - sum ln m)``
+    from ``0.0``.
+    """
+
+    FORMS = ("real-orthonormal", "complex")
+
+    def __init__(self, form: str, data: Any, *, signal: Callable, params: Params, psd: Any = None,
+                 fmin: float | None = None, crop: tuple[int, int] | None = None, map: Any = None,
+                 sI: Any = None, sG: Any = None, row_ok: Callable | None = None,
+                 backend: str | Backend | None = None) -> None:
+        if form not in self.FORMS:
+            raise ValueError(f"form must be one of {self.FORMS}; got {form!r}")
+        if not isinstance(params, Params):
+            raise TypeError("params must be a domainia.likelihood.Params")
+        self.form, self.params, self.row_ok = form, params, row_ok
+        values = getattr(data, "values", data)
+        self.be = be = _resolve_backend(values, backend)
+        values = np.asarray(values)
+        self._src = np.asarray(params.source, dtype=np.int64)
+        self._noise = np.asarray(params.noise, dtype=np.int64)
+        self._density_real = RealGaussian(0.0)
+        self._density_complex = ComplexGaussian()
+        if form == "real-orthonormal":
+            if psd is None or fmin is None or map is not None or sI is not None or sG is not None:
+                raise ValueError("form='real-orthonormal' takes psd and fmin (and crop), not map/sI/sG")
+            if not (np.isfinite(fmin) and fmin > 0):
+                raise ValueError(f"fmin must be a positive analysis cut; got {fmin!r}")
+            if len(params.noise) != 2:
+                raise ValueError("form='real-orthonormal' needs params.noise = (log10 A, alpha)")
+            dom = data.domain
+            N, dt = int(dom.N), float(dom.dt)
+            start, stop = (0, N) if crop is None else (int(crop[0]), int(crop[1]))
+            if not 0 <= start < stop <= N:
+                raise ValueError(f"crop {crop} is not inside the {N}-sample record")
+            self.crop, self.Nc, self.dt = (start, stop), stop - start, dt
+            f = np.fft.rfftfreq(self.Nc, d=dt)
+            keep = (f >= max(float(fmin), 0.0)) & (f < 0.5 / dt)
+            keep[[0, -1]] = False
+            if not keep.any():
+                raise ValueError("fmin leaves no interior Fourier bin")
+            self.keep = np.flatnonzero(keep)
+            self.n_keep = 2 * int(self.keep.size)
+            L = np.asarray(psd.L(f[self.keep]), dtype=np.float64)
+            parts = _WhittleParts(values, L, None, None, None, signal)
+        else:
+            if map is None or sI is None or sG is None or psd is not None or fmin is not None \
+                    or crop is not None:
+                raise ValueError("form='complex' takes map, sI and sG, not psd/fmin/crop")
+            d = np.asarray(map.apply(values, be=NUMPY))
+            sI, sG = np.asarray(sI, dtype=np.float64), np.asarray(sG, dtype=np.float64)
+            if d.ndim != 2 or sI.shape != d.shape or sG.shape != d.shape:
+                raise ValueError(f"data bins {d.shape}, sI {sI.shape} and sG {sG.shape} must agree "
+                                 "as (channels, bins)")
+            if len(params.noise) != d.shape[0]:
+                raise ValueError("form='complex' needs one noise entry per channel")
+            self.n_keep = int(d.shape[1])
+            parts = _WhittleParts(d, None, sI, sG, map, signal)
+        if be.name == "jax":
+            import jax
+
+            parts = jax.tree_util.tree_map(be.asarray, parts)
+            _check_pytree(parts, "FourierWhittle")
+            self.parts = jax.device_put(parts)
+            self._row_fn = jax.jit(self.lnl_row)
+        else:
+            self.parts, self._row_fn = parts, self.lnl_row
+        self.reset_counters()
+
+    @property
+    def ndim(self) -> int:
+        return self.params.ndim
+
+    @property
+    def param_names(self) -> tuple[str, ...]:
+        return self.params.names
+
+    def _terms(self, parts: _WhittleParts, theta: Any) -> list[tuple[Any, Any]]:
+        """``[(quad, logdet)]`` per channel (one entry for the real form)."""
+        be, xp = self.be, self.be.xp
+        if self.form == "real-orthonormal":
+            r = parts.data - parts.signal(theta[self._src])
+            x = r[self.crop[0]:self.crop[1]]
+            R = be.fft.rfft(x)[self.keep]
+            log10A, alpha = theta[self._noise[0]], theta[self._noise[1]]
+            lam = 10.0 ** log10A * xp.exp(alpha * parts.L) / (2.0 * self.dt)
+            return [(2.0 / self.Nc * xp.sum(xp.abs(R) ** 2 / lam), 2.0 * xp.sum(xp.log(lam)))]
+        hc = parts.map.apply(parts.signal(theta[self._src]), be=be)
+        out = []
+        for c in range(parts.data.shape[0]):
+            r = parts.data[c] - hc[c]
+            m = parts.sI[c] + xp.exp(theta[self._noise[c]]) * parts.sG[c]
+            out.append((xp.sum(xp.abs(r) ** 2 / m), xp.sum(xp.log(m))))
+        return out
+
+    def lnl_row(self, parts: _WhittleParts, theta: Any) -> tuple[Any, Any]:
+        xp = self.be.xp
+        terms = self._terms(parts, theta)
+        if self.form == "real-orthonormal":
+            val = self._density_real.lnl(terms[0][0], terms[0][1], self.n_keep)
+        else:
+            val = 0.0
+            for quad, logdet in terms:
+                val = val + self._density_complex.lnl(quad, logdet)
+        ok = xp.isfinite(val)
+        if self.row_ok is not None:
+            ok = ok & self.row_ok(theta)
+        return xp.where(ok, val, -xp.inf), xp.zeros((), dtype=bool)
+
+    def quad_logdet(self, theta: Any) -> np.ndarray:
+        """``(channels, 2)``: ``(quad, logdet)`` per channel at ``theta`` (the G6 "parts")."""
+        terms = self._terms(self.parts, self.be.asarray(np.asarray(theta, dtype=np.float64)))
+        return np.array([[float(q), float(l)] for q, l in terms])
+
+    def __call__(self, Z: Any) -> np.ndarray:
+        X = _rows(Z, self.ndim)
+        self.evaluations += X.shape[0]
+        out = np.empty(X.shape[0])
+        with np.errstate(all="ignore"):
+            for r, row in enumerate(X):
+                out[r] = float(self._row_fn(self.parts, self.be.asarray(row))[0])
+        self.last_failed = np.zeros(X.shape[0], dtype=bool)
         return out
 
     lnlike = __call__
