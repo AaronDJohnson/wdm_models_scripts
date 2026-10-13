@@ -136,6 +136,21 @@ def test_form_arguments_are_checked():
                        signal=StaticSignal(sinusoid), params=PARAMS)
     with pytest.raises(ValueError, match="takes map, sI and sG"):
         FourierWhittle("complex", ts, psd=LogF(), signal=StaticSignal(sinusoid), params=PARAMS)
+    # the real form reads one record off a time domain: a bare array or a channel axis is refused
+    with pytest.raises(TypeError, match="needs a TimeSeries"):
+        FourierWhittle("real-orthonormal", ts.values, psd=LogF(), fmin=FMIN,
+                       signal=StaticSignal(sinusoid), params=PARAMS)
+    two = SimpleNamespace(values=np.stack([ts.values, ts.values]), domain=ts.domain)
+    with pytest.raises(ValueError, match=r"one record of shape \(1024,\)"):
+        FourierWhittle("real-orthonormal", two, psd=LogF(), fmin=FMIN, signal=StaticSignal(sinusoid),
+                       params=PARAMS)
+
+
+def test_jax_names_a_signal_that_is_not_a_pytree():
+    pytest.importorskip("jax")
+    with pytest.raises(TypeError, match="leaf of type function is not an array"):
+        FourierWhittle("real-orthonormal", series(8), psd=LogF(), fmin=FMIN, signal=sinusoid,
+                       params=PARAMS, backend="jax")
 
 
 def test_jax_matches_numpy():

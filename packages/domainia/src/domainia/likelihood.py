@@ -546,8 +546,13 @@ class FourierWhittle(_CountersMixin):
                 raise ValueError(f"fmin must be a positive analysis cut; got {fmin!r}")
             if len(params.noise) != 2:
                 raise ValueError("form='real-orthonormal' needs params.noise = (log10 A, alpha)")
-            dom = data.domain
+            dom = getattr(data, "domain", None)
+            if dom is None:
+                raise TypeError("form='real-orthonormal' needs a TimeSeries (data with a .domain)")
             N, dt = int(dom.N), float(dom.dt)
+            if values.shape != (N,):         # else the crop would slice a leading channel axis
+                raise ValueError(f"form='real-orthonormal' reads one record of shape ({N},); "
+                                 f"got {values.shape}")
             start, stop = (0, N) if crop is None else (int(crop[0]), int(crop[1]))
             if not 0 <= start < stop <= N:
                 raise ValueError(f"crop {crop} is not inside the {N}-sample record")
@@ -577,8 +582,8 @@ class FourierWhittle(_CountersMixin):
         if be.name == "jax":
             import jax
 
+            _check_pytree(parts, "FourierWhittle")     # before asarray: name the offending leaf
             parts = jax.tree_util.tree_map(be.asarray, parts)
-            _check_pytree(parts, "FourierWhittle")
             self.parts = jax.device_put(parts)
             self._row_fn = jax.jit(self.lnl_row)
         else:
