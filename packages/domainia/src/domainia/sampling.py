@@ -280,7 +280,14 @@ class PriorSanitized:
         ndim = int(lik.ndim)
         if self.bounds.shape != (ndim, 2) or self.anchor.shape != (ndim,):
             raise ValueError(f"bounds must be ({ndim}, 2) and anchor ({ndim},)")
-        self.periodic = {int(i): (float(lo), float(hi)) for i, (lo, hi) in (periodic or {}).items()}
+        self.periodic: dict[int, tuple[float, float]] = {}
+        for i, (lo, hi) in (periodic or {}).items():
+            i, lo, hi = int(i), float(lo), float(hi)
+            if not 0 <= i < ndim:            # a negative index would wrap the wrong column silently
+                raise ValueError(f"periodic index {i} is out of range for {ndim} parameters")
+            if not (np.isfinite(lo) and np.isfinite(hi) and hi > lo):
+                raise ValueError(f"periodic range ({lo}, {hi}) of index {i} must be finite with hi > lo")
+            self.periodic[i] = (lo, hi)
         if not self.valid(self.wrap(self.anchor[None, :]))[0]:
             raise ValueError("the anchor is outside the prior")
 

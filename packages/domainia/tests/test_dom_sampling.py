@@ -190,6 +190,10 @@ def test_prior_sanitized_checks():
         PriorSanitized(_Recorder(), BOUNDS, np.array([9.0, 0.0, 0.0]))
     with pytest.raises(ValueError, match="bounds must be"):
         PriorSanitized(_Recorder(), BOUNDS[:2], ANCHOR)
+    with pytest.raises(ValueError, match="out of range"):
+        PriorSanitized(_Recorder(), BOUNDS, ANCHOR, periodic={-1: (-np.pi, np.pi)})
+    with pytest.raises(ValueError, match="hi > lo"):
+        PriorSanitized(_Recorder(), BOUNDS, ANCHOR, periodic={1: (np.pi, -np.pi)})
     ps = PriorSanitized(_Recorder(), BOUNDS, ANCHOR)
     with pytest.raises(ValueError, match="real"):
         ps(np.array([1.0 + 1j, 0.0, 0.0]))
