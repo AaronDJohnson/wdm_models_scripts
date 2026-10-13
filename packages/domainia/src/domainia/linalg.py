@@ -419,13 +419,24 @@ def _ragged_forward(f: BlockTriFactor, B: Any, be: Backend) -> list[Any]:
     return z
 
 
-def blocktri_whiten(f: BlockTriFactor, b: Any, *, be: Backend | None = None) -> Any:
+def _layout_of(f: BlockTriFactor, band_layout: BandLayout | None) -> BandLayout:
+    """The padded factor's layout: the argument (a covariance passes its constants' layout,
+    so a stored factor need not carry it) or the one the factor was built with."""
+    lay = band_layout if band_layout is not None else f.band_layout
+    if lay is None:
+        raise ValueError("a padded factor without its band_layout: pass band_layout=")
+    return lay
+
+
+def blocktri_whiten(f: BlockTriFactor, b: Any, *, band_layout: BandLayout | None = None,
+                    be: Backend | None = None) -> Any:
     """``L^-1 b`` for ``b`` of shape ``(n,)`` or ``(n, k)`` in natural (band-major) order,
     so ``b^T Lambda^-1 b = |L^-1 b|^2`` (WG ``_forward_only``).
 
     Ragged: the forward substitution of WT ``BlockTri.solve``.  Padded: WG
     ``_btri_forward`` between :meth:`BandLayout.pack` and :meth:`BandLayout.unpack`
-    (the dummy entries of the packed result are exactly zero).
+    (the dummy entries of the packed result are exactly zero); ``band_layout`` overrides
+    the factor's own (``None`` when a covariance stored it without).
     """
     if f.layout == "ragged":
         _require_complete(f)
@@ -435,16 +446,18 @@ def blocktri_whiten(f: BlockTriFactor, b: Any, *, be: Backend | None = None) -> 
     if f.layout == "ragged":
         out = be.xp.concatenate(_ragged_forward(f, be.asarray(B), be), axis=0)
     else:
-        lay = f.band_layout
+        lay = _layout_of(f, band_layout)
         out = lay.unpack(blocktri_whiten_packed(f, lay.pack(B, be=be), be=be), be=be)
     return out[:, 0] if one else out
 
 
-def blocktri_solve(f: BlockTriFactor, b: Any, *, be: Backend | None = None) -> Any:
+def blocktri_solve(f: BlockTriFactor, b: Any, *, band_layout: BandLayout | None = None,
+                   be: Backend | None = None) -> Any:
     """``Lambda^-1 b`` for ``b`` of shape ``(n,)`` or ``(n, k)`` in natural order.
 
     Ragged: WT ``BlockTri.solve`` (matrix.py:546-563) verbatim.  Padded: WG
-    ``_approx_solve`` (``unpack(_btri_solve(pack(b)))``, matrix.py:605-612).
+    ``_approx_solve`` (``unpack(_btri_solve(pack(b)))``, matrix.py:605-612); ``band_layout``
+    as :func:`blocktri_whiten`.
     """
     if f.layout == "ragged":
         _require_complete(f)
@@ -463,7 +476,7 @@ def blocktri_solve(f: BlockTriFactor, b: Any, *, be: Backend | None = None) -> A
             x[i] = (be.solve_triangular(f.Ls[i], r, lower=True, trans=1) if f.Ls[i].size else r)
         out = xp.concatenate(x, axis=0)
     else:
-        lay = f.band_layout
+        lay = _layout_of(f, band_layout)
         out = lay.unpack(blocktri_solve_packed(f, lay.pack(B, be=be), be=be), be=be)
     return out[:, 0] if one else out
 

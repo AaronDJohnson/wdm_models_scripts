@@ -27,7 +27,8 @@ from wdm.grid import active_mask, packed_cells
 from wdm.transform import band_atoms, forward_time_many, inverse_time_many
 
 from ..linalg import BandLayout
-from .base import CholFactor, Covariance, DiagFactor, QuadForm, concrete_failure, quad_form
+from .base import (CholFactor, Covariance, DiagFactor, QuadForm, attach_constants, concrete_failure,
+                   factor_constants, quad_form)
 from .blocktri import blocktri_cov_factor, dummy_slots
 from .dense import dense_factor
 from .diagonal import DiagonalCovariance
@@ -49,67 +50,71 @@ def cut(make_cov: Callable[[Any], Any], cells: Any, lead: int, trail: int) -> An
 # ---------------------------------------------------------------------------------------
 
 
-@pytree_dataclass(data=("T", "S", "B", "TiBt", "e", "i", "logdet", "ok"), meta=())
+@pytree_dataclass(data=("T", "S", "B", "TiBt", "logdet", "ok"), meta=())
 @dataclass(frozen=True, eq=False)
 class SchurFactor:
     """WT ``Schur``: ``T`` the interior factor, ``S`` the Schur complement's Cholesky,
-    ``B = R_ei``, ``TiBt = T^-1 B^T``; ``e`` / ``i`` the edge / interior positions."""
+    ``B = R_ei``, ``TiBt = T^-1 B^T``.  The edge / interior positions are constants: the
+    methods read ``C["e"]``, ``C["i"]`` and pass ``C["interior"]`` to ``T``."""
 
     T: Any
     S: Any
     B: Any
     TiBt: Any
-    e: Any
-    i: Any
     logdet: Any
     ok: Any
 
     n_u = 0
 
-    def solve(self, b: Any, *, be: Backend | None = None) -> Any:
+    def solve(self, b: Any, *, C: Any = None, be: Backend | None = None) -> Any:
         """WT ``Schur.solve`` line for line."""
         if self.S is None:
             raise ValueError("the factorisation failed (not positive definite): check ok first")
+        C = factor_constants(self, C, "solve")
         be = be or get_backend(b, self.B)
         one = b.ndim == 1
         b = b[:, None] if one else b
-        b_e, b_i = b[self.e], b[self.i]
-        ti = self.T.solve(b_i, be=be)
+        e, i = C["e"], C["i"]
+        b_e, b_i = b[e], b[i]
+        ti = self.T.solve(b_i, C=C["interior"], be=be)
         xe = self.S.solve(b_e - self.B @ ti, be=be)
         xi = ti - self.TiBt @ xe
         x = be.xp.zeros_like(b)
-        x = be.set(x, self.e, xe, copy=False)
-        x = be.set(x, self.i, xi, copy=False)
+        x = be.set(x, e, xe, copy=False)
+        x = be.set(x, i, xi, copy=False)
         return x[:, 0] if one else x
 
-    def whiten(self, b: Any, *, be: Backend | None = None) -> Any:
+    def whiten(self, b: Any, *, C: Any = None, be: Backend | None = None) -> Any:
         """``[L_T^-1 b_i ; L_S^-1 (b_e - B T^-1 b_i)]`` (GB ``EdgeSchurCache``)."""
         if self.S is None:
             raise ValueError("the factorisation failed (not positive definite): check ok first")
+        C = factor_constants(self, C, "whiten")
         be = be or get_backend(b, self.B)
-        b_e, b_i = b[self.e], b[self.i]
-        z = b_e - self.B @ self.T.solve(b_i, be=be)
-        return be.xp.concatenate([self.T.whiten(b_i, be=be), self.S.whiten(z, be=be)], axis=0)
+        b_e, b_i = b[C["e"]], b[C["i"]]
+        z = b_e - self.B @ self.T.solve(b_i, C=C["interior"], be=be)
+        return be.xp.concatenate([self.T.whiten(b_i, C=C["interior"], be=be), self.S.whiten(z, be=be)],
+                                 axis=0)
 
-    def quad(self, b: Any, *, form: QuadForm = "solve", be: Backend | None = None) -> Any:
-        return quad_form(self, b, form, be or get_backend(b, self.B))
+    def quad(self, b: Any, *, C: Any = None, form: QuadForm = "solve", be: Backend | None = None) -> Any:
+        return quad_form(self, b, form, be or get_backend(b, self.B), C)
 
 
-def schur_factor(T: Any, R: Any, e: Any, i: Any, *, chol_impl: Literal["numpy", "scipy"],
-                 be: Backend) -> SchurFactor:
-    """Factor ``[[A, B], [B^T, T]]`` from the edge rows ``R`` (WT ``MatrixWdm.solver`` +
-    ``Schur.__init__``): ``A = (R_ee + R_ee^T)/2``, ``B = R_ei``, ``TiBt = T^-1 B^T``,
-    ``S = A - B TiBt`` symmetrised; ``ok = T.ok & S.ok``.  A concretely failed ``T`` (WT:
-    ``LinAlgError`` before the complement) gives a failed factor without ``S``."""
-    A = R[:, e]
-    A = 0.5 * (A + A.T)
-    B = R[:, i]
+def schur_factor(T: Any, A_ee: Any, B_ei: Any, *, chol_impl: Literal["numpy", "scipy"], be: Backend,
+                 C_T: Any = None) -> SchurFactor:
+    """Factor ``[[A, B], [B^T, T]]`` from the edge rows ``R`` split at the edge / interior
+    positions, ``A_ee = R[:, e]``, ``B_ei = R[:, i]`` (WT ``MatrixWdm.solver`` +
+    ``Schur.__init__``): ``A = (A_ee + A_ee^T)/2``, ``TiBt = T^-1 B^T``, ``S = A - B TiBt``
+    symmetrised; ``ok = T.ok & S.ok``.  ``C_T`` are ``T``'s constants (``C["interior"]``).  A
+    concretely failed ``T`` (WT: ``LinAlgError`` before the complement) gives a failed factor
+    without ``S``."""
+    A = 0.5 * (A_ee + A_ee.T)
+    B = B_ei
     if concrete_failure(T.ok):
-        return SchurFactor(T, None, B, None, e, i, float("nan"), False)
-    TiBt = T.solve(B.T, be=be)
+        return SchurFactor(T, None, B, None, float("nan"), False)
+    TiBt = T.solve(B.T, C=C_T, be=be)
     Sc = A - B @ TiBt
     S = CholFactor.build(0.5 * (Sc + Sc.T), impl=chol_impl, be=be)
-    return SchurFactor(T, S, B, TiBt, e, i, T.logdet + S.logdet, T.ok & S.ok)
+    return SchurFactor(T, S, B, TiBt, T.logdet + S.logdet, T.ok & S.ok)
 
 
 def assemble_edge_rows(M_i: Any, R: Any, e: Any, i: Any, be: Backend) -> Any:
@@ -180,7 +185,7 @@ class SchurEdge(Covariance):
         e, i = C["e"], C["i"]
         if self.assembly == "schur":
             T = self.interior._factor(C["interior"], nu, be)
-            return schur_factor(T, R, e, i, chol_impl=self.chol_impl, be=be)
+            return schur_factor(T, R[:, e], R[:, i], chol_impl=self.chol_impl, be=be, C_T=C["interior"])
         lam = assemble_edge_rows(self.interior._matrix(C["interior"], nu, be), R, e, i, be)
         return dense_factor(lam, chol_impl=self.chol_impl, symmetrize=True, be=be)
 
@@ -193,7 +198,8 @@ class SchurEdge(Covariance):
         nu = be.asarray(nu)
         P = self.rows.order_for(nu)
         if not (be.name == "jax" and (self.jittable if jit is None else bool(jit))):
-            return self.factor_from_rows(C, nu, self.rows.evaluate(C["rows"], nu, be, P=P), be)
+            return attach_constants(self.factor_from_rows(C, nu, self.rows.evaluate(C["rows"], nu, be, P=P), be),
+                                    C)
         fns = self.__dict__.setdefault("_jit_cache", {})
         if self.rows.staged and self.rows.phi_cache:
             R = self.rows.evaluate_staged(C["rows"], nu, be, P)
@@ -203,7 +209,7 @@ class SchurEdge(Covariance):
             R = fns["rows", P](C["rows"], nu)
         if "rest" not in fns:
             fns["rest"] = be.jit(lambda C, nu, R: self.factor_from_rows(C, nu, R, be))
-        return fns["rest"](C, nu, R)
+        return attach_constants(fns["rest"](C, nu, R), C)
 
     def _matrix(self, C: Any, nu: Any, be: Backend) -> Any:
         R = self.rows.evaluate(C["rows"], nu, be)
@@ -215,19 +221,17 @@ class SchurEdge(Covariance):
 # ---------------------------------------------------------------------------------------
 
 
-@pytree_dataclass(data=("Lam", "LiWp", "Q", "Wp", "m", "n_idx", "logdet", "ok"),
-                  meta=("Nf", "Nt", "dt", "n"))
+@pytree_dataclass(data=("Lam", "LiWp", "Q", "logdet", "ok"), meta=("Nf", "Nt", "dt", "n"))
 @dataclass(frozen=True, eq=False)
 class PaddedFactor:
     """WT ``PaddedMarginal``: ``C_dd^-1 = Q_dd - Q_dp Q_pp^-1 Q_pd`` on the data samples,
-    ``Q = W^T Lambda^-1 W``; vectors are length-``n`` time series (``solve`` only)."""
+    ``Q = W^T Lambda^-1 W``; vectors are length-``n`` time series (``solve`` only).  The
+    padding impulses ``W_p`` and the active-cell index ``(m, n_idx)`` are constants
+    (``C["Wp"]``, ``C["m"]``, ``C["n_idx"]``); ``Lam`` reads ``C["base"]``."""
 
     Lam: Any
     LiWp: Any
     Q: Any
-    Wp: Any
-    m: Any
-    n_idx: Any
     logdet: Any
     ok: Any
     Nf: int
@@ -237,29 +241,31 @@ class PaddedFactor:
 
     n_u = 0
 
-    def solve(self, x: Any, *, be: Backend | None = None) -> Any:
+    def solve(self, x: Any, *, C: Any = None, be: Backend | None = None) -> Any:
         """WT ``PaddedMarginal.solve`` line for line (``W^T z = dt W^-1 z``)."""
         if self.LiWp is None:
             raise ValueError("the factorisation failed (not positive definite): check ok first")
-        be = be or get_backend(x, self.Wp)
+        C = factor_constants(self, C, "solve")
+        Wp, m, n_idx = C["Wp"], C["m"], C["n_idx"]
+        be = be or get_backend(x, Wp)
         xp = be.xp
         one = x.ndim == 1
         X = x[None, :] if one else x.T                                      # (k, n)
         ext = be.set(xp.zeros((X.shape[0], self.Nf * self.Nt)), (slice(None), slice(0, self.n)), X, copy=False)
-        W = forward_time_many(ext, self.Nf, self.Nt, self.dt, be=be)[:, self.m, self.n_idx]
-        Liw = self.Lam.solve(W.T, be=be)                                    # (size, k)
-        c = self.Q.solve(self.Wp.T @ Liw, be=be)
+        W = forward_time_many(ext, self.Nf, self.Nt, self.dt, be=be)[:, m, n_idx]
+        Liw = self.Lam.solve(W.T, C=C["base"], be=be)                       # (size, k)
+        c = self.Q.solve(Wp.T @ Liw, be=be)
         Y = (Liw - self.LiWp @ c).T                                         # (k, size)
-        full = be.set(xp.zeros((Y.shape[0], self.Nf + 1, self.Nt)), (slice(None), self.m, self.n_idx), Y,
+        full = be.set(xp.zeros((Y.shape[0], self.Nf + 1, self.Nt)), (slice(None), m, n_idx), Y,
                       copy=False)
         out = self.dt * inverse_time_many(full, self.Nf, self.Nt, self.dt, be=be)[:, :self.n]
         return out[0] if one else out.T
 
-    def whiten(self, b: Any, *, be: Backend | None = None) -> Any:
+    def whiten(self, b: Any, *, C: Any = None, be: Backend | None = None) -> Any:
         raise NotImplementedError("the padded marginal has no whitening; use form='solve'")
 
-    def quad(self, b: Any, *, form: QuadForm = "solve", be: Backend | None = None) -> Any:
-        return quad_form(self, b, form, be or get_backend(b, self.Wp))
+    def quad(self, b: Any, *, C: Any = None, form: QuadForm = "solve", be: Backend | None = None) -> Any:
+        return quad_form(self, b, form, be or get_backend(b, self.logdet), C)
 
 
 class ZeroPadded(Covariance):
@@ -341,13 +347,13 @@ class ZeroPadded(Covariance):
             m, n = packed_cells(g.Nf, g.Nt)
             return {"Wp": forward_time_many(unit, g.Nf, g.Nt, g.dt)[:, active_mask(g.Nf, g.Nt)].T,
                     "m": m, "n_idx": n}
-        C: dict[str, Any] = {"E": self.e, "I": self.i, "Kpos": np.asarray(self.mask.Kpos, int),
-                             "AE": np.asarray(self.mask.AE, float)}
+        C: dict[str, Any] = {"e": self.e, "i": self.i, "Kpos": np.asarray(self.mask.Kpos, int),
+                             "AE": np.asarray(self.mask.AE, float), "interior": {}}
         if self.factor_kind == "schur" and getattr(self.base, "layout", None) is not None:
             sizes = tuple(int(c.size) for c in self.interior_cols)
             padded = self.base.layout == "padded"
-            C["interior_layout"] = BandLayout.from_sizes(sizes) if padded else None
-            C["interior_dummy"] = dummy_slots(sizes) if padded else None
+            C["interior"] = {"layout": BandLayout.from_sizes(sizes) if padded else None,
+                             "dummy": dummy_slots(sizes) if padded else None}
         return C
 
     def children(self) -> dict[str, Covariance]:
@@ -360,14 +366,12 @@ class ZeroPadded(Covariance):
         Lam = self.base._factor(C["base"], nu, be)
         Wp = C["Wp"]
         if concrete_failure(Lam.ok):        # WT: LinAlgError in Lam -> -inf before Q_pp
-            return PaddedFactor(Lam, None, None, Wp, C["m"], C["n_idx"], float("nan"), False,
-                                g.Nf, g.Nt, g.dt, self.n)
-        LiWp = Lam.solve(Wp, be=be)
+            return PaddedFactor(Lam, None, None, float("nan"), False, g.Nf, g.Nt, g.dt, self.n)
+        LiWp = Lam.solve(Wp, C=C["base"], be=be)
         Qpp = Wp.T @ LiWp
         Q = CholFactor.build(0.5 * (Qpp + Qpp.T), impl=self.chol_impl, be=be)
         logdet = Lam.logdet - g.N * np.log(g.dt) + Q.logdet
-        return PaddedFactor(Lam, LiWp, Q, Wp, C["m"], C["n_idx"], logdet, Lam.ok & Q.ok,
-                            g.Nf, g.Nt, g.dt, self.n)
+        return PaddedFactor(Lam, LiWp, Q, logdet, Lam.ok & Q.ok, g.Nf, g.Nt, g.dt, self.n)
 
     # -- cell_congruence ----------------------------------------------------------------
     def _congruence_pieces(self, C: Any, nu: Any, be: Backend) -> tuple[Any, Any, Any]:
@@ -401,15 +405,15 @@ class ZeroPadded(Covariance):
     def _edge_rows(self, C: Any, Y: Any, be: Backend) -> Any:
         """GB ``assemble``: ``rows = Y[:, Kpos]`` with the ``E`` columns replaced by ``Y A_E^T``."""
         rows = Y[:, C["Kpos"]]
-        return be.set(rows, (slice(None), C["E"]), Y @ C["AE"].T, copy=False)
+        return be.set(rows, (slice(None), C["e"]), Y @ C["AE"].T, copy=False)
 
     def _matrix(self, C: Any, nu: Any, be: Backend) -> Any:
         if self.strategy == "time_marginal":
             raise NotImplementedError("time_marginal has no cell-space matrix (its data are samples)")
         lamKK, Y, _ = self._congruence_pieces(C, nu, be)
         rows = self._edge_rows(C, Y, be)
-        lam = be.set(lamKK, (C["E"], slice(None)), rows)
-        return be.set(lam, (slice(None), C["E"]), rows.T, copy=False)
+        lam = be.set(lamKK, (C["e"], slice(None)), rows)
+        return be.set(lam, (slice(None), C["e"]), rows.T, copy=False)
 
     def _interior_factor(self, C: Any, lamKK: Any, blocks: Any, be: Backend) -> Any:
         """The interior's own factor: diagonal, or block-tridiagonal over the analysis bands."""
@@ -420,8 +424,8 @@ class ZeroPadded(Covariance):
         diag = [d[k0 + b][np.ix_(c, c)] for b, c in enumerate(cols)]
         up = [u[k0 + b][np.ix_(cols[b], cols[b + 1])] for b in range(len(cols) - 1)]
         sizes = tuple(int(c.size) for c in cols)
-        return blocktri_cov_factor(diag, up, sizes, self.base.layout, C.get("interior_layout"), be,
-                                   C.get("interior_dummy"))
+        Ci = C["interior"]
+        return blocktri_cov_factor(diag, up, sizes, self.base.layout, Ci.get("layout"), be, Ci.get("dummy"))
 
     def _factor(self, C: Any, nu: Any, be: Backend) -> Any:
         if self.strategy == "time_marginal":
@@ -431,7 +435,7 @@ class ZeroPadded(Covariance):
         lamKK, Y, blocks = self._congruence_pieces(C, nu, be)
         R = self._edge_rows(C, Y, be)
         T = self._interior_factor(C, lamKK, blocks, be)
-        return schur_factor(T, R, C["E"], C["I"], chol_impl=self.chol_impl, be=be)
+        return schur_factor(T, R[:, C["e"]], R[:, C["i"]], chol_impl=self.chol_impl, be=be, C_T=C["interior"])
 
 
 @dataclass(frozen=True, eq=False)

@@ -80,7 +80,7 @@ def test_factor_classes_follow_the_protocol(cls):
     """The supported methods are real (no ``NotImplementedError`` in their bodies, and a call
     on a bare instance fails, if at all, for want of state); the others are the documented
     stubs (they raise ``NotImplementedError`` before reading any state)."""
-    assert "quad" in SUPPORTED[cls] and "n_u" in dir(cls)
+    assert "quad" in SUPPORTED[cls] and ("n_u" in dir(cls) or "n_u" in cls.__dataclass_fields__)
     bare = object.__new__(cls)
     for name in PROTOCOL:
         fn = getattr(cls, name)

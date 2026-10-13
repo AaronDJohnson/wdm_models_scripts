@@ -13,11 +13,13 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, Literal
 
+import dataclasses
+
 import numpy as np
 from wdm.backend import Backend, get_backend, pytree_dataclass
 
 from ..linalg import BandLayout, blocktri_factor, blocktri_solve, blocktri_whiten
-from .base import Covariance, QuadForm, as_evaluator, quad_form
+from .base import Covariance, QuadForm, as_evaluator, factor_constants, quad_form
 
 __all__ = ["BlockTriCovFactor", "BlockTridiagonalCovariance", "blocks_to_dense", "blocktri_cov_factor",
            "dummy_slots", "to_layout"]
@@ -79,23 +81,28 @@ def blocks_to_dense(diag: list[Any], up: list[Any], be: Backend) -> Any:
     return xp.block([[blk(i, j) for j in range(nb)] for i in range(nb)])
 
 
-@pytree_dataclass(data=("bt", "lay", "logdet", "ok"), meta=("layout",))
+@pytree_dataclass(data=("bt", "logdet", "ok"), meta=("layout",))
 @dataclass(frozen=True, eq=False)
 class BlockTriCovFactor:
-    """A :class:`domainia.linalg.BlockTriFactor` with vectors in cell order (band-major)."""
+    """A :class:`domainia.linalg.BlockTriFactor` with vectors in cell order (band-major).
+
+    The padded layout's :class:`~domainia.linalg.BandLayout` is a constant: it is not stored
+    (``bt.band_layout`` is ``None``) and comes from the covariance's constants,
+    ``C["layout"]`` (WG kept ``lay_*`` in ``C``, ``wdmtoysgpu/matrix.py:287``)."""
 
     bt: Any
-    lay: Any
     logdet: Any
     ok: Any
     layout: str
 
     n_u = 0
 
-    def _apply(self, fn: Any, b: Any, be: Backend) -> Any:
+    def _apply(self, fn: Any, b: Any, C: Any, be: Backend, what: str) -> Any:
         # domainia.linalg (D-A) takes natural, band-major vectors on both layouts: the padded
         # layout packs, runs WG's _btri_* and unpacks inside (the dummy entries are exactly 0).
-        return fn(self.bt, b, be=be)
+        if self.layout == "ragged":
+            return fn(self.bt, b, be=be)
+        return fn(self.bt, b, band_layout=factor_constants(self, C, what)["layout"], be=be)
 
     def _be(self, b: Any, be: Backend | None) -> Backend:
         # The factor's arrays count too (as CholFactor): a host b against a device factor
@@ -103,23 +110,25 @@ class BlockTriCovFactor:
         Ls = self.bt.Ls
         return be or get_backend(b, *(Ls if isinstance(Ls, (list, tuple)) else (Ls,)))
 
-    def solve(self, b: Any, *, be: Backend | None = None) -> Any:
-        return self._apply(blocktri_solve, b, self._be(b, be))
+    def solve(self, b: Any, *, C: Any = None, be: Backend | None = None) -> Any:
+        return self._apply(blocktri_solve, b, C, self._be(b, be), "solve")
 
-    def whiten(self, b: Any, *, be: Backend | None = None) -> Any:
-        return self._apply(blocktri_whiten, b, self._be(b, be))
+    def whiten(self, b: Any, *, C: Any = None, be: Backend | None = None) -> Any:
+        return self._apply(blocktri_whiten, b, C, self._be(b, be), "whiten")
 
-    def quad(self, b: Any, *, form: QuadForm = "solve", be: Backend | None = None) -> Any:
-        return quad_form(self, b, form, self._be(b, be))
+    def quad(self, b: Any, *, C: Any = None, form: QuadForm = "solve", be: Backend | None = None) -> Any:
+        return quad_form(self, b, form, self._be(b, be), C)
 
 
 def blocktri_cov_factor(diag: Any, up: Any, sizes: tuple[int, ...], layout: Layout, lay: Any,
                         be: Backend, dummy: Any = None) -> BlockTriCovFactor:
     """Factor band blocks in ``layout`` (``lay``: the :class:`BandLayout`, ``dummy``:
-    :func:`dummy_slots`, both for ``"padded"``)."""
+    :func:`dummy_slots`, both for ``"padded"``).  The returned factor does not keep ``lay``."""
     d, u = to_layout(diag, up, sizes, layout, be, dummy)
     bt = blocktri_factor(d, u, layout=layout, band_layout=lay, be=be)
-    return BlockTriCovFactor(bt, lay, bt.logdet, bt.ok, layout)
+    if layout == "padded":
+        bt = dataclasses.replace(bt, band_layout=None)
+    return BlockTriCovFactor(bt, bt.logdet, bt.ok, layout)
 
 
 class BlockTridiagonalCovariance(Covariance):

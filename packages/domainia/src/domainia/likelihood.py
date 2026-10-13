@@ -27,9 +27,10 @@ the factorisation dispatches on a static key, e.g. ``SchurEdge``'s adaptive Cheb
 order).  A factor ``F`` has ``ok``, ``logdet``, ``n_u``, ``quad(b, form=...)``,
 ``whiten(b)`` (``L^-1 b``) and ``solve(b)`` (``C^-1 b``; for the GB factors --
 ``CholFactor(impl="numpy")``, ``HermitianFactor`` -- ``solve`` is ``L^-H (L^-1 b)``, the
-``MatrixCache``/``FullCache`` order).  Optional ``F.expanded_terms(d) -> (q0, y)`` and
-``F.signal_quad(h)`` replace the whiten-based expanded order where an oracle differs
-(``EdgeSchurCache``).
+``MatrixCache``/``FullCache`` order).  Optional ``F.expanded_terms(d, *, C) -> (q0, y)``
+and ``F.signal_quad(h, *, C)`` replace the whiten-based expanded order where an oracle
+differs (``EdgeSchurCache``); like every factor method they receive the covariance's
+constants as ``C=`` (``parts.covs[c]``, E-C1).
 
 **JAX** (spec section 3.3): the map and the signal must be JAX pytrees
 (``wdm.backend.pytree_dataclass``); the covariances stay static and their constants
@@ -151,23 +152,23 @@ def _inner(a: Any, b: Any, xp: Any) -> Any:
     return xp.dot(a, b)
 
 
-def _expanded_terms(F: Any, d: Any, xp: Any) -> tuple[Any, Any]:
+def _expanded_terms(F: Any, d: Any, xp: Any, C: Any) -> tuple[Any, Any]:
     """``(q0, y)`` = ``(d^T C^-1 d, C^-1 d)``: ``u = L^-1 d``, ``q0 = u.u``, ``y = F.solve(d)``
     (``L^-H L^-1 d`` for the GB factors: ``MatrixCache.state``, ``fullcache.noise_state``)
-    unless the factor brings its own."""
+    unless the factor brings its own.  ``C``: the covariance's constants."""
     own = getattr(F, "expanded_terms", None)
     if own is not None:
-        return own(d)
-    u = F.whiten(d)
-    return _inner(u, u, xp), F.solve(d)
+        return own(d, C=C)
+    u = F.whiten(d, C=C)
+    return _inner(u, u, xp), F.solve(d, C=C)
 
 
-def _signal_quad(F: Any, h: Any, xp: Any) -> Any:
+def _signal_quad(F: Any, h: Any, xp: Any, C: Any) -> Any:
     """``|L^-1 h|^2`` in the factor's expanded order (``t = L^-1 h``, ``t.t``)."""
     own = getattr(F, "signal_quad", None)
     if own is not None:
-        return own(h)
-    t = F.whiten(h)
+        return own(h, C=C)
+    t = F.whiten(h, C=C)
     return _inner(t, t, xp)
 
 
@@ -393,8 +394,8 @@ class GaussianLikelihood(_CountersMixin):
     def _chan(self, x: Any, c: int) -> Any:
         return x[c] if self.stacked else x
 
-    def _quad(self, F: Any, r: Any) -> Any:
-        return F.quad(r) if self.quad_form is None else F.quad(r, form=self.quad_form)
+    def _quad(self, F: Any, r: Any, C: Any) -> Any:
+        return F.quad(r, C=C) if self.quad_form is None else F.quad(r, C=C, form=self.quad_form)
 
     # -- pure kernels -------------------------------------------------------
     def _factors(self, parts: _Parts, nu: Any) -> tuple:
@@ -412,7 +413,7 @@ class GaussianLikelihood(_CountersMixin):
             logdet = F.logdet
             ok = ok & F.ok & xp.isfinite(logdet)
             if self.strategy == "expanded":
-                q0, y = _expanded_terms(F, self._chan(parts.y_data, c), xp)
+                q0, y = _expanded_terms(F, self._chan(parts.y_data, c), xp, parts.covs[c])
                 ok = ok & xp.isfinite(q0)
                 ys.append(y)
                 q0s.append(q0)
@@ -436,7 +437,7 @@ class GaussianLikelihood(_CountersMixin):
         for c in range(self.n_channels):
             F, h = state.factors[c], self._chan(hc, c)
             if self.strategy == "residual":
-                q = self._quad(F, self._chan(parts.y_data, c) - h)
+                q = self._quad(F, self._chan(parts.y_data, c) - h, parts.covs[c])
                 if self.density_order == "folded":
                     val = self.density.lnl_folded(q, state.logdet[c], self.n_eff[c], log10A, be=be)
                 elif isinstance(self.density, RealGaussian):
@@ -445,7 +446,7 @@ class GaussianLikelihood(_CountersMixin):
                     val = self.density.lnl(q, state.logdet[c], self.n_eff[c])
             else:
                 hy = _inner(h, state.y[c], xp)
-                tt = _signal_quad(F, h, xp)
+                tt = _signal_quad(F, h, xp, parts.covs[c])
                 if isinstance(self.density, RealGaussian):
                     val = self.density.lnl_expanded(state.q0[c], hy, tt, state.logdet[c])
                 else:
@@ -503,9 +504,9 @@ class GaussianLikelihood(_CountersMixin):
         for c in range(self.n_channels):
             F, h = state.factors[c], self._chan(hc, c)
             if self.strategy == "residual":
-                q = self._quad(F, self._chan(parts.y_data, c) - h)
+                q = self._quad(F, self._chan(parts.y_data, c) - h, parts.covs[c])
             else:
-                q = state.q0[c] - 2.0 * _inner(h, state.y[c], xp) + _signal_quad(F, h, xp)
+                q = state.q0[c] - 2.0 * _inner(h, state.y[c], xp) + _signal_quad(F, h, xp, parts.covs[c])
             out[c] = float(q), float(F.logdet)
         return out
 

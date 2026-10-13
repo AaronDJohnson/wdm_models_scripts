@@ -13,6 +13,17 @@ positive definite: the likelihood is then :math:`-\infty`), ``solve(b)`` (:math:
 ``whiten(b)`` (:math:`L^{-1}b` with :math:`|L^{-1}b|^2 = b^{\mathsf T}C^{-1}b`),
 ``quad(b, form=...)`` and ``n_u`` (directions a marginal removed; 0 for a covariance).
 
+**A factor holds per-state arrays only** (spec section 3.3, S4 deferral (b)).  Every array
+that depends on the grid alone -- edge/interior positions, ``W_p``, the nuisance ``U``,
+band layouts, the Chebyshev basis -- stays in the covariance's constants ``C`` and is passed
+to the factor's methods: ``F.solve(b, C=C)``, ``F.whiten(b, C=C)``, ``F.quad(b, C=C)``, with
+``C = cov.constants(be)`` (a combinator passes its child's sub-dict, e.g. ``C["interior"]``).
+So a cached or stacked noise state carries no constants (the LRU of spec section 3.5 holds
+16 states on a GPU).  :meth:`Covariance.factor` attaches ``C`` to the factor it returns
+(outside every pytree: not a leaf, dropped by ``tree_map``/``jit``), so ``cov.factor(nu).quad(b)``
+works without it; factors produced inside a jitted function or unstacked from a cache get
+``C`` explicitly (``GaussianLikelihood`` passes ``parts.covs[c]``).
+
 Structure / Constants / Factor (spec §3.3).  The configuration a subclass keeps on itself
 is static (ints, tuples, strings).  Every array a factorisation reads comes from
 ``constants(be)`` and reaches the jitted function as an ARGUMENT, never closed over:
@@ -45,6 +56,8 @@ __all__ = [
     "Factor",
     "QuadForm",
     "as_evaluator",
+    "attach_constants",
+    "factor_constants",
     "quad_form",
 ]
 
@@ -67,11 +80,11 @@ class Factor(Protocol):
     @property
     def n_u(self) -> int: ...
 
-    def solve(self, b: Any, *, be: Backend | None = None) -> Any: ...
+    def solve(self, b: Any, *, C: Any = None, be: Backend | None = None) -> Any: ...
 
-    def whiten(self, b: Any, *, be: Backend | None = None) -> Any: ...
+    def whiten(self, b: Any, *, C: Any = None, be: Backend | None = None) -> Any: ...
 
-    def quad(self, b: Any, *, form: QuadForm = "solve", be: Backend | None = None) -> Any: ...
+    def quad(self, b: Any, *, C: Any = None, form: QuadForm = "solve", be: Backend | None = None) -> Any: ...
 
 
 class Evaluator(Protocol):
@@ -150,14 +163,34 @@ def as_evaluator(obj: Any, **kwargs: Any) -> Evaluator:
     return _FixedEvaluator(obj)
 
 
-def quad_form(factor: Any, b: Any, form: QuadForm, be: Backend) -> Any:
-    """``b^T C^-1 b`` in the operation order ``form`` (module docstring)."""
+def quad_form(factor: Any, b: Any, form: QuadForm, be: Backend, C: Any = None) -> Any:
+    """``b^T C^-1 b`` in the operation order ``form`` (module docstring); ``C`` the factor's
+    constants (passed through to ``solve`` / ``whiten``)."""
     if form == "solve":
-        return b @ factor.solve(b, be=be)
+        return b @ factor.solve(b, C=C, be=be)
     if form == "whiten":
-        w = factor.whiten(b, be=be)
+        w = factor.whiten(b, C=C, be=be)
         return w @ w
     raise ValueError(f"{type(factor).__name__} has no quadratic form {form!r}")
+
+
+def attach_constants(F: Any, C: Any) -> Any:
+    """``F`` with ``C`` attached as a plain attribute (never a pytree leaf), so its methods
+    run without an explicit ``C=`` (:meth:`Covariance.factor` calls this)."""
+    object.__setattr__(F, "_C", C)
+    return F
+
+
+def factor_constants(F: Any, C: Any, what: str) -> Any:
+    """The constants a factor method reads: ``C`` when given, else the attached ones; a
+    clear error when neither exists (a factor from a jitted function or an unstacked cache
+    entry has none attached)."""
+    if C is None:
+        C = F.__dict__.get("_C")
+    if C is None:
+        raise ValueError(f"{type(F).__name__}.{what} needs its covariance's constants: pass "
+                         "C=cov.constants(be) (cov.factor(nu) attaches them)")
+    return C
 
 
 def concrete_failure(ok: Any) -> bool:
@@ -186,15 +219,15 @@ class DiagFactor:
         v = be.asarray(v)
         return cls(v, xp.sum(xp.log(v)), xp.all(v > 0) & xp.all(xp.isfinite(v)))
 
-    def solve(self, b: Any, *, be: Backend | None = None) -> Any:
+    def solve(self, b: Any, *, C: Any = None, be: Backend | None = None) -> Any:
         return b / (self.v if b.ndim == 1 else self.v[:, None])
 
-    def whiten(self, b: Any, *, be: Backend | None = None) -> Any:
+    def whiten(self, b: Any, *, C: Any = None, be: Backend | None = None) -> Any:
         be = be or get_backend(self.v, b)
         s = be.xp.sqrt(self.v)
         return b / (s if b.ndim == 1 else s[:, None])
 
-    def quad(self, b: Any, *, form: QuadForm = "solve", be: Backend | None = None) -> Any:
+    def quad(self, b: Any, *, C: Any = None, form: QuadForm = "solve", be: Backend | None = None) -> Any:
         be = be or get_backend(self.v, b)
         if form == "elementwise":
             return be.xp.sum(b ** 2 / self.v)
@@ -225,18 +258,18 @@ class CholFactor:
         xp = be.xp
         return cls(L, 2.0 * xp.sum(xp.log(xp.diagonal(L))), ok, impl)
 
-    def solve(self, b: Any, *, be: Backend | None = None) -> Any:
+    def solve(self, b: Any, *, C: Any = None, be: Backend | None = None) -> Any:
         be = be or get_backend(self.L, b)
         if self.impl == "scipy":
             return be.cho_solve(self.L, b)
         u = be.solve_triangular(self.L, b, lower=True)
         return be.solve_triangular(self.L, u, lower=True, trans=1)
 
-    def whiten(self, b: Any, *, be: Backend | None = None) -> Any:
+    def whiten(self, b: Any, *, C: Any = None, be: Backend | None = None) -> Any:
         be = be or get_backend(self.L, b)
         return be.solve_triangular(self.L, b, lower=True)
 
-    def quad(self, b: Any, *, form: QuadForm = "solve", be: Backend | None = None) -> Any:
+    def quad(self, b: Any, *, C: Any = None, form: QuadForm = "solve", be: Backend | None = None) -> Any:
         return quad_form(self, b, form, be or get_backend(self.L, b))
 
 
@@ -312,8 +345,8 @@ class Covariance:
             fns = self.__dict__.setdefault("_jit_cache", {})
             if "factor" not in fns:
                 fns["factor"] = be.jit(lambda C, nu: self._factor(C, nu, be))
-            return fns["factor"](C, nu)
-        return self._factor(C, nu, be)
+            return attach_constants(fns["factor"](C, nu), C)
+        return attach_constants(self._factor(C, nu, be), C)
 
     def dense(self, nu: Any) -> np.ndarray:
         """The covariance matrix on the host (tests, dense oracles)."""

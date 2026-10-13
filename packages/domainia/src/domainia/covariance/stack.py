@@ -29,20 +29,28 @@ class StackFactor:
     def n_u(self) -> int:
         return sum(f.n_u for f in self.channels)
 
-    def quad(self, b: Any, *, form: str = "solve", be: Backend | None = None) -> Any:
+    def _sub(self, C: Any) -> list[Any]:
+        """Each channel's constants (``C[str(c)]``; ``None`` when no constants were given or
+        attached, so a channel factor that needs none still runs)."""
+        C = C if C is not None else self.__dict__.get("_C")
+        return [None if C is None else C[str(c)] for c in range(len(self.channels))]
+
+    def quad(self, b: Any, *, C: Any = None, form: str = "solve", be: Backend | None = None) -> Any:
         """``sum_c quad_c(b[c])`` from ``0.0`` in channel order; ``b`` is ``(C, n)``."""
         total = 0.0
-        for c, f in enumerate(self.channels):
-            total = total + f.quad(b[c], form=form, be=be)
+        for c, (f, Cc) in enumerate(zip(self.channels, self._sub(C), strict=True)):
+            total = total + f.quad(b[c], C=Cc, form=form, be=be)
         return total
 
-    def solve(self, b: Any, *, be: Backend | None = None) -> Any:
+    def solve(self, b: Any, *, C: Any = None, be: Backend | None = None) -> Any:
         be = be or get_backend(b)
-        return be.xp.stack([f.solve(b[c], be=be) for c, f in enumerate(self.channels)])
+        return be.xp.stack([f.solve(b[c], C=Cc, be=be)
+                            for c, (f, Cc) in enumerate(zip(self.channels, self._sub(C), strict=True))])
 
-    def whiten(self, b: Any, *, be: Backend | None = None) -> Any:
+    def whiten(self, b: Any, *, C: Any = None, be: Backend | None = None) -> Any:
         be = be or get_backend(b)
-        return be.xp.stack([f.whiten(b[c], be=be) for c, f in enumerate(self.channels)])
+        return be.xp.stack([f.whiten(b[c], C=Cc, be=be)
+                            for c, (f, Cc) in enumerate(zip(self.channels, self._sub(C), strict=True))])
 
 
 class ChannelStack(Covariance):

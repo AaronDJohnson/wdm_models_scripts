@@ -32,7 +32,7 @@ class HermitianFactor:
 
     n_u = 0
 
-    def whiten(self, b: Any, *, be: Backend | None = None) -> Any:
+    def whiten(self, b: Any, *, C: Any = None, be: Backend | None = None) -> Any:
         """``L^-1 b`` (GB ``fullcache.forward``)."""
         if self.blocks is not None:
             return cblock_forward(self.blocks, b, be=be)
@@ -46,10 +46,10 @@ class HermitianFactor:
         be = be or get_backend(u, self.L)
         return be.solve_triangular(self.L, u, lower=True, trans=2)
 
-    def solve(self, b: Any, *, be: Backend | None = None) -> Any:
+    def solve(self, b: Any, *, C: Any = None, be: Backend | None = None) -> Any:
         return self.backward(self.whiten(b, be=be), be=be)
 
-    def quad(self, b: Any, *, form: QuadForm = "whiten", be: Backend | None = None) -> Any:
+    def quad(self, b: Any, *, C: Any = None, form: QuadForm = "whiten", be: Backend | None = None) -> Any:
         """``Re(b^H M^-1 b)``: ``"whiten"`` = ``Re(vdot(w, w))`` (GB ``noise_state`` ``q0``)."""
         be = be or get_backend(b, self.L if self.blocks is None else self.blocks.Ls)
         xp = be.xp

@@ -27,7 +27,7 @@ import wdm
 from wdm.backend import Backend, get_backend, is_tracer, pytree_dataclass
 from wdm.grid import active_mask
 
-from .covariance.base import CholFactor, Covariance, QuadForm, concrete_failure
+from .covariance.base import CholFactor, Covariance, QuadForm, concrete_failure, factor_constants
 from .covariance.eq45 import keep_mask
 
 __all__ = ["FlatMarginal", "FourierBandNuisance", "MarginalFactor", "ProjectedFactor", "ProjectedOperatorMarginal",
@@ -103,50 +103,51 @@ def nuisance_basis(u: np.ndarray, rtol: float = 1e-10) -> np.ndarray:
     return U[:, s > rtol * s.max()]
 
 
-@pytree_dataclass(data=("base", "U", "H", "Zu", "logdet", "ok"), meta=("form",))
+@pytree_dataclass(data=("base", "H", "Zu", "logdet", "ok"), meta=("form", "n_u"))
 @dataclass(frozen=True, eq=False)
 class MarginalFactor:
-    """A factor with ``n_u`` flat directions marginalised: ``quad`` / ``logdet`` / ``ok``."""
+    """A factor with ``n_u`` flat directions marginalised: ``quad`` / ``logdet`` / ``ok``.
+
+    Per-state arrays only: the base factor, ``H``'s Cholesky and (``form="whiten"``)
+    ``Zu = L^-1 U``.  ``U`` is a constant (``C["U"]``); ``base`` reads ``C["cov"]``."""
 
     base: Any
-    U: Any
     H: Any
     Zu: Any
     logdet: Any
     ok: Any
     form: str
+    n_u: int
 
-    @property
-    def n_u(self) -> int:
-        return int(self.U.shape[1]) + self.base.n_u
-
-    def parts(self, y: Any, *, be: Backend | None = None) -> dict[str, Any]:
+    def parts(self, y: Any, *, C: Any = None, be: Backend | None = None) -> dict[str, Any]:
         """``quad_C, quad_H, logdet_C, logdet_H`` (the G6 split) in this factor's order."""
-        be = be or get_backend(y, self.U)
         if self.H is None:
             raise ValueError("the factorisation failed (not positive definite): check ok first")
+        C = factor_constants(self, C, "parts")
+        be = be or get_backend(y, self.H.L)
         if self.form == "solve":
-            Ciy = self.base.solve(y, be=be)
+            Ciy = self.base.solve(y, C=C["cov"], be=be)
             quad_C = y @ Ciy
-            b = self.U.T @ Ciy
+            b = C["U"].T @ Ciy
         else:
-            zy = self.base.whiten(y, be=be)
+            zy = self.base.whiten(y, C=C["cov"], be=be)
             quad_C = zy @ zy
             b = self.Zu.T @ zy
         return {"quad_C": quad_C, "quad_H": b @ self.H.solve(b, be=be),
                 "logdet_C": self.base.logdet, "logdet_H": self.H.logdet}
 
-    def quad(self, y: Any, *, form: QuadForm | None = None, be: Backend | None = None) -> Any:
+    def quad(self, y: Any, *, C: Any = None, form: QuadForm | None = None,
+             be: Backend | None = None) -> Any:
         """``y^T C^-1 y - b^T H^-1 b`` (WT: ``quad -= b @ cho_solve(cf, b)``)."""
         if form is not None and form != self.form:
             raise ValueError(f"this marginal was factorised for form={self.form!r}")
-        p = self.parts(y, be=be)
+        p = self.parts(y, C=C, be=be)
         return p["quad_C"] - p["quad_H"]
 
-    def solve(self, b: Any, *, be: Backend | None = None) -> Any:
+    def solve(self, b: Any, *, C: Any = None, be: Backend | None = None) -> Any:
         raise NotImplementedError("a marginal exposes quad and logdet only")
 
-    def whiten(self, b: Any, *, be: Backend | None = None) -> Any:
+    def whiten(self, b: Any, *, C: Any = None, be: Backend | None = None) -> Any:
         raise NotImplementedError("a marginal exposes quad and logdet only")
 
 
@@ -182,29 +183,30 @@ class FlatMarginal(Covariance):
         F = self.cov._factor(C["cov"], nu, be)
         U = C["U"]
         if concrete_failure(F.ok):          # WT: LinAlgError in the base -> -inf; H is never formed
-            return MarginalFactor(F, U, None, None, float("nan"), False, self.form)
+            return MarginalFactor(F, None, None, float("nan"), False, self.form, self.n_u)
         if self.form == "solve":
             Zu = None
-            H = U.T @ F.solve(U, be=be)
+            H = U.T @ F.solve(U, C=C["cov"], be=be)
         else:
-            Zu = F.whiten(U, be=be)
+            Zu = F.whiten(U, C=C["cov"], be=be)
             H = Zu.T @ Zu
         Hf = CholFactor.build(0.5 * (H + H.T), impl="scipy", be=be)
-        return MarginalFactor(F, U, Hf, Zu, F.logdet + Hf.logdet, F.ok & Hf.ok, self.form)
+        return MarginalFactor(F, Hf, Zu, F.logdet + Hf.logdet, F.ok & Hf.ok, self.form, self.n_u)
 
 
-@pytree_dataclass(data=("A", "M", "keep", "logdet", "ok"), meta=("N", "tol", "maxit", "on_fail", "n_drop"))
+@pytree_dataclass(data=("A", "M", "logdet", "ok"), meta=("N", "tol", "maxit", "on_fail", "n_drop"))
 @dataclass(frozen=True, eq=False)
 class ProjectedFactor:
     """WT ``BandCovariance``: ``quad`` by projected PCG with a true-residual check.
 
     ``quad`` raises (``on_fail="raise"``, WT) or returns NaN (``"nan"``, jit-able; the
-    likelihood maps a non-finite value to ``-inf``) when PCG fails.
+    likelihood maps a non-finite value to ``-inf``) when PCG fails.  ``A`` / ``M`` hold the
+    per-state Bessel coefficients and weights only; the Chebyshev basis
+    (``C["op"]["T"]``) and the retained-bin mask (``C["keep"]``) are constants.
     """
 
     A: Any
     M: Any
-    keep: Any
     logdet: Any
     ok: Any
     N: int
@@ -217,29 +219,34 @@ class ProjectedFactor:
     def n_u(self) -> int:
         return self.n_drop
 
-    def project(self, x: Any, be: Backend) -> Any:
-        return be.fft.irfft(be.fft.rfft(x, axis=-1) * self.keep, n=self.N, axis=-1)
+    def project(self, x: Any, keep: Any, be: Backend) -> Any:
+        return be.fft.irfft(be.fft.rfft(x, axis=-1) * keep, n=self.N, axis=-1)
 
-    def quad(self, r: Any, *, form: QuadForm | None = None, be: Backend | None = None) -> Any:
+    def quad(self, r: Any, *, C: Any = None, form: QuadForm | None = None,
+             be: Backend | None = None) -> Any:
         """WT ``BandCovariance.quad`` after its domain check (the model layer owns the box)."""
+        from .covariance.exact_time import with_basis
         from .linalg import pcg
 
         be = be or get_backend(r, self.A.E)
         xp = be.xp
         if form not in (None, "solve"):
             raise ValueError("the projected operator marginal has only form='solve'")
+        C = factor_constants(self, C, "quad")
+        keep = C["keep"]
+        Aop, Mop = with_basis(self.A, C["op"]), with_basis(self.M, C["op"])
         r = be.asarray(r, dtype=float)      # WT: band.project(np.asarray(r, dtype=float))
         if r.shape[-1:] != (self.N,):       # WT band.project; irfft(n=N) would resize silently
             raise ValueError(f"last axis must have length {self.N}")
-        r = self.project(r, be)
+        r = self.project(r, keep, be)
         if r.shape != (self.N,) or (not is_tracer(r) and not np.all(np.isfinite(be.to_host(r)))):
             raise ValueError("residual must be a finite length-N vector")
 
         def A(v: Any) -> Any:
-            return self.project(self.A(self.project(v, be), be), be)
+            return self.project(Aop(self.project(v, keep, be), be), keep, be)
 
         def M(v: Any) -> Any:
-            return self.project(self.M(self.project(v, be), be), be)
+            return self.project(Mop(self.project(v, keep, be), be), keep, be)
 
         # One row: WT's 1-D pcg.  linalg.pcg also runs WT's true-residual check
         # (|r - A x| <= max(5 tol, 1e-12) |r|, bandcov.py:198-201): with on_fail="raise" it
@@ -248,10 +255,10 @@ class ProjectedFactor:
                   maxit=self.maxit, on_fail=self.on_fail, be=be)
         return xp.where(res.converged[0], r @ res.x[0], xp.nan)
 
-    def solve(self, b: Any, *, be: Backend | None = None) -> Any:
+    def solve(self, b: Any, *, C: Any = None, be: Backend | None = None) -> Any:
         raise NotImplementedError("the projected marginal exposes quad and logdet only")
 
-    def whiten(self, b: Any, *, be: Backend | None = None) -> Any:
+    def whiten(self, b: Any, *, C: Any = None, be: Backend | None = None) -> Any:
         raise NotImplementedError("the projected marginal exposes quad and logdet only")
 
 
@@ -286,9 +293,11 @@ class ProjectedOperatorMarginal(Covariance):
     def _factor(self, C: Any, nu: Any, be: Backend) -> ProjectedFactor:
         """WT ``FastCovariance._operators`` (A and its Weyl-inverse preconditioner) +
         ``BandCovariance.logdet``."""
+        from .covariance.exact_time import without_basis
+
         op = self.op
         A = op.operator(C["op"], nu[0], nu[1], be)
         M = op.operator(C["op"], -nu[0], -nu[1], be, scale=4.0 * op.dt ** 2)
         logdet = op.logdet_model(nu) + self.correction(nu, be)
-        return ProjectedFactor(A, M, C["keep"], logdet, be.xp.isfinite(logdet), op.N, op.tol,
-                               op.maxit, op.on_fail, self.nuisance.n_drop)
+        return ProjectedFactor(without_basis(A), without_basis(M), logdet, be.xp.isfinite(logdet), op.N,
+                               op.tol, op.maxit, op.on_fail, self.nuisance.n_drop)

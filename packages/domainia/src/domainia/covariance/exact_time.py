@@ -32,9 +32,10 @@ from wdm.grid import endpoint_weights
 from wdm.special import chebyshev_basis
 
 from ..linalg import pcg
-from .base import CholFactor, Covariance, QuadForm
+from .base import CholFactor, Covariance, QuadForm, factor_constants
 
-__all__ = ["CovOperator", "ExactTimeAt", "ExactTimeCovariance", "OperatorFactor", "bessel_coefficients"]
+__all__ = ["CovOperator", "ExactTimeAt", "ExactTimeCovariance", "OperatorFactor", "bessel_coefficients",
+           "with_basis", "without_basis"]
 
 
 @pytree_dataclass(data=("E", "g", "T"), meta=("N",))
@@ -58,6 +59,17 @@ class CovOperator:
         return xp.einsum("pn,pn->n", self.T, Y)
 
 
+def without_basis(op: CovOperator) -> CovOperator:
+    """``op`` without its Chebyshev basis ``T`` (a constant): what a factor stores."""
+    return CovOperator(op.E, op.g, None, op.N)
+
+
+def with_basis(op: CovOperator, C: Any) -> CovOperator:
+    """A stored operator with the basis restored from the constants (``C["T"]``, first ``P``
+    rows: ``P = op.E.shape[0]``, static)."""
+    return CovOperator(op.E, op.g, C["T"][:op.E.shape[0]], op.N)
+
+
 def bessel_coefficients(a: Any, P: int, be: Backend) -> Any:
     """``(P, K)``: ``E_p = (2 - delta_p0) I_p(a)``, the Chebyshev coefficients of ``e^{a u}``
     (WT ``CovOperator``: ``ive(p, a) e^{|a|}``, then ``E[1:] *= 2``)."""
@@ -71,7 +83,8 @@ class OperatorFactor:
     """``C = Sigma~`` as an operator: ``solve`` by PCG (``linalg.pcg``), ``logdet`` closed form.
 
     ``on_fail="raise"`` (WT, eager) raises when PCG does not converge; ``"nan"`` returns a
-    NaN solution (the likelihood is then ``-inf``).
+    NaN solution (the likelihood is then ``-inf``).  ``A`` / ``M`` hold no Chebyshev basis
+    (a constant, ``C["T"]``).
     """
 
     A: Any
@@ -84,22 +97,24 @@ class OperatorFactor:
 
     n_u = 0
 
-    def solve(self, b: Any, *, be: Backend | None = None) -> Any:
+    def solve(self, b: Any, *, C: Any = None, be: Backend | None = None) -> Any:
         """``C^-1 b`` by ``linalg.pcg`` on the rows ``b[None]`` (1-D) or ``b.T`` (``(N, k)``); the
         operator is applied row by row (``be.map``), so a single row is WT ``fastcov.pcg``."""
         be = be or get_backend(b, self.A.E)
+        C = factor_constants(self, C, "solve")
+        A, M = with_basis(self.A, C), with_basis(self.M, C)
         one = b.ndim == 1
-        res = pcg(lambda V: be.map(lambda v: self.A(v, be), V), lambda V: be.map(lambda v: self.M(v, be), V),
+        res = pcg(lambda V: be.map(lambda v: A(v, be), V), lambda V: be.map(lambda v: M(v, be), V),
                   b[None, :] if one else b.T, tol=self.tol, maxit=self.maxit, on_fail=self.on_fail, be=be)
         return res.x[0] if one else res.x.T
 
-    def whiten(self, b: Any, *, be: Backend | None = None) -> Any:
+    def whiten(self, b: Any, *, C: Any = None, be: Backend | None = None) -> Any:
         raise NotImplementedError("an operator covariance has no whitening; use form='solve'")
 
-    def quad(self, b: Any, *, form: QuadForm = "solve", be: Backend | None = None) -> Any:
+    def quad(self, b: Any, *, C: Any = None, form: QuadForm = "solve", be: Backend | None = None) -> Any:
         if form != "solve":
             raise ValueError("an operator covariance has only form='solve'")
-        return b @ self.solve(b, be=be)
+        return b @ self.solve(b, C=C, be=be)
 
 
 class ExactTimeCovariance(Covariance):
@@ -227,7 +242,8 @@ class ExactTimeCovariance(Covariance):
         A = self.operator(C, nu[0], nu[1], be)
         M = self.operator(C, -nu[0], -nu[1], be, scale=4.0 * self.dt ** 2)
         logdet = self.logdet_model(nu)
-        return OperatorFactor(A, M, logdet, be.xp.isfinite(logdet), self.tol, self.maxit, self.on_fail)
+        return OperatorFactor(without_basis(A), without_basis(M), logdet, be.xp.isfinite(logdet), self.tol,
+                              self.maxit, self.on_fail)
 
 
 @dataclass(frozen=True, eq=False)
