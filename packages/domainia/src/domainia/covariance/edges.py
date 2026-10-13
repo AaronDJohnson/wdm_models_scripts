@@ -22,7 +22,7 @@ from dataclasses import dataclass
 from typing import Any, Literal
 
 import numpy as np
-from wdm.backend import Backend, get_backend, pytree_dataclass
+from wdm.backend import NUMPY, Backend, get_backend, pytree_dataclass
 from wdm.grid import active_mask, packed_cells
 from wdm.transform import band_atoms, forward_time_many, inverse_time_many
 
@@ -36,7 +36,7 @@ from .eq45 import window_bins
 from .pushed import PushedRows, positions
 
 __all__ = ["PadMask", "PaddedFactor", "SchurEdge", "SchurFactor", "ZeroPadded", "assemble_edge_rows", "cut",
-           "padded_factor", "schur_factor"]
+           "lift_samples", "padded_factor", "schur_factor"]
 
 
 def cut(make_cov: Callable[[Any], Any], cells: Any, lead: int, trail: int) -> Any:
@@ -260,6 +260,18 @@ class SchurEdge(Covariance):
 PaddedForm = Literal["solve", "reduce"]
 
 
+def lift_samples(x: Any, C: Any, Nf: int, Nt: int, dt: float, n: int, be: Backend) -> Any:
+    """The padded marginal's map from ``n`` data samples to every active cell of the extended
+    ``(Nf, Nt)`` grid: zero padding at the end, ``wdm.forward_time_many``, the active cells
+    ``C["m"], C["n_idx"]``.  ``(k, n) -> (k, n')`` or ``(n,) -> (n',)``."""
+    xp = be.xp
+    one = x.ndim == 1
+    X = x[None, :] if one else x
+    ext = be.set(xp.zeros((X.shape[0], Nf * Nt)), (slice(None), slice(0, n)), X, copy=False)
+    W = forward_time_many(ext, Nf, Nt, dt, be=be)[:, C["m"], C["n_idx"]]
+    return W[0] if one else W
+
+
 @pytree_dataclass(data=("Lam", "LiWp", "Q", "logdet", "ok"), meta=("Nf", "Nt", "dt", "n", "form"))
 @dataclass(frozen=True, eq=False)
 class PaddedFactor:
@@ -299,13 +311,7 @@ class PaddedFactor:
         record on every active cell of the extended grid (WT ``PaddedMarginal.solve``'s first
         step; WG ``y_data`` / ``_template_cells`` with ``v.extend``)."""
         C = factor_constants(self, C, "lift")
-        be = be or get_backend(x, self.logdet)
-        xp = be.xp
-        one = x.ndim == 1
-        X = x[None, :] if one else x
-        ext = be.set(xp.zeros((X.shape[0], self.Nf * self.Nt)), (slice(None), slice(0, self.n)), X, copy=False)
-        W = forward_time_many(ext, self.Nf, self.Nt, self.dt, be=be)[:, C["m"], C["n_idx"]]
-        return W[0] if one else W
+        return lift_samples(x, C, self.Nf, self.Nt, self.dt, self.n, be or get_backend(x, self.logdet))
 
     def reduce(self, t: Any, *, C: Any = None, be: Backend | None = None) -> Any:
         """``Lq^-1 W_p^T t`` (WG ``_evaluate`` pad branch ``cb``; ``Gu`` in ``_factor``): with
@@ -396,6 +402,12 @@ class ZeroPadded(Covariance):
     one ``(pad_columns Nf)^2`` Cholesky per state).  The kept-cell route (condition ~1e11)
     is never used.
 
+    ``form`` (time_marginal only): ``"solve"`` stores ``Lambda^-1 W_p`` and evaluates WT's
+    time-domain solve (the NumPy golden); ``"reduce"`` stores the WG-shaped state (``Q``'s
+    Cholesky only; with :class:`~domainia.nuisance.FlatMarginal` ``form="reduce"`` also ``Gu``)
+    and evaluates the WG cell-space order ``w.t - |cb|^2`` (the JAX default: 9.3 MiB per
+    state instead of ~300 MiB at the sinusoid grid).
+
     ``strategy="cell_congruence"`` (GB): ``base_ext`` covers the store bands x ``Nt'``
     columns of the padded grid (a ``DiagonalCovariance``, or a covariance with
     ``band_blocks`` returning padded ``(nB, Nt', Nt')`` / ``(nB - 1, Nt', Nt')`` blocks, e.g. a
@@ -409,11 +421,16 @@ class ZeroPadded(Covariance):
     def __init__(self, base_ext: Covariance, *, strategy: Literal["time_marginal", "cell_congruence"],
                  grid: Any = None, pad_columns: int = 16, mask: Any = None, n_bands: int | None = None,
                  n_columns: int | None = None, factor: Literal["dense", "schur"] = "dense",
-                 chol_impl: Literal["numpy", "scipy"] | None = None) -> None:
+                 chol_impl: Literal["numpy", "scipy"] | None = None, form: PaddedForm = "solve") -> None:
         if strategy not in ("time_marginal", "cell_congruence"):
             raise ValueError(f"unknown padding strategy {strategy!r}")
         if factor not in ("dense", "schur"):
             raise ValueError(f"factor must be 'dense' or 'schur'; got {factor!r}")
+        if form not in ("solve", "reduce"):
+            raise ValueError(f"form must be 'solve' or 'reduce'; got {form!r}")
+        if form != "solve" and strategy != "time_marginal":
+            raise ValueError("form applies to time_marginal only")
+        self.form = form
         if chol_impl not in (None, "numpy", "scipy"):   # else it raises only at the first factor
             raise ValueError(f"chol_impl must be 'numpy' or 'scipy'; got {chol_impl!r}")
         self.base, self.strategy, self.factor_kind = base_ext, strategy, factor
@@ -482,7 +499,17 @@ class ZeroPadded(Covariance):
         """WT ``PaddedMarginal.__init__`` + ``logdet``."""
         g = self.grid
         Lam = self.base._factor(C["base"], nu, be)
-        return padded_factor(Lam, C["Wp"], grid=g, n=self.n, chol_impl=self.chol_impl, be=be, C_base=C["base"])
+        return padded_factor(Lam, C["Wp"], grid=g, n=self.n, chol_impl=self.chol_impl, be=be, form=self.form,
+                             C_base=C["base"])
+
+    def lift(self, x: Any, C: Any = None, be: Backend | None = None) -> Any:
+        """:func:`lift_samples` with this covariance's constants (``time_marginal``; default:
+        host NumPy) -- e.g. the nuisance's cells ``W_u`` for ``FlatMarginal(form="reduce")``."""
+        if self.strategy != "time_marginal":
+            raise ValueError("lift needs strategy='time_marginal'")
+        be = be or NUMPY
+        g = self.grid
+        return lift_samples(x, self.constants(be) if C is None else C, g.Nf, g.Nt, g.dt, self.n, be)
 
     # -- cell_congruence ----------------------------------------------------------------
     def _congruence_pieces(self, C: Any, nu: Any, be: Backend) -> tuple[Any, Any, Any]:

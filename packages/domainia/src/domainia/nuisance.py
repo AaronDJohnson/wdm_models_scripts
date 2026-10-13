@@ -10,7 +10,10 @@ r"""Flat marginals over nuisance directions (spec §4.6): the analysis cut below
   ``quad = y^T C^-1 y - b^T H^-1 b``, ``logdet = log|C| + log|H|``, ``b = U^T C^-1 y``,
   ``H = U^T C^-1 U``; ``n_u = U.shape[1]`` directions removed.  ``form="solve"`` is the
   WT order (NumPy golden); ``form="whiten"`` the WG forward-only order
-  (``H = Z_u^T Z_u``, ``Z_u = L^-1 U``; the JAX tri raw/cut golden).
+  (``H = Z_u^T Z_u``, ``Z_u = L^-1 U``; the JAX tri raw/cut golden); ``form="reduce"`` the
+  WG pad order over ``ZeroPadded(form="reduce")`` (``W_u`` the nuisance's extended cells,
+  ``G_u = Lq^-1 W_p^T Lambda^-1 W_u``, ``H = W_u^T Lambda^-1 W_u - G_u^T G_u``; the JAX pad
+  golden).
 * :class:`ProjectedOperatorMarginal` -- WT ``bandcov.BandCovariance`` evaluation path
   (the sinusoid ``exact`` model): projected PCG with a true-residual check, and
   ``log|Sigma~| + correction(nu)``.
@@ -103,17 +106,19 @@ def nuisance_basis(u: np.ndarray, rtol: float = 1e-10) -> np.ndarray:
     return U[:, s > rtol * s.max()]
 
 
-@pytree_dataclass(data=("base", "H", "Zu", "logdet", "ok"), meta=("form", "n_u"))
+@pytree_dataclass(data=("base", "H", "Zu", "Gu", "logdet", "ok"), meta=("form", "n_u"))
 @dataclass(frozen=True, eq=False)
 class MarginalFactor:
     """A factor with ``n_u`` flat directions marginalised: ``quad`` / ``logdet`` / ``ok``.
 
-    Per-state arrays only: the base factor, ``H``'s Cholesky and (``form="whiten"``)
-    ``Zu = L^-1 U``.  ``U`` is a constant (``C["U"]``); ``base`` reads ``C["cov"]``."""
+    Per-state arrays only: the base factor, ``H``'s Cholesky, ``Zu = L^-1 U``
+    (``form="whiten"``) and ``Gu = Lq^-1 W_p^T Lambda^-1 W_u`` (``form="reduce"``).  ``U``
+    and ``W_u`` are constants (``C["U"]``, ``C["Wu"]``); ``base`` reads ``C["cov"]``."""
 
     base: Any
     H: Any
     Zu: Any
+    Gu: Any
     logdet: Any
     ok: Any
     form: str
@@ -125,6 +130,16 @@ class MarginalFactor:
             raise ValueError("the factorisation failed (not positive definite): check ok first")
         C = factor_constants(self, C, "parts")
         be = be or get_backend(y, self.H.L)
+        if self.form == "reduce":
+            # WG _evaluate pad branch: t = Lambda^-1 w, cb = Lq^-1 W_p^T t,
+            # quad = w.t - cb.cb - |cH^-1 (W_u^T t - G_u^T cb)|^2
+            xp, F, Cc = be.xp, self.base, C["cov"]
+            w = F.lift(y, C=Cc, be=be)
+            t = F.Lam.solve(w, C=Cc["base"], be=be)
+            cb = F.reduce(t, C=Cc, be=be)
+            cu = self.H.whiten(C["Wu"].T @ t - self.Gu.T @ cb, be=be)
+            return {"quad_C": xp.dot(w, t) - xp.dot(cb, cb), "quad_H": xp.dot(cu, cu),
+                    "logdet_C": F.logdet, "logdet_H": self.H.logdet}
         if self.form == "solve":
             Ciy = self.base.solve(y, C=C["cov"], be=be)
             quad_C = y @ Ciy
@@ -154,12 +169,17 @@ class MarginalFactor:
 class FlatMarginal(Covariance):
     """``cov`` marginalised over the columns of ``U`` (``(n, n_u)``: the nuisance in the
     data coordinates) under a flat prior.  ``U`` goes through :func:`nuisance_basis`
-    (unchanged when full rank, so the raw models are WT's exactly)."""
+    (unchanged when full rank, so the raw models are WT's exactly).  ``form`` (module
+    docstring): ``"solve"`` (WT), ``"whiten"`` (WG forward-only) or ``"reduce"`` (WG pad: ``cov``
+    a ``ZeroPadded(strategy="time_marginal", form="reduce")``)."""
 
-    def __init__(self, cov: Covariance, U: np.ndarray, *, form: Literal["solve", "whiten"] = "solve",
-                 rtol: float = 1e-10) -> None:
-        if form not in ("solve", "whiten"):
-            raise ValueError(f"form must be 'solve' or 'whiten'; got {form!r}")
+    def __init__(self, cov: Covariance, U: np.ndarray, *,
+                 form: Literal["solve", "whiten", "reduce"] = "solve", rtol: float = 1e-10) -> None:
+        if form not in ("solve", "whiten", "reduce"):
+            raise ValueError(f"form must be 'solve', 'whiten' or 'reduce'; got {form!r}")
+        if form == "reduce" and not (getattr(cov, "strategy", None) == "time_marginal"
+                                     and getattr(cov, "form", None) == "reduce"):
+            raise ValueError("form='reduce' marginalises a ZeroPadded(strategy='time_marginal', form='reduce')")
         U = np.asarray(U, float)
         if U.ndim != 2 or U.shape[0] != cov.n:
             raise ValueError(f"U must be ({cov.n}, n_u); got {U.shape}")
@@ -173,6 +193,8 @@ class FlatMarginal(Covariance):
         self.jittable = cov.jittable
 
     def host_constants(self) -> dict[str, Any]:
+        if self.form == "reduce":                         # WG Wu: the nuisance on the extended cells
+            return {"U": self.U, "Wu": np.ascontiguousarray(self.cov.lift(self.U.T).T)}
         return {"U": self.U}
 
     def children(self) -> dict[str, Covariance]:
@@ -183,15 +205,22 @@ class FlatMarginal(Covariance):
         F = self.cov._factor(C["cov"], nu, be)
         U = C["U"]
         if concrete_failure(F.ok):          # WT: LinAlgError in the base -> -inf; H is never formed
-            return MarginalFactor(F, None, None, float("nan"), False, self.form, self.n_u)
+            return MarginalFactor(F, None, None, None, float("nan"), False, self.form, self.n_u)
+        Zu = Gu = None
+        impl = "scipy"
         if self.form == "solve":
-            Zu = None
             H = U.T @ F.solve(U, C=C["cov"], be=be)
-        else:
+        elif self.form == "whiten":
             Zu = F.whiten(U, C=C["cov"], be=be)
             H = Zu.T @ Zu
-        Hf = CholFactor.build(0.5 * (H + H.T), impl="scipy", be=be)
-        return MarginalFactor(F, Hf, Zu, F.logdet + Hf.logdet, F.ok & Hf.ok, self.form, self.n_u)
+        else:                               # WG _factor pad branch (jnp.linalg.cholesky: numpy)
+            Wu = C["Wu"]
+            LiWu = F.Lam.solve(Wu, C=C["cov"]["base"], be=be)
+            Gu = F.reduce(LiWu, C=C["cov"], be=be)
+            H = Wu.T @ LiWu - Gu.T @ Gu
+            impl = "numpy"
+        Hf = CholFactor.build(0.5 * (H + H.T), impl=impl, be=be)
+        return MarginalFactor(F, Hf, Zu, Gu, F.logdet + Hf.logdet, F.ok & Hf.ok, self.form, self.n_u)
 
 
 @pytree_dataclass(data=("A", "M", "logdet", "ok"), meta=("N", "tol", "maxit", "on_fail", "n_drop"))
