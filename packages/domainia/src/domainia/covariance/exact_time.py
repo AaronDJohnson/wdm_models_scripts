@@ -34,7 +34,7 @@ from wdm.special import chebyshev_basis
 from ..linalg import pcg
 from .base import CholFactor, Covariance, QuadForm
 
-__all__ = ["CovOperator", "ExactTimeCovariance", "OperatorFactor", "bessel_coefficients"]
+__all__ = ["CovOperator", "ExactTimeAt", "ExactTimeCovariance", "OperatorFactor", "bessel_coefficients"]
 
 
 @pytree_dataclass(data=("E", "g", "T"), meta=("N",))
@@ -168,6 +168,11 @@ class ExactTimeCovariance(Covariance):
             raise ValueError("the operator log-determinant needs c_N (model-layer asset)")
         return self.weyl_logdet(nu) + self.c_N * nu[1] * nu[1]
 
+    def at(self, nu: Any) -> "ExactTimeAt":
+        """``Sigma~(nu)`` at a fixed noise state as ``maps.SupportsMatvec`` (section D-B), so
+        ``TimeToWDM(time, cells).push(cov.at(nu)).rows(e)`` is the exact rows (spec §4.2)."""
+        return ExactTimeAt(self, np.array(nu, dtype=float))
+
     # -- dense forms (WT noise.py) ----------------------------------------------------
     def sigma_tilde(self, nu: Any) -> np.ndarray:
         """Exact ``Sigma~ = Sigma / A_n`` ``(N, N)``: WT ``noise.sigma_tilde`` verbatim."""
@@ -217,3 +222,21 @@ class ExactTimeCovariance(Covariance):
         M = self.operator(C, -nu[0], -nu[1], be, scale=4.0 * self.dt ** 2)
         logdet = self.logdet_model(nu)
         return OperatorFactor(A, M, logdet, be.xp.isfinite(logdet), self.tol, self.maxit, self.on_fail)
+
+
+@dataclass(frozen=True, eq=False)
+class ExactTimeAt:
+    """:meth:`ExactTimeCovariance.at`: ``matvec(X)`` applies the fixed-order operator
+    (``P = cov.P``) to each row of ``X`` in order -- WT ``MatrixWdm._exact_rows``, one
+    ``CovOperator`` call per atom -- so ``maps.PushedCovariance.rows`` equals
+    ``PushedRows(order="fixed")`` bit for bit."""
+
+    cov: ExactTimeCovariance
+    nu: np.ndarray
+
+    def matvec(self, X: Any, be: Backend | None = None) -> Any:
+        be = be or get_backend(X)
+        op = self.cov.operator(self.cov.constants(be), self.nu[0], self.nu[1], be)
+        X2 = be.asarray(X if X.ndim == 2 else X[None, :])
+        Y = be.map(lambda x: op(x, be), X2)
+        return Y if X.ndim == 2 else Y[0]

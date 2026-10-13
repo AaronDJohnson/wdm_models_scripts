@@ -12,12 +12,13 @@ every lag is checked against the grid's Nyquist ``L/2`` once, at construction.
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from typing import Any
 
 import numpy as np
-from wdm.backend import Backend, get_backend
+from wdm.backend import NUMPY, Backend, get_backend, require_x64
 
-__all__ = ["ExactFourierCovariance", "ghat"]
+__all__ = ["ExactFourierAt", "ExactFourierCovariance", "ghat"]
 
 
 def ghat(mu: Any, basis_L: Any, lags: np.ndarray, be: Backend) -> Any:
@@ -70,6 +71,12 @@ class ExactFourierCovariance:
         root = xp.sqrt(C["sG"])
         return xp.diag(C["sI"].astype(complex)) + (root[:, None] * root[None, :]) * xp.conj(gh)[C["lag"]]
 
+    def at(self, mu: Any) -> "ExactFourierAt":
+        """``M'(mu)`` at a fixed noise state as ``maps.SupportsDense`` (section D-B), so
+        ``FourierToWDM(bins, cells, restrict=True).push(cov.at(mu)).rows(e)`` is the exact
+        cell rows ``0.5 Re(U_E M' U^H)`` (spec §4.2)."""
+        return ExactFourierAt(self, np.array(mu, dtype=float))
+
     def ghat(self, mu: Any, lags: np.ndarray, be: Backend | None = None) -> Any:
         """``ghat`` at ``lags`` (``|lags| <= L/2``, checked)."""
         be = be or get_backend(mu)
@@ -78,3 +85,22 @@ class ExactFourierCovariance:
         if np.any(np.abs(lags) > L // 2):
             raise ValueError("lag beyond the decimation grid's Nyquist; raise the envelope's L")
         return ghat(be.asarray(mu), be.asarray(np.asarray(self.envelope.basis_L, float)), lags, be)
+
+
+@dataclass(frozen=True, eq=False)
+class ExactFourierAt:
+    """:meth:`ExactFourierCovariance.at`: ``dense(be)`` is ``M'(mu)`` (GB ``full_covariance``),
+    the host constants moved once to a JAX backend (``require_x64``)."""
+
+    cov: ExactFourierCovariance
+    mu: np.ndarray
+
+    def dense(self, be: Backend | None = None) -> Any:
+        be = be or NUMPY
+        C = self.cov.host_constants()
+        if be.name != "numpy":
+            require_x64()
+            import jax
+
+            C = jax.device_put(C)
+        return self.cov.evaluate(C, be.asarray(self.mu), be)
