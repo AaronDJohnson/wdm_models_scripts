@@ -295,6 +295,15 @@ class Covariance:
     jittable: bool = True
     n_u: int = 0
 
+    @property
+    def batchable(self) -> bool:
+        """Whether a sampler may stack this covariance's noise states into one ``vmap``
+        (``domainia.sampling.NoiseStateCache(batch_rows=...)``): every child's, by default.
+        ``SchurEdge`` over time rows says no -- WG never batched the sinusoid edge-exact
+        states (``MatrixGPU._cached_rows``: ``self.edge == "exact" or not self.batch_rungs``),
+        ~120 MiB each at the manuscript grid."""
+        return all(c.batchable for c in self.children().values())
+
     def host_constants(self) -> Any:
         return {}
 

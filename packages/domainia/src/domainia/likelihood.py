@@ -346,6 +346,9 @@ class GaussianLikelihood(_CountersMixin):
         probe = np.zeros(len(params.noise))
         self.traceable = self.jittable and all(c.state_key(probe[s]) is None
                                                for c, s in zip(covs, self._slices, strict=True))
+        #: jittable, and every covariance's noise states may be stacked into one vmap
+        #: (``Covariance.batchable``; ``NoiseStateCache(batch_rows=...)``)
+        self.batchable = self.jittable and all(bool(c.batchable) for c in covs)
         # host-constant rule: the data are mapped once in NumPy float64
         y_data = np.asarray(map.apply(np.asarray(values), be=NUMPY))
         if self.stacked and (y_data.ndim < 2 or y_data.shape[0] != self.n_channels):

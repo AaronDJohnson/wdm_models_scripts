@@ -171,7 +171,11 @@ class SchurEdge(Covariance):
     destination cells whose row cells are ``edge``.
     ``chol_impl`` pins the complement's (``"schur"``) or the matrix's (``"dense"``)
     Cholesky: ``"scipy"`` (WT ``Schur``) or ``"numpy"`` (GB).  ``assembly="dense"``
-    needs an interior with a dense form (``_matrix``).
+    needs an interior with a dense form (``_matrix``).  ``form`` (``assembly="schur"``):
+    ``"solve"`` stores ``T^-1 B^T`` (WT; the NumPy golden); ``"scaled"`` (a
+    :class:`~domainia.covariance.diagonal.DiagonalCovariance` interior only) forms ``B / v``
+    on the fly (WG diagonal branch, GB ``EdgeSchurCache``; the JAX default: the state is
+    ``B``, ``v`` and ``S``, 120 MiB at the sinusoid grid instead of 233 MiB).
 
     On JAX the rows are evaluated per static Chebyshev order (``rows.order_for``): one
     jitted program per order, or the separately compiled stages when ``rows.staged`` and
@@ -183,12 +187,17 @@ class SchurEdge(Covariance):
 
     def __init__(self, interior: Covariance, rows: PushedRows, edge: Any, *,
                  assembly: Literal["schur", "dense"] = "schur",
-                 chol_impl: Literal["numpy", "scipy"] = "scipy") -> None:
+                 chol_impl: Literal["numpy", "scipy"] = "scipy", form: SchurForm = "solve") -> None:
         if assembly not in ("schur", "dense"):
             raise ValueError(f"assembly must be 'schur' or 'dense'; got {assembly!r}")
         if chol_impl not in ("numpy", "scipy"):     # else NumPy raises only after the rows (~3 s)
             raise ValueError(f"chol_impl must be 'numpy' or 'scipy'; got {chol_impl!r}")
+        if form not in ("solve", "scaled"):
+            raise ValueError(f"form must be 'solve' or 'scaled'; got {form!r}")
+        if form == "scaled" and (assembly != "schur" or not isinstance(interior, DiagonalCovariance)):
+            raise ValueError("form='scaled' needs assembly='schur' and a DiagonalCovariance interior")
         self.interior, self.rows, self.assembly, self.chol_impl = interior, rows, assembly, chol_impl
+        self.form = form
         self.cells = rows.cells
         self.n = rows.n
         self.e = positions(edge, self.cells)
@@ -209,6 +218,12 @@ class SchurEdge(Covariance):
     def children(self) -> dict[str, Covariance]:
         return {"interior": self.interior}
 
+    @property
+    def batchable(self) -> bool:
+        """Fourier rows (GB, 27 edge cells: ``EdgeSchurCache`` batched) yes; time rows (the
+        sinusoid's 959 edge atoms: WG never batched) no."""
+        return self.rows.kind != "time" and self.interior.batchable
+
     def state_key(self, nu: Any) -> Any:
         """``(P, interior key)``, ``P = rows.order_for(nu)`` for adaptive rows (``None`` for
         fixed-order and Fourier rows): the static order :meth:`factor` dispatches on."""
@@ -221,7 +236,8 @@ class SchurEdge(Covariance):
         e, i = C["e"], C["i"]
         if self.assembly == "schur":
             T = self.interior._factor(C["interior"], nu, be)
-            return schur_factor(T, R[:, e], R[:, i], chol_impl=self.chol_impl, be=be, C_T=C["interior"])
+            return schur_factor(T, R[:, e], R[:, i], chol_impl=self.chol_impl, be=be, form=self.form,
+                                C_T=C["interior"])
         lam = assemble_edge_rows(self.interior._matrix(C["interior"], nu, be), R, e, i, be)
         return dense_factor(lam, chol_impl=self.chol_impl, symmetrize=True, be=be)
 

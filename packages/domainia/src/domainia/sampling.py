@@ -45,6 +45,14 @@ def group_misses(group_keys: Sequence[Hashable]) -> list[tuple[Hashable, list[in
     return [(k, groups[k]) for k in order]
 
 
+def _accelerator() -> bool:
+    """WG ``batch_rungs``: ``jax.default_backend() != "cpu"`` (stacking costs more than it
+    saves on a CPU)."""
+    import jax
+
+    return jax.default_backend() != "cpu"
+
+
 def _stack(states: list[Any]) -> Any:
     import jax
     import jax.numpy as jnp
@@ -63,9 +71,12 @@ class NoiseStateCache(_CountersMixin):
 
     ``capacity``: states kept (sinusoid 16 on GPU / 32 on CPU, GB 24; spec section 3.5).
     ``batch_rows``: evaluate the rows of one call in one ``vmap`` over their stacked
-    states (JAX with ``lik.jittable`` only; NumPy loops, which is its oracle).  Default:
-    on for a jittable JAX likelihood.  The WG sinusoid runner batched only on a GPU and
-    never for edge-exact; the model layer passes ``batch_rows`` to match.  ``misses``:
+    states (JAX with ``lik.jittable`` only; NumPy loops, which is its oracle).  Default
+    (``None``): the WG policy (``MatrixGPU.batch_rungs``, ``_cached_rows``) -- on for a
+    ``lik.batchable`` JAX likelihood on an accelerator, off on CPU and never for a
+    covariance that is not ``batchable`` (the sinusoid edge-exact states, ~120 MiB each);
+    ``True`` there is refused.  GB ``batch_signal`` batched on every device: the model layer
+    (S7) passes ``batch_rows=True`` for the GB models.  ``misses``:
     ``"serial"`` (golden default, one factorisation per new state in row order) or
     ``"batched"`` (opt-in, gated in S8: new states grouped by ``lik.state_key`` -- the
     covariances' ``state_key``, e.g. the adaptive Chebyshev order -- with
@@ -89,9 +100,14 @@ class NoiseStateCache(_CountersMixin):
             raise ValueError(f"misses must be one of {MISSES}; got {misses!r}")
         self.lik, self.capacity, self.misses = lik, int(capacity), misses
         jax_ok = lik.be.name == "jax" and lik.jittable
-        self.batch_rows = jax_ok if batch_rows is None else bool(batch_rows)
+        if batch_rows is None:
+            batch_rows = jax_ok and lik.batchable and _accelerator()
+        self.batch_rows = bool(batch_rows)
         if self.batch_rows and not jax_ok:
             raise ValueError("batch_rows needs the JAX backend and jittable covariances (NumPy loops the rows)")
+        if self.batch_rows and not lik.batchable:
+            raise ValueError("batch_rows: this likelihood's noise states are not batchable (edge-exact time rows: "
+                             "WG evaluated them one row at a time)")
         self.cache: OrderedDict[bytes, NoiseState | None] = OrderedDict()
         self._batch_fn = None
         self._miss_fn = None

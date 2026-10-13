@@ -220,8 +220,8 @@ def test_jax_cache_batches_hits_and_matches_numpy():
     X[3:6, 3] = -60.0                                        # the second state fails: 3 rows, 1 state
     want = two_channel()(X)
     for strategy in ("residual", "expanded"):
-        cache = NoiseStateCache(two_channel(backend="jax", strategy=strategy), 16)
-        assert cache.batch_rows
+        cache = NoiseStateCache(two_channel(backend="jax", strategy=strategy), 16, batch_rows=True)
+        assert cache.batch_rows                              # the default on CPU is off (WG, E-C4)
         got = cache(X)
         assert np.array_equal(np.isneginf(got), np.isneginf(want))
         ok = np.isfinite(want)
