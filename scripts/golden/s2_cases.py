@@ -172,3 +172,144 @@ def sinusoid_compare(model: str) -> dict:
         ref = to_float(p[key])
         out[key] = (val, ref, abs(val - ref))
     return out
+
+
+# --- galactic binary -------------------------------------------------------------------------
+@dataclass(frozen=True, eq=False)
+class G6Envelope:
+    """``galactic_binary/envelope.py`` (``orthonormal_coefficients`` with L = 2**20,
+    ``basis``) and ``likelihoods.ghat_at`` (+ the lag guard of ``envelope.ghat``), test-local."""
+
+    T: float
+    period: float
+    basis_L: np.ndarray
+    n_harm: int = 2
+    _C: np.ndarray = field(init=False, repr=False)
+
+    def __post_init__(self) -> None:
+        L = 1 << 20
+        t = np.arange(L) * (self.T / L)
+        B = self._raw(t)
+        n = B.shape[0]
+        C = np.zeros((n, n))
+        C[0, 0] = 1.0
+        E = [np.ones(L)]
+        for i in range(1, n):
+            c = np.zeros(n)
+            c[i] = 1.0
+            v = B[i].copy()
+            for j, e in enumerate(E):
+                p = float(np.mean(v * e) / np.mean(e * e))
+                v -= p * e
+                c -= p * C[j]
+            s = float(np.sqrt(np.mean(v * v)))
+            E.append(v / s)
+            C[i] = c / s
+        object.__setattr__(self, "_C", C)
+
+    def _raw(self, t):
+        t = np.asarray(t, dtype=float)
+        rows = [np.ones_like(t)]
+        for h in range(1, self.n_harm + 1):
+            w = 2.0 * np.pi * h / self.period
+            rows += [np.cos(w * t), np.sin(w * t)]
+        return np.stack(rows)
+
+    @property
+    def n_params(self) -> int:
+        return 1 + 2 * self.n_harm
+
+    def basis(self, t) -> np.ndarray:
+        """``envelope.basis(t, T, n_harm, period)`` = ``C @ raw_basis(t)``, a host constant (D-B's
+        ``Envelope`` protocol; ``variance`` and ``Eq45Covariance`` read it at the cell times)."""
+        return self._C @ self._raw(t)
+
+    def log_g(self, t, mu, be=None):
+        return mu @ self.basis(t)
+
+    def ghat(self, lags, mu, be=None):
+        L = self.basis_L.shape[1]
+        lags = np.asarray(lags)
+        if np.any(np.abs(lags) > L // 2):
+            raise ValueError("lag beyond the decimation grid's Nyquist")
+        R = np.fft.rfft(np.exp(mu @ self.basis_L)) / L
+        out = R[np.abs(lags)]
+        return np.where(lags < 0, np.conj(out), out)
+
+
+@cache
+def gb_envelope(case: str) -> G6Envelope:
+    a = gb_inputs(case).a
+    return G6Envelope(float(a["T"]), float(a["envelope_period"]), np.asarray(a["basis_L"]))
+
+
+@cache
+def gb_inputs(case: str) -> SimpleNamespace:
+    a = read_npz(DATA / "galactic_binary" / "prepared" / f"{case}.npz")
+    gi = read_json(GOLDEN / "galactic_binary" / f"intermediates_{case}.json")
+    gz = read_npz(GOLDEN / "galactic_binary" / f"intermediates_{case}.npz")
+    return SimpleNamespace(a=a, json=gi, npz=gz,
+                           anchor=np.concatenate([a["inject_glass"], a["mu_fit"].ravel()]),
+                           anchor_whittle=np.concatenate([a["inject_glass"], a["mu_freq"]]))
+
+
+def gb_likelihood(case: str, model: str):
+    """One GB model at the anchor of ``case``, NumPy ``historical`` strategies."""
+    g = gb_inputs(case)
+    a = g.a
+    Nr, dtg, nt = int(a["N"]), float(a["DT"]), int(a["NT"])
+    store_dom = FourierDomain(Nr, dtg, int(a["store_offset"]), int(a["store_n"]), "sigma0")
+    store = FourierBins(a["store_z"], store_dom, ChannelAxis(("A", "E")))
+    signal = StaticSignal(lambda src, h=g.npz["store_template"]: h)
+    nominal = FourierDomain(Nr, dtg, int(a["bin_offset"]) + int(a["freq_lo"]), int(a["freq_n"]), "sigma0")
+    if model == "whittle_raw":
+        lo = nominal.k0 - store_dom.k0
+        k = slice(lo, lo + nominal.n)
+        return FourierWhittle("complex", store, map=BinSelect(store_dom, nominal),
+                              sI=a["store_sI"][:, k], sG=a["store_sG"][:, k], signal=signal, params=GB_WHITTLE)
+    env = gb_envelope(case)
+    grid = wdm.Grid(Nr // nt, nt, dtg)
+    cells = CellSet.bands(grid, tuple(int(a["first_band"]) + b for b in range(int(a["n_bands"]))))
+    # one two-channel spectrum; each covariance selects its channel (GB band_psd's 2-row matvec)
+    psd = SeparablePSD(((TabulatedSpectrum(store_dom, a["store_sI"]), None),
+                        (TabulatedSpectrum(store_dom, a["store_sG"]), env)), ("A", "E"))
+    covs = []
+    for c in range(2):
+        if model == "band_raw":
+            covs.append(DiagonalCovariance(BandAveragedVariance(psd, cells), len(cells.m), channel=c))
+        elif model == "tri_exact":
+            edge = cells.columns(*(int(v) for v in a["matrix_cut"]))
+            window = FourierDomain(Nr, dtg, int(a["bin_offset"]), int(a["n_bins"]), "sigma0")
+            rows = PushedRows(ExactFourierCovariance(psd, window, channel=c),
+                              FourierToWDM(window, WDMDomain(cells), restrict=True), edge)
+            covs.append(SchurEdge(Eq45Covariance(psd, cells.complement(edge), builder="separable",
+                                                 assembly="dense", channel=c),
+                                  rows, edge, assembly="dense", chol_impl="numpy"))
+        elif model == "exact":
+            covs.append(HermitianCovariance(ExactFourierCovariance(psd, nominal, channel=c), block=None))
+        else:
+            raise ValueError(f"{model!r} is not in the S2 GB preview set {GB_MODELS}")
+    stack = ChannelStack(tuple(covs), len(ENV))
+    if model == "exact":
+        return GaussianLikelihood(store, BinSelect(store_dom, nominal), stack, ComplexGaussian(),
+                                  signal=signal, params=GB_PARAMS, strategy="expanded")
+    # GB _dense_quad_logdet whitens; the diagonal models sum r**2 / v (matrix.py:919, 928-938)
+    return GaussianLikelihood(store, FourierToWDM(store_dom, WDMDomain(cells), impl="dense"), stack,
+                              RealGaussian(), signal=signal, params=GB_PARAMS,
+                              quad_form="elementwise" if model == "band_raw" else "whiten")
+
+
+def gb_compare(case: str, model: str) -> dict:
+    """``{c<k>/quad, c<k>/logdet, lnL}`` -> ``(value, golden, |delta|)`` at the anchor."""
+    g = gb_inputs(case)
+    lik = gb_likelihood(case, model)
+    theta = g.anchor_whittle if model.startswith("whittle") else g.anchor
+    ql = lik.quad_logdet(theta)
+    ref = g.npz["quad_logdet"][g.json["quad_logdet_models"].index(model)]
+    out = {}
+    for c in range(2):
+        for j, key in enumerate(("quad", "logdet")):
+            out[f"c{c}/{key}"] = (float(ql[c, j]), float(ref[c, j]), abs(float(ql[c, j]) - float(ref[c, j])))
+    lnl, want = float(lik(theta[None, :])[0]), to_float(g.json["lnl_at_anchor"][model]["lnl_make_lnlike"])
+    out["lnL"] = (lnl, want, abs(lnl - want))
+    return out
