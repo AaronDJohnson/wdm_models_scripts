@@ -85,3 +85,14 @@ def g1g2_items(tier: str = "fast") -> list[str]:
             pos = rows["fast_positions"] if tier == "fast" else range(len(r))
             items += [f"{root}/g2/row{int(r[p])}" for p in pos] + [f"{root}/g2/mask", f"{root}/g2/counters"]
     return items
+
+
+#: The G5 items (tests/golden/test_s3_g5_sinusoid.py records exactly these).
+G5_ITEMS: tuple[str, ...] = (
+    *(f"sinusoid/{c}/g5/{k}" for c in CASES for k in ("toy_data_sha256", "w_d")),
+    "sinusoid/g5/cN_sha256", "sinusoid/g5/bandcov_sha256",
+    "sinusoid/g5/wrap_cut", "sinusoid/g5/wrap_first_dropped_lead", "sinusoid/g5/wrap_first_dropped_trail",
+    "sinusoid/g5/wrap_worst_kept",
+    "sinusoid/g5/c_N", "sinusoid/g5/bandcov_key", "sinusoid/g5/bandcov_identity", "sinusoid/g5/noise_bounds",
+    *(f"sinusoid/g5/describe/{k}" for k in ("raw_cells", "cut_cells", "exact_rows", "pad_cells")),
+)
