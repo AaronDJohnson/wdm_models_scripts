@@ -18,6 +18,7 @@ def test_the_defaults():
     assert (o.strategy, o.tri_build, o.rows_order, o.cells, o.gb_pad_factor, o.waveform_backend,
             o.cache_size, o.exact_chunk, o.whitened) == ("historical", None, None, None, None,
                                                          "fourier", None, None, False)
+    assert (o.layout, o.phi_cache, o.staged, o.marginal_form, o.batch_rows) == (None,) * 5
     assert hash(o) == hash(ModelOptions())
 
 
