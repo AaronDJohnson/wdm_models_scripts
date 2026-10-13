@@ -37,7 +37,6 @@ from pathlib import Path
 from scripts.golden.goldens_io import read_json
 from scripts.golden.paths import GOLDEN, REL, tmp_root
 
-SIN_PREVIEW = ("whittle_raw", "whittle_cut", "band_raw", "mid_cut", "tri_raw", "band_pad", "band_exact")
 GB_PREVIEW = {"gb_3mo": ("whittle_raw", "band_raw", "tri_exact", "exact")}
 DEFAULT_TESTS = ("tests/golden/test_s2_g6_*.py", "packages/domainia/tests/test_dom_*.py")
 _GB = r"galactic_binary/(?P<case>gb_\w+)"
@@ -121,9 +120,9 @@ def deferred() -> dict[str, str]:
     out: dict[str, str] = {}
     for item in inventory():
         parts = item.split("/")
-        if item.endswith("/composition") and item.startswith("sinusoid/") and parts[3] not in SIN_PREVIEW:
-            out[item] = "S3: the full sinusoid registry (spec section 7.6)"
-        elif item.endswith("/composition") and item.startswith("galactic_binary/") \
+        # S3 (E-B8, tests/golden/test_s2_g6_sinusoid_registry.py) covers the sinusoid
+        # compositions outside the S2 preview (s2_cases.SIN_DEFAULT + SIN_SLOW): none is deferred.
+        if item.endswith("/composition") and item.startswith("galactic_binary/") \
                 and parts[3] not in GB_PREVIEW.get(parts[1], ()):
             out[item] = "S6: the full GB registry (spec section 7.6)"
         elif item.endswith("/arrays/store_template"):

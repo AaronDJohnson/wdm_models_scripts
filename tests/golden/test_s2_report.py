@@ -29,9 +29,9 @@ def test_inventory_lists_every_g6_item():
 
 def test_deferred_items_are_inventory_items_with_owners():
     later, items = R.deferred(), set(R.inventory())
-    assert len(later) == 45 and set(later) <= items
+    assert len(later) == 37 and set(later) <= items
     assert "galactic_binary/gb_12mo/arrays/V_exact_rows" not in later      # asserted in S2 (empty)
-    assert later["sinusoid/manuscript_mid/parts/exact/composition"].startswith("S3")
+    assert not any(i.startswith("sinusoid/") for i in later)              # S3 covers them (E-B8)
     assert later["galactic_binary/gb_6mo/quad_logdet/tri_raw/composition"].startswith("S6")
     assert later["galactic_binary/gb_3mo/arrays/store_template"].startswith("S5")
     assert "galactic_binary/gb_3mo/quad_logdet/exact/composition" not in later   # an S2 preview
@@ -58,7 +58,8 @@ def test_summary_marks_covered_deferred_uncovered_and_failures(tmp_path):
     assert rep["failed_items"] == ["sinusoid/manuscript_mid/parts/band_raw/composition/lnL"]
     assert not rep["ok"]
     assert "sinusoid/manuscript_mid/variances/band_raw" in rep["inventory"]["uncovered"]
-    assert "sinusoid/manuscript_mid/parts/tri_cut/composition" in rep["inventory"]["deferred"]
+    assert "sinusoid/manuscript_mid/parts/tri_cut/composition" in rep["inventory"]["uncovered"]
+    assert "galactic_binary/gb_6mo/quad_logdet/tri_raw/composition" in rep["inventory"]["deferred"]
 
 
 def test_asserted_items_need_their_passing_tests(tmp_path):
@@ -196,6 +197,6 @@ def test_the_report_runs_the_s2_gate_tests(tmp_path):
     assert proc.returncode == 0, proc.stderr[-2000:]
     rep = json.loads(out.read_text())
     assert rep["ok"] and rep["tests"]["failures"] == 0
-    assert len(rep["records"]) >= 108 and rep["inventory"]["covered"] == 78
+    assert len(rep["records"]) >= 132 and rep["inventory"]["covered"] == 86   # + E-B8's 8 x 3
     # only the gate tests ran: the one ASSERTED node among them is D-D6's band_pad map check
     assert set(rep["inventory"]["asserted"]) == {f"sinusoid/manuscript_mid/maps/{b}_pad/y_data" for b in ("mid", "tri")}
