@@ -130,3 +130,10 @@ def numpy_gate(golden_io):
         return golden_io.to_float(g["atol"]), golden_io.to_float(g["rtol"])
 
     return gate
+
+
+@pytest.fixture(scope="session")
+def facts(golden_io):
+    """golden/sinusoid/model_facts.json (E-A2): the oracle's configs, prior tables, noise
+    bounds, signal sha256, PSD sample and the 45 final runs' prior records."""
+    return golden_io.read_json(SIN_GOLDEN / "model_facts.json")
