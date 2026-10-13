@@ -294,6 +294,10 @@ class Covariance:
     n: int
     jittable: bool = True
     n_u: int = 0
+    #: ``_factor`` takes the keywords ``key`` (this covariance's :meth:`state_key` at ``nu``)
+    #: and ``pre`` (its :meth:`prepare` output) and threads them to its children: set by the
+    #: combinators and ``SchurEdge``.  Other covariances never receive them.
+    threads_key: bool = False
 
     @property
     def batchable(self) -> bool:
@@ -321,6 +325,21 @@ class Covariance:
 
     def _factor(self, C: Any, nu: Any, be: Backend) -> Any:
         raise NotImplementedError
+
+    def prepare(self, C: Any, nu: Any, be: Backend, key: Any) -> Any:
+        """Work done OUTSIDE the compiled factorisation at a concrete ``nu`` (default: none).
+        ``SchurEdge`` with staged rows evaluates them here -- XLA-CPU's irfft is ~6x slower
+        on an input computed inside the same program (WG ``_exact_rows_staged``) -- and the
+        combinators collect their children's; the result reaches ``_factor(..., pre=)`` as a
+        jit argument."""
+        return None
+
+    @staticmethod
+    def child_factor(child: Covariance, C: Any, nu: Any, be: Backend, key: Any = None, pre: Any = None) -> Any:
+        """``child._factor`` with ``key`` / ``pre`` when the child threads them, else plain."""
+        if child.threads_key:
+            return child._factor(C, nu, be, key=key, pre=pre)
+        return child._factor(C, nu, be)
 
     def _matrix(self, C: Any, nu: Any, be: Backend) -> Any:
         raise NotImplementedError(f"{type(self).__name__} has no dense assembly")
@@ -353,23 +372,33 @@ class Covariance:
     def factor(self, nu: Any, be: Backend | None = None, *, jit: bool | None = None) -> Any:
         """Factorise at the noise state ``nu`` (``A_n`` is never inside ``nu``).
 
-        JAX and ``jittable``: one compiled ``jax.jit(lambda C, nu: self._factor(C, nu, be))``
-        per covariance, the constants passed as its argument.  A covariance whose
-        :meth:`state_key` is not ``None`` (adaptive rows below a combinator: the static
-        order needs a concrete ``nu``) runs eagerly unless ``jit`` is given -- the reference
-        path; ``SchurEdge.factor`` itself dispatches per order.
+        JAX and ``jittable`` (or ``jit=True``): the static ``key = state_key(nu)`` (a concrete
+        ``nu``: e.g. the adaptive Chebyshev order of ``SchurEdge`` rows, also below a
+        combinator) selects ONE compiled program per key,
+        ``jax.jit(lambda C, nu, pre: self._factor(C, nu, be, key=key, pre=pre))``, the
+        constants and the :meth:`prepare` output (staged rows) passed as its arguments.
+        NumPy, ``jit=False`` or a non-jittable covariance: eager, in the same order (the
+        reference path).  S4 deferral (c): before, a keyed combinator ran eagerly on JAX.
         """
         be = be or get_backend(nu)
         C = self.constants(be)
         nu = be.asarray(nu)
-        if jit is None:
-            jit = self.jittable and self.state_key(np.asarray(nu, dtype=float)) is None
-        if be.name == "jax" and bool(jit):
+        key = self.state_key(np.asarray(nu, dtype=float))
+        kw = {"key": key} if self.threads_key else {}
+        if be.name == "jax" and (self.jittable if jit is None else bool(jit)):
+            pre = self.prepare(C, nu, be, key)
             fns = self.__dict__.setdefault("_jit_cache", {})
-            if "factor" not in fns:
-                fns["factor"] = be.jit(lambda C, nu: self._factor(C, nu, be))
-            return attach_constants(fns["factor"](C, nu), C)
-        return attach_constants(self._factor(C, nu, be), C)
+            if ("factor", key) not in fns:
+                if self.threads_key:
+                    fns["factor", key] = be.jit(lambda C, nu, pre: self._factor(C, nu, be, key=key, pre=pre))
+                else:
+                    fns["factor", key] = be.jit(lambda C, nu, pre: self._factor(C, nu, be))
+            return attach_constants(fns["factor", key](C, nu, pre), C)
+        return attach_constants(self._factor(C, nu, be, **kw), C)
+
+    def compiled_keys(self) -> tuple:
+        """The static keys :meth:`factor` has compiled a program for (one per key)."""
+        return tuple(k[1] for k in self.__dict__.get("_jit_cache", {}) if isinstance(k, tuple) and k[0] == "factor")
 
     def dense(self, nu: Any) -> np.ndarray:
         """The covariance matrix on the host (tests, dense oracles)."""

@@ -378,9 +378,10 @@ def test_jax_expanded_complex_matches_numpy():
 
 def test_jax_keyed_covariance_runs_its_own_factor():
     """A covariance with a static key (adaptive rows) is not traced inside the likelihood's
-    jit: ``noise_state`` calls ``cov.factor(nu_c, be)`` (eager here) and compiles only the
-    rest; ``state_key`` forwards the key; ``BatchedLikelihood`` refuses it (checked once
-    ``domainia.sampling`` exists: it lands in D-D4, whose Verify reruns this file)."""
+    jit: ``noise_state`` calls ``cov.factor(nu_c, be)`` (one compiled program per key since
+    S4) and compiles the rest; ``state_key`` forwards the key; ``BatchedLikelihood`` refuses
+    it (checked once ``domainia.sampling`` exists: it lands in D-D4, whose Verify reruns this
+    file)."""
     pytest.importorskip("jax")
     from dom_toys import AffineMatrix
     from domainia.covariance import DenseCovariance

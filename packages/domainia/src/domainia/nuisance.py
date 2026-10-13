@@ -200,9 +200,14 @@ class FlatMarginal(Covariance):
     def children(self) -> dict[str, Covariance]:
         return {"cov": self.cov}
 
-    def _factor(self, C: Any, nu: Any, be: Backend) -> MarginalFactor:
+    threads_key = True
+
+    def prepare(self, C: Any, nu: Any, be: Backend, key: Any) -> Any:
+        return self.cov.prepare(C["cov"], nu, be, None if key is None else key[0])
+
+    def _factor(self, C: Any, nu: Any, be: Backend, *, key: Any = None, pre: Any = None) -> MarginalFactor:
         """WT ``marginal_lnlike``'s noise-only half: ``H = U^T C^-1 U``, ``cho_factor(0.5 (H + H^T))``."""
-        F = self.cov._factor(C["cov"], nu, be)
+        F = self.child_factor(self.cov, C["cov"], nu, be, None if key is None else key[0], pre)
         U = C["U"]
         if concrete_failure(F.ok):          # WT: LinAlgError in the base -> -inf; H is never formed
             return MarginalFactor(F, None, None, None, float("nan"), False, self.form, self.n_u)

@@ -172,15 +172,16 @@ def test_state_key_is_the_adaptive_order_and_n_u_is_static():
 
 
 @pytest.mark.jax
-def test_jax_flat_marginal_over_adaptive_rows_runs_eagerly(jax_be):
-    """A combinator over adaptive rows has a static key, so ``factor`` runs it eagerly on JAX
-    (the order needs a concrete ``nu``) instead of failing inside ``jit``."""
+def test_jax_flat_marginal_over_adaptive_rows_compiles_per_key(jax_be):
+    """A combinator over adaptive rows has a static key: ``factor`` compiles one program for
+    it on JAX (S4; before, it ran eagerly) instead of failing inside ``jit``."""
     import jax.numpy as jnp
 
     U = np.linalg.qr(np.random.default_rng(3).standard_normal((N, 2)))[0]
     fm = FlatMarginal(SchurEdge(_interior("diag"), _rows(order="adaptive"), EDGE), U)
     Fn, Fj = fm.factor(NU), fm.factor(jnp.asarray(NU))
     assert type(Fj.logdet).__module__.startswith("jax")
+    assert fm.compiled_keys() == (fm.state_key(NU),)
     assert float(Fj.logdet) == pytest.approx(float(Fn.logdet), rel=1e-12)
 
 

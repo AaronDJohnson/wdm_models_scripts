@@ -177,12 +177,11 @@ class SchurEdge(Covariance):
     on the fly (WG diagonal branch, GB ``EdgeSchurCache``; the JAX default: the state is
     ``B``, ``v`` and ``S``, 120 MiB at the sinusoid grid instead of 233 MiB).
 
-    On JAX the rows are evaluated per static Chebyshev order (``rows.order_for``): one
-    jitted program per order, or the separately compiled stages when ``rows.staged`` and
-    ``rows.phi_cache``; the rest of the factorisation is one more jitted program taking
-    the rows.  With ``jit=False`` (or a non-jittable interior) everything runs eagerly in
-    the rows' own order -- the WG order when ``phi_cache`` -- and the stages are unused:
-    the ``reference`` strategy, never a production JAX path.
+    On JAX ``Covariance.factor`` compiles one program per static key ``(P, interior key)``
+    (``P`` the rows' Chebyshev order, also below ``FlatMarginal`` / ``ChannelStack``): the rows
+    inside it, or -- ``rows.staged`` -- evaluated beforehand by :meth:`prepare` as separately
+    compiled stages and passed in.  With ``jit=False`` (or a non-jittable interior)
+    everything runs eagerly in the rows' own order (the reference path).
     """
 
     def __init__(self, interior: Covariance, rows: PushedRows, edge: Any, *,
@@ -235,37 +234,38 @@ class SchurEdge(Covariance):
         inner = self.interior.state_key(nu)
         return None if own is None and inner is None else (own, inner)
 
-    def factor_from_rows(self, C: Any, nu: Any, R: Any, be: Backend) -> Any:
-        """Everything after the rows (pure; jitted on JAX with ``R`` as an argument)."""
+    def _order(self, nu: Any, key: Any) -> int:
+        """The rows' static Chebyshev order: the key's (adaptive) or ``order_for`` (fixed:
+        ``P_max``; adaptive with a concrete ``nu``)."""
+        return key[0] if key is not None and key[0] is not None else self.rows.order_for(nu)
+
+    def prepare(self, C: Any, nu: Any, be: Backend, key: Any) -> Any:
+        """Staged rows (``rows.staged``): evaluated here as separately compiled stages at the
+        key's order; the interior's own pre-pass under ``"interior"``."""
+        R = self.rows.evaluate_staged(C["rows"], nu, be, self._order(nu, key)) if self.rows.staged else None
+        inner = self.interior.prepare(C["interior"], nu, be, None if key is None else key[1])
+        return None if R is None and inner is None else {"R": R, "interior": inner}
+
+    def factor_from_rows(self, C: Any, nu: Any, R: Any, be: Backend, key: Any = None, pre: Any = None) -> Any:
+        """Everything after the rows (pure; ``key`` / ``pre`` the interior's)."""
         e, i = C["e"], C["i"]
         if self.assembly == "schur":
-            T = self.interior._factor(C["interior"], nu, be)
+            T = self.child_factor(self.interior, C["interior"], nu, be, key, pre)
             return schur_factor(T, R[:, e], R[:, i], chol_impl=self.chol_impl, be=be, form=self.form,
                                 C_T=C["interior"])
         lam = assemble_edge_rows(self.interior._matrix(C["interior"], nu, be), R, e, i, be)
         return dense_factor(lam, chol_impl=self.chol_impl, symmetrize=True, be=be)
 
-    def _factor(self, C: Any, nu: Any, be: Backend) -> Any:
-        return self.factor_from_rows(C, nu, self.rows.evaluate(C["rows"], nu, be), be)
+    threads_key = True
 
-    def factor(self, nu: Any, be: Backend | None = None, *, jit: bool | None = None) -> Any:
-        be = be or get_backend(nu)
-        C = self.constants(be)
-        nu = be.asarray(nu)
-        P = self.rows.order_for(nu)
-        if not (be.name == "jax" and (self.jittable if jit is None else bool(jit))):
-            return attach_constants(self.factor_from_rows(C, nu, self.rows.evaluate(C["rows"], nu, be, P=P), be),
-                                    C)
-        fns = self.__dict__.setdefault("_jit_cache", {})
-        if self.rows.staged and self.rows.phi_cache:
-            R = self.rows.evaluate_staged(C["rows"], nu, be, P)
-        else:
-            if ("rows", P) not in fns:
-                fns["rows", P] = be.jit(lambda Cr, nu, P=P: self.rows.evaluate(Cr, nu, be, P=P))
-            R = fns["rows", P](C["rows"], nu)
-        if "rest" not in fns:
-            fns["rest"] = be.jit(lambda C, nu, R: self.factor_from_rows(C, nu, R, be))
-        return attach_constants(fns["rest"](C, nu, R), C)
+    def _factor(self, C: Any, nu: Any, be: Backend, *, key: Any = None, pre: Any = None) -> Any:
+        """The rows at the static order (``pre["R"]`` when staged), then the rest.  Traceable
+        when the order is static: fixed rows, or ``key`` given (``Covariance.factor``)."""
+        R = None if pre is None else pre["R"]
+        if R is None:
+            R = self.rows.evaluate(C["rows"], nu, be, P=self._order(nu, key))
+        return self.factor_from_rows(C, nu, R, be, None if key is None else key[1],
+                                     None if pre is None else pre["interior"])
 
     def _matrix(self, C: Any, nu: Any, be: Backend) -> Any:
         R = self.rows.evaluate(C["rows"], nu, be)
@@ -515,10 +515,10 @@ class ZeroPadded(Covariance):
         return {"base": self.base}
 
     # -- time_marginal ------------------------------------------------------------------
-    def _time_factor(self, C: Any, nu: Any, be: Backend) -> PaddedFactor:
+    def _time_factor(self, C: Any, nu: Any, be: Backend, key: Any = None, pre: Any = None) -> PaddedFactor:
         """WT ``PaddedMarginal.__init__`` + ``logdet``."""
         g = self.grid
-        Lam = self.base._factor(C["base"], nu, be)
+        Lam = self.child_factor(self.base, C["base"], nu, be, key, pre)
         return padded_factor(Lam, C["Wp"], grid=g, n=self.n, chol_impl=self.chol_impl, be=be, form=self.form,
                              C_base=C["base"])
 
@@ -585,9 +585,14 @@ class ZeroPadded(Covariance):
         Ci = C["interior"]
         return blocktri_cov_factor(diag, up, sizes, self.base.layout, Ci.get("layout"), be, Ci.get("dummy"))
 
-    def _factor(self, C: Any, nu: Any, be: Backend) -> Any:
+    threads_key = True
+
+    def prepare(self, C: Any, nu: Any, be: Backend, key: Any) -> Any:
+        return self.base.prepare(C["base"], nu, be, None if key is None else key[0])
+
+    def _factor(self, C: Any, nu: Any, be: Backend, *, key: Any = None, pre: Any = None) -> Any:
         if self.strategy == "time_marginal":
-            return self._time_factor(C, nu, be)
+            return self._time_factor(C, nu, be, None if key is None else key[0], pre)
         if self.factor_kind == "dense":
             return dense_factor(self._matrix(C, nu, be), chol_impl=self.chol_impl, symmetrize=True, be=be)
         lamKK, Y, blocks = self._congruence_pieces(C, nu, be)

@@ -214,6 +214,6 @@ def test_jax_gram_plan_is_a_jit_argument(jax_be):
 
     cov = Eq45Covariance(SIN_PSD, CellSet.all_active(SIN_GRID), builder="gram", layout="padded")
     F = cov.factor(jnp.asarray(T.SIN_NU))
-    text = cov._jit_cache["factor"].lower(cov.constants(jax_be), jnp.asarray(T.SIN_NU)).as_text()
+    text = cov._jit_cache["factor", None].lower(cov.constants(jax_be), jnp.asarray(T.SIN_NU), None).as_text()
     assert len(text) < 5_000_000
     assert float(F.logdet) == pytest.approx(T.num(T.sinusoid_mid()["g6"]["parts"]["tri_raw"]["logdet_C"]), rel=1e-12)

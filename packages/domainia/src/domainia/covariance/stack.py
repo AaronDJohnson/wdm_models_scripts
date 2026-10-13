@@ -81,8 +81,16 @@ class ChannelStack(Covariance):
         keys = tuple(cov.state_key(nu_c) for cov, nu_c in zip(self.covs, self.split(nu), strict=True))
         return None if all(k is None for k in keys) else keys
 
-    def _factor(self, C: Any, nu: Any, be: Backend) -> StackFactor:
-        fs = tuple(cov._factor(C[str(c)], nu_c, be)
+    threads_key = True
+
+    def prepare(self, C: Any, nu: Any, be: Backend, key: Any) -> Any:
+        pre = tuple(cov.prepare(C[str(c)], nu_c, be, None if key is None else key[c])
+                    for c, (cov, nu_c) in enumerate(zip(self.covs, self.split(nu), strict=True)))
+        return None if all(p is None for p in pre) else pre
+
+    def _factor(self, C: Any, nu: Any, be: Backend, *, key: Any = None, pre: Any = None) -> StackFactor:
+        fs = tuple(self.child_factor(cov, C[str(c)], nu_c, be, None if key is None else key[c],
+                                     None if pre is None else pre[c])
                    for c, (cov, nu_c) in enumerate(zip(self.covs, self.split(nu), strict=True)))
         logdet = 0.0
         ok = True

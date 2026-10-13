@@ -134,8 +134,9 @@ def test_jit_takes_the_constants_as_an_argument(jax_be):
     cov = DiagonalCovariance(Big(), 16)
     F = cov.factor(jnp.asarray([0.1, 0.0]))
     assert type(F.logdet).__module__.startswith("jax")
-    fn = cov._jit_cache["factor"]
-    text = fn.lower(cov.constants(jax_be), jnp.asarray([0.1, 0.0])).as_text()
+    assert cov.compiled_keys() == (None,)                     # one program, no static key
+    fn = cov._jit_cache["factor", None]
+    text = fn.lower(cov.constants(jax_be), jnp.asarray([0.1, 0.0]), None).as_text()
     assert len(text) < 200_000
     assert float(F.logdet) == pytest.approx(float(cov.factor(np.array([0.1, 0.0])).logdet), rel=1e-15)
 
