@@ -6,7 +6,7 @@ A covariance is built once from host constants and factorised once per noise sta
 
     cov = DiagonalCovariance(variance)
     F = cov.factor(nu)                    # NumPy: eager, oracle operation order
-    F = cov.factor(jnp.asarray(nu))       # JAX: jax.jit(cov._factor)(constants, nu)
+    F = cov.factor(jnp.asarray(nu))       # JAX: one jax.jit(cov._factor) per state_key(nu)
 
 ``F`` is a :class:`Factor`: ``logdet`` (:math:`\ln|C|`), ``ok`` (False when ``C`` is not
 positive definite: the likelihood is then :math:`-\infty`), ``solve(b)`` (:math:`C^{-1}b`),

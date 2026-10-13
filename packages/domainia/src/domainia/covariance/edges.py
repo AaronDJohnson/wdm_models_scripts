@@ -27,8 +27,8 @@ from wdm.grid import active_mask, packed_cells
 from wdm.transform import band_atoms, forward_time_many, inverse_time_many
 
 from ..linalg import BandLayout
-from .base import (CholFactor, Covariance, DiagFactor, QuadForm, attach_constants, concrete_failure,
-                   factor_constants, quad_form)
+from .base import (CholFactor, Covariance, DiagFactor, QuadForm, concrete_failure, factor_constants,
+                   quad_form)
 from .blocktri import blocktri_cov_factor, dummy_slots
 from .dense import dense_factor
 from .diagonal import DiagonalCovariance
