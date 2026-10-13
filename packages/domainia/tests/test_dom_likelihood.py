@@ -201,6 +201,34 @@ def test_not_positive_definite_rows_are_minus_inf_and_counted():
     assert lik.counters() == dict.fromkeys(list(COUNTERS) + ["cache_hits"], 0)
 
 
+def failed_marginal_like(backend=None):
+    """A ``FlatMarginal`` over a dense channel whose factorisation fails at ``bad``
+    (``C = e^a K0 - 50 I``): the marginal never forms ``H`` and must not be applied."""
+    rng = np.random.default_rng(15)
+    n, nu_ = 20, 3
+    params = Params(("s0", "s1", "log10_A_n", "a", "b"), (0, 1), (3, 4))
+    lik = GaussianLikelihood(rng.standard_normal(n), ToyMap(np.eye(n)), dense_cov(spd(n, rng), n),
+                             RealGaussian(-3.5, "log10_A_n"), signal=ToySignal(rng.standard_normal((2, n))),
+                             params=params, nuisance=rng.standard_normal((n, nu_)), backend=backend)
+    return lik, np.array([0.3, -0.2, 0.4, 0.1, -50.0])
+
+
+def test_lnl_row_and_evaluate_map_a_failed_combinator_state_to_minus_inf():
+    """A concretely failed state (outside ``jit``) is never applied: ``lnl_row`` gives
+    ``(-inf, True)`` and ``evaluate`` ``-inf``, as ``__call__`` does -- the NumPy row loop
+    of ``BatchedLikelihood`` must not raise the marginal's "check ok first"."""
+    lik, bad = failed_marginal_like()
+    lnl, failed = lik.lnl_row(lik.parts, bad)
+    assert np.isneginf(lnl) and bool(failed) is True
+    assert np.isneginf(lik.evaluate(bad, lik.noise_state(lik.noise_slice_host(bad))))
+    out = lik(bad[None])
+    assert np.isneginf(out).all() and lik.last_failed.tolist() == [True]
+    good = bad.copy()
+    good[4] = 0.2
+    lnl, failed = lik.lnl_row(lik.parts, good)               # the guard leaves a PD row alone
+    assert lnl == lik(good[None])[0] and np.isfinite(lnl) and not bool(failed)
+
+
 def test_row_ok_rejects_without_flagging_a_failure():
     rng = np.random.default_rng(7)
     C = rng.standard_normal((P, NB)) + 1j * rng.standard_normal((P, NB))
@@ -327,6 +355,18 @@ def test_jax_keyed_covariance_runs_its_own_factor():
 
     with pytest.raises(TypeError, match="traceable"):
         BatchedLikelihood(liks[1])
+
+
+def test_jax_failed_combinator_state_eager_and_jitted():
+    """Eager JAX ``lnl_row`` takes the concrete guard; under ``jit`` the guard is inert
+    (``ok`` is a tracer) and the failed state's NaN maps the row to ``(-inf, True)``."""
+    jax = pytest.importorskip("jax")
+    lik, bad = failed_marginal_like(backend="jax")
+    th = jax.numpy.asarray(bad)
+    for fn in (lik.lnl_row, jax.jit(lik.lnl_row)):
+        lnl, failed = fn(lik.parts, th)
+        assert np.isneginf(float(lnl)) and bool(failed) is True
+    assert np.isneginf(float(lik.evaluate(bad, lik.noise_state(lik.noise_slice_host(bad)))))
 
 
 def test_jax_refuses_a_map_that_is_not_a_pytree():

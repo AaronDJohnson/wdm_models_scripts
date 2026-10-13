@@ -53,6 +53,7 @@ import numpy as np
 
 from wdm.backend import NUMPY, Backend, get_backend, pytree_dataclass
 
+from .covariance.base import concrete_failure
 from .covariance.stack import ChannelStack
 from .density import ComplexGaussian, RealGaussian
 
@@ -410,8 +411,14 @@ class GaussianLikelihood(_CountersMixin):
 
     def lnl_row(self, parts: _Parts, theta: Any) -> tuple[Any, Any]:
         """``(lnL, failed)`` of one row, noise state included (jit/vmap-able on JAX when
-        ``traceable``)."""
+        ``traceable``).  A concretely failed state (outside ``jit``: NumPy, eager JAX) is
+        never applied -- a combinator's factor (``FlatMarginal``, ``SchurEdge``, ragged
+        block-tridiagonal, zero padding) raises "check ok first" -- and gives
+        ``(-inf, True)``; under tracing the guard is inert (``ok`` is a tracer) and
+        ``_evaluate``'s ``where(ok, ...)`` maps the row to ``-inf``."""
         state = self._noise_state(parts, self.noise_slice(theta))
+        if concrete_failure(state.ok):
+            return -self.be.xp.inf, True
         return self._evaluate(parts, theta, state), ~state.ok
 
     # -- user-facing --------------------------------------------------------
@@ -426,7 +433,10 @@ class GaussianLikelihood(_CountersMixin):
         return self._finish_fn(self.parts, factors)
 
     def evaluate(self, theta: Any, state: NoiseState) -> Any:
-        """One row's lnL against a noise state (compiled on JAX when ``jittable``)."""
+        """One row's lnL against a noise state (compiled on JAX when ``jittable``); ``-inf``
+        without applying the factors when the state failed (``state.ok`` concretely False)."""
+        if concrete_failure(state.ok):
+            return -self.be.xp.inf
         return self._eval_fn(self.parts, self.be.asarray(np.asarray(theta, dtype=np.float64)), state)
 
     def quad_logdet(self, theta: Any) -> np.ndarray:
