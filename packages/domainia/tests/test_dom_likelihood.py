@@ -230,6 +230,9 @@ def test_noise_clamp_clips_before_the_factorisation():
     with pytest.raises(ValueError, match="positive"):
         GaussianLikelihood(np.zeros(n), ToyMap(np.eye(n)), diag_cov(np.ones(n), n), RealGaussian(),
                            signal=ToySignal(np.ones((1, n))), params=params, noise_clamp={"a": 0.0})
+    with pytest.raises(ValueError, match="noise parameters only; 's'"):
+        GaussianLikelihood(np.zeros(n), ToyMap(np.eye(n)), diag_cov(np.ones(n), n), RealGaussian(),
+                           signal=ToySignal(np.ones((1, n))), params=params, noise_clamp={"s": 1.0})
 
 
 def test_construction_errors():
@@ -301,6 +304,10 @@ def test_jax_keyed_covariance_runs_its_own_factor():
         def state_key(self, nu):
             return int(np.asarray(nu)[0] > 0)
 
+        def factor(self, nu, be=None, *, jit=None):
+            self.factor_calls = getattr(self, "factor_calls", 0) + 1
+            return super().factor(nu, be, jit=jit)
+
     rng = np.random.default_rng(14)
     n = 12
     K0, W, data, B = spd(n, rng), rng.standard_normal((n, n)), rng.standard_normal(n), rng.standard_normal((2, n))
@@ -313,6 +320,7 @@ def test_jax_keyed_covariance_runs_its_own_factor():
     assert liks[1].state_key(X[0, 2:]) == (1,) and liks[1].state_key(X[1, 2:]) == (0,)
     a, b = liks[0](X), liks[1](X)
     assert np.max(np.abs(a - b) / np.abs(a)) <= 1e-12
+    assert getattr(liks[1].covs[0], "factor_calls", 0) == len(X)    # its own factor, once per row
     if importlib.util.find_spec("domainia.sampling") is None:
         return                          # D-D4 (domainia.sampling) not landed yet
     from domainia.sampling import BatchedLikelihood

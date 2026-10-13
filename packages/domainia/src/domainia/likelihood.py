@@ -284,6 +284,9 @@ class GaussianLikelihood(_CountersMixin):
         self._amp = (params.index(density.amplitude)
                      if isinstance(density, RealGaussian) and density.amplitude else None)
         clamp = dict(noise_clamp or {})
+        for name in clamp:                 # else tuple.index's "x not in tuple"
+            if params.index(name) not in params.noise:
+                raise ValueError(f"noise_clamp clips noise parameters only; {name!r} is not one")
         self._clamp = tuple((params.noise.index(params.index(name)), float(c))
                             for name, c in sorted(clamp.items()))
         if any(not c > 0 for _, c in self._clamp):
