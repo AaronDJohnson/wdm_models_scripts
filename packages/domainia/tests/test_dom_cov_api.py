@@ -26,8 +26,8 @@ EXPORTS = {
     "ExactFourierCovariance", "ExactTimeCovariance", "Factor", "HermitianCovariance", "HermitianFactor",
     "OperatorFactor", "PadMask", "PaddedFactor", "PushedRows", "QuadForm", "SchurEdge", "SchurFactor",
     "StackFactor", "ZeroPadded", "as_evaluator", "assemble_edge_rows", "bessel_coefficients", "cheb_order",
-    "cheb_tail", "cut", "dense_factor", "ghat", "keep_mask", "positions", "quad_form", "schur_factor",
-    "window_bins",
+    "cheb_tail", "cut", "dense_factor", "ghat", "keep_mask", "padded_factor", "positions", "quad_form",
+    "schur_factor", "window_bins",
 }
 SRC = Path(__file__).resolve().parents[1] / "src"
 WDM_SRC = Path(__file__).resolve().parents[2] / "wdm" / "src"

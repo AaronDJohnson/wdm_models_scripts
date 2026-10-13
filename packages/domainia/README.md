@@ -6,9 +6,10 @@ likelihoods over the WDM transform: the middle layer of the WDM Paper II release
 
 * `domainia.domains`, `domainia.data`: time / Fourier / WDM-cell domains (static, hashable)
   and the data vectors on them (JAX pytrees).
-* `domainia.linalg`: block-tridiagonal (ragged host loop or padded `scan`), complex
-  Hermitian block, dense, Schur and padded-marginal factors, preconditioned CG; each a
-  port of one legacy oracle with its library call pinned.
+* `domainia.linalg`: array kernels -- block-tridiagonal (ragged host loop or padded
+  `scan`), complex Hermitian block, preconditioned CG; each a port of one legacy oracle
+  with its library call pinned.  The factor objects (diagonal, dense, Schur, padded
+  marginal) are `domainia.covariance`'s: one family (S4).
 * `domainia.assets`: fail-closed artifacts (identity + sha256; never written implicitly).
 * `domainia.testing`: dense oracles for tests.
 

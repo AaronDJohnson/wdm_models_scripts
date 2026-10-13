@@ -17,8 +17,10 @@ import numpy as np
 import pytest
 
 import wdm
+from wdm.backend import NUMPY
 from wdm.evolutionary import eq45_blocks_cheb, eq45_coeffs_bessel, eq45_plan
 from domainia import linalg as la
+from domainia.covariance import BlockTriCovFactor, DiagFactor, HermitianCovariance, padded_factor
 from domainia.domains import CellSet
 
 pytestmark = pytest.mark.golden
@@ -93,11 +95,11 @@ def test_sinusoid_diagonal_quad_and_logdet(sin, same_build, golden_io, base, key
     bitwise = same_build(sin["g6"]["runtime"])
     for edge, kept in (("raw", cells), ("cut", cells.drop_columns(6, 5))):
         pos = kept.packed_positions()
-        f = la.diag_factor(sin["arrays"][key][pos])
+        f = DiagFactor.build(sin["arrays"][key][pos], NUMPY)
         y = sin["y"][pos]
         part = sin["g6"]["parts"][f"{base}_{edge}"]
         gate(float(f.logdet), golden_io.to_float(part["logdet_C"]), bitwise=bitwise)
-        gate(float(y @ la.diag_solve(f, y)), golden_io.to_float(part["quad_C"]), bitwise=bitwise)
+        gate(float(y @ f.solve(y)), golden_io.to_float(part["quad_C"]), bitwise=bitwise)
 
 
 def test_sinusoid_padded_marginal(sin, same_build, golden_io):
@@ -113,18 +115,19 @@ def test_sinusoid_padded_marginal(sin, same_build, golden_io):
     idx = np.asarray(wp_fp["sample_index"])
     assert np.array_equal(Wp.reshape(-1)[idx], np.asarray(wp_fp["sample_values"]))
     m, n = wdm.grid.packed_cells(NF, Ntp)
-    lam = {"tri_pad": la.blocktri_factor(*tri_blocks(Ntp, None, Ntp / NT), layout="ragged"),
-           "mid_pad": la.diag_factor(0.5 * np.exp((AC + AD * (n * wdm.delta_T(NF, DT) / (N * DT) - 0.5))
-                                                  * L_of(wdm.band_frequencies(NF, DT))[m]))}
+    bt = la.blocktri_factor(*tri_blocks(Ntp, None, Ntp / NT), layout="ragged")
+    lam = {"tri_pad": BlockTriCovFactor(bt, bt.logdet, bt.ok, "ragged"),
+           "mid_pad": DiagFactor.build(0.5 * np.exp((AC + AD * (n * wdm.delta_T(NF, DT) / (N * DT) - 0.5))
+                                                    * L_of(wdm.band_frequencies(NF, DT))[m]), NUMPY)}
     bitwise = same_build(sin["g6"]["runtime"])
     x = sin["x"]
     for model, base in lam.items():
-        f = la.padded_factor(base, Wp, n_ext=Np, dt=DT, impl="scipy")
+        f = padded_factor(base, Wp, grid=wdm.Grid(NF, Ntp, DT), n=N, chol_impl="scipy", be=NUMPY)
         ext = np.zeros((1, Np))
         ext[0, :N] = x
         w = wdm.forward_time_many(ext, NF, Ntp, DT)[:, wdm.active_mask(NF, Ntp)].T
         full = np.zeros((1, NF + 1, Ntp))
-        full[:, wdm.active_mask(NF, Ntp)] = la.padded_solve(f, w).T
+        full[:, wdm.active_mask(NF, Ntp)] = f.solve_cells(w, C={"Wp": Wp, "base": None}).T
         Cx = DT * wdm.inverse_time_many(full, NF, Ntp, DT)[0, :N]          # PaddedMarginal.solve
         part = sin["g6"]["parts"][model]
         gate(float(f.logdet), golden_io.to_float(part["logdet_C"]), bitwise=bitwise)
@@ -159,12 +162,8 @@ def test_gb_exact_covariance_factor(same_build, golden_io, case, block):
         lag = np.arange(n)[None, :] - np.arange(n)[:, None] + n - 1
         root = np.sqrt(sG)
         M = np.diag(sI.astype(complex)) + (root[:, None] * root[None, :]) * np.conj(gh)[lag]
-        if block:
-            f = la.cblock_factor(M, block)
-            u = la.cblock_forward(f, zc)
-        else:
-            f = la.chol_factor(M, impl="numpy")
-            u = la.chol_whiten(f, zc)
+        f = HermitianCovariance(M, block=block).factor(np.zeros(1), NUMPY)
+        u = f.whiten(zc)
         want = g6["scalars"][f"Mprime_c{c}"]
         gate(float(f.logdet), golden_io.to_float(want["logdet"]), bitwise=bitwise)
         gate(float(np.real(np.vdot(u, u))), golden_io.to_float(want["q0"]), bitwise=bitwise)

@@ -16,6 +16,7 @@ from wdm.backend import NUMPY
 from wdm.evolutionary import eq45_blocks_cheb, eq45_coeffs_bessel, eq45_plan, exact_covariance
 from domainia import linalg as la
 from domainia import testing as T
+from domainia.covariance import CholFactor, DiagFactor, padded_factor, schur_factor
 from domainia.domains import CellSet
 
 pytestmark = pytest.mark.jax
@@ -136,11 +137,11 @@ def test_dense_cblock_schur_and_padded_factors_on_jax(jax_be, rng):
     A = rng.standard_normal((20, 20))
     C = A @ A.T + 20 * np.eye(20)
     r = rng.standard_normal(20)
-    q = jax.jit(lambda C, r: (lambda f: (f.logdet, la.chol_whiten(f, r)))(
-        la.chol_factor(C, impl="numpy", symmetrize=True)))(jnp.asarray(C), jnp.asarray(r))
-    fn = la.chol_factor(C, impl="numpy", symmetrize=True)
+    q = jax.jit(lambda C, r: (lambda f: (f.logdet, f.whiten(r)))(
+        CholFactor.build(0.5 * (C + C.T), impl="numpy", be=jax_be)))(jnp.asarray(C), jnp.asarray(r))
+    fn = CholFactor.build(0.5 * (C + C.T), impl="numpy", be=NUMPY)
     assert abs(float(q[0]) - float(fn.logdet)) < 1e-12 * abs(float(fn.logdet))
-    assert rel(q[1], la.chol_whiten(fn, r)) < 1e-12
+    assert rel(q[1], fn.whiten(r)) < 1e-12
     b, nb = 6, 4
     Z = rng.standard_normal((b * nb, b * nb)) + 1j * rng.standard_normal((b * nb, b * nb))
     M = Z @ Z.conj().T / (b * nb) + 2 * np.eye(b * nb)
@@ -149,7 +150,7 @@ def test_dense_cblock_schur_and_padded_factors_on_jax(jax_be, rng):
         la.cblock_factor(M, b)))(jnp.asarray(M), jnp.asarray(z))
     fc = la.cblock_factor(M, b)
     assert abs(float(out[0]) - float(fc.logdet)) < 1e-12 * abs(float(fc.logdet))
-    assert rel(out[1], la.factor_solve(fc, z)) < 1e-12
+    assert rel(out[1], la.cblock_backward(fc, la.cblock_forward(fc, z))) < 1e-12
     # Schur over a diagonal interior (the GB band/mid_exact JAX default)
     cells = CellSet.all_active(GRID)
     edge = cells.columns(3, 1)
@@ -159,12 +160,12 @@ def test_dense_cblock_schur_and_padded_factors_on_jax(jax_be, rng):
     v = np.diag(ex)[i]
     y = rng.standard_normal(N)
 
-    def schur(v, Ree, Rei, e, i, y):
-        f = la.schur_factor(la.diag_factor(v), Ree, Rei, e=e, i=i, form="scaled", impl="numpy")
-        return f.logdet, la.schur_solve(f, y)
+    def schur(v, Ree, Rei, e, i, y, be):
+        f = schur_factor(DiagFactor.build(v, be), Ree, Rei, form="scaled", chol_impl="numpy", be=be)
+        return f.logdet, f.solve(y, C={"e": e, "i": i, "interior": None}, be=be)
 
-    got = jax.jit(schur)(*(jnp.asarray(a) for a in (v, R[:, e], R[:, i], e, i, y)))
-    want = schur(v, R[:, e], R[:, i], e, i, y)
+    got = jax.jit(lambda *a: schur(*a, jax_be))(*(jnp.asarray(a) for a in (v, R[:, e], R[:, i], e, i, y)))
+    want = schur(v, R[:, e], R[:, i], e, i, y, NUMPY)
     assert abs(float(got[0]) - float(want[0])) < 1e-12 * abs(float(want[0]))
     assert rel(got[1], want[1]) < 1e-12
     # padded marginal
@@ -174,12 +175,13 @@ def test_dense_cblock_schur_and_padded_factors_on_jax(jax_be, rng):
     vext = rng.uniform(0.5, 2.0, Np)
     w = rng.standard_normal(Np)
 
-    def pad(vext, Wp, w):
-        f = la.padded_factor(la.diag_factor(vext), Wp, n_ext=Np, dt=DT, impl="numpy")
-        return f.logdet, la.padded_solve(f, w)
+    def pad(vext, Wp, w, be):
+        f = padded_factor(DiagFactor.build(vext, be), Wp, grid=wdm.Grid(NF, NT + 2, DT), n=N, chol_impl="numpy",
+                          be=be)
+        return f.logdet, f.solve_cells(w, C={"Wp": Wp, "base": None}, be=be)
 
-    gp = jax.jit(pad)(jnp.asarray(vext), jnp.asarray(W[:, N:]), jnp.asarray(w))
-    wp = pad(vext, W[:, N:], w)
+    gp = jax.jit(lambda *a: pad(*a, jax_be))(jnp.asarray(vext), jnp.asarray(W[:, N:]), jnp.asarray(w))
+    wp = pad(vext, W[:, N:], w, NUMPY)
     assert abs(float(gp[0]) - float(wp[0])) < 1e-12 * abs(float(wp[0]))
     assert rel(gp[1], wp[1]) < 1e-12
 

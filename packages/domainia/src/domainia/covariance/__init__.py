@@ -19,6 +19,7 @@ from .edges import (
     ZeroPadded,
     assemble_edge_rows,
     cut,
+    padded_factor,
     schur_factor,
 )
 from .eq45 import Eq45Covariance, keep_mask, window_bins
@@ -64,6 +65,7 @@ __all__ = [
     "dense_factor",
     "ghat",
     "keep_mask",
+    "padded_factor",
     "positions",
     "quad_form",
     "schur_factor",

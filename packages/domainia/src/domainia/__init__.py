@@ -11,8 +11,9 @@ Modules
   ``ChannelAxis`` (frozen, hashable: static under ``jax.jit``)
 * :mod:`domainia.data`: ``TimeSeries``, ``FourierBins``, ``WDMCells`` (pytrees; the
   domain and channels are static metadata)
-* :mod:`domainia.linalg`: block-tridiagonal (ragged / padded), Hermitian block, dense,
-  Schur and padded-marginal factors, preconditioned CG
+* :mod:`domainia.linalg`: array kernels -- block-tridiagonal (ragged / padded), Hermitian
+  block, preconditioned CG (the factor objects -- diagonal, dense, Schur, padded marginal --
+  are :mod:`domainia.covariance`'s, one family since S4)
 * :mod:`domainia.assets`: ``Artifact`` (identity + sha256, fail-closed, never writes
   unless asked)
 * :mod:`domainia.testing`: dense oracles for tests (not imported here)

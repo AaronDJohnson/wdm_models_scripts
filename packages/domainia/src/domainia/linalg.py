@@ -1,4 +1,4 @@
-"""Factorisations and solves of the WDM II covariances (spec sections 3.4 and 4).
+"""Array kernels of the WDM II factorisations (spec sections 3.4 and 4).
 
 Every routine is a line-for-line port of one oracle code path and keeps that oracle's
 library call at each call site (spec section 0, rule 1).  The Cholesky implementation
@@ -10,14 +10,17 @@ routine                     ``impl``    oracle
 :func:`blocktri_factor`     ``numpy``   WT ``matrix.BlockTri`` (ragged), WG ``_btri_factor``
                                         (padded)
 :func:`cblock_factor`       ``numpy``   GB ``fullcache.block_factor`` (12-month exact)
-:func:`chol_factor`         per call    WT ``Solver(dense)`` / ``marginal_lnlike`` (scipy);
-                                        GB ``_dense_quad_logdet``, ``MatrixCache``,
-                                        ``fullcache`` dense, ``lnl_complex`` (numpy)
-:func:`schur_factor`        per call    WT ``Schur`` (scipy); GB ``EdgeSchurCache`` (numpy);
-                                        WG ``_factor`` (JAX)
-:func:`padded_factor`       per call    WT ``PaddedMarginal`` (scipy); WG ``_factor`` pad
-                                        branch (JAX)
+:func:`pcg`                 --          WT ``fastcov.pcg``, WG ``BandFullCovarianceGPU._solve``
 ==========================  ==========  ===============================================
+
+**One factor family (S4 deferral (a)).**  The factor objects with methods -- diagonal and
+dense Cholesky (``domainia.covariance.base.DiagFactor`` / ``CholFactor``), the
+block-tridiagonal factor in cell order (``covariance.blocktri.BlockTriCovFactor``), the
+Schur complement (``covariance.edges.SchurFactor`` / ``schur_factor``, WT ``Schur`` and the
+WG / GB ``"scaled"`` order) and the padded marginal (``covariance.edges.PaddedFactor`` /
+``padded_factor``, WT ``PaddedMarginal`` and the WG cell-space ``reduce``) -- live in
+``domainia.covariance``; this module keeps the array kernels they call.  The duplicate
+free-function copies S2 had here (``diag_factor`` ... ``factor_solve``) are gone.
 
 Layouts of a block-tridiagonal matrix (spec section 3.2):
 
@@ -55,11 +58,7 @@ __all__ = [
     "BandLayout",
     "BlockTriFactor",
     "CBlockFactor",
-    "CholFactor",
-    "DiagFactor",
     "PCGResult",
-    "PaddedFactor",
-    "SchurFactor",
     "blocktri_factor",
     "blocktri_solve",
     "blocktri_solve_packed",
@@ -68,25 +67,11 @@ __all__ = [
     "cblock_backward",
     "cblock_factor",
     "cblock_forward",
-    "chol_backward",
-    "chol_factor",
-    "chol_solve",
-    "chol_whiten",
     "device_constants",
-    "diag_factor",
-    "diag_solve",
-    "factor_solve",
-    "padded_factor",
-    "padded_reduce",
-    "padded_solve",
     "pcg",
-    "schur_edge_whiten",
-    "schur_factor",
-    "schur_solve",
 ]
 
 Layout = Literal["ragged", "padded"]
-CholImpl = Literal["numpy", "scipy"]
 
 
 def _be(be: Backend | None, *arrays: Any) -> Backend:
@@ -97,89 +82,6 @@ def _logdet_from_chol(xp: Any, L: Any) -> Any:
     """``2 sum log Re diag L`` -- the expression every oracle uses (``np.real`` of a real
     array is the array itself, so the real and complex forms agree bit for bit)."""
     return 2.0 * xp.sum(xp.log(xp.real(xp.diagonal(L, axis1=-2, axis2=-1))))
-
-
-# ---------------------------------------------------------------------------
-# Diagonal
-# ---------------------------------------------------------------------------
-
-
-@pytree_dataclass(data=("v", "logdet", "ok"))
-@dataclass(frozen=True, eq=False)
-class DiagFactor:
-    """``C = diag(v)``."""
-
-    v: Any
-    logdet: Any
-    ok: Any
-
-
-def diag_factor(v: Any, *, be: Backend | None = None) -> DiagFactor:
-    """WT ``Solver(diag=v)`` (matrix.py:579-596); ``logdet = sum(log v)``, ``ok = all(v > 0)``."""
-    be = _be(be, v)
-    xp = be.xp
-    v = be.asarray(v)
-    return DiagFactor(v, xp.sum(xp.log(v)), xp.all(v > 0))
-
-
-def diag_solve(f: DiagFactor, b: Any, *, be: Backend | None = None) -> Any:
-    """``C^-1 b`` as WT ``Solver.solve`` / WG ``_approx_solve``: ``b / v`` (column-wise for 2-D ``b``)."""
-    return b / (f.v if b.ndim == 1 else f.v[:, None])
-
-
-# ---------------------------------------------------------------------------
-# Dense Cholesky (real symmetric or complex Hermitian)
-# ---------------------------------------------------------------------------
-
-
-@pytree_dataclass(data=("L", "logdet", "ok"), meta=("impl",))
-@dataclass(frozen=True, eq=False)
-class CholFactor:
-    """``C = L L^H``, ``L`` lower triangular (upper triangle zero)."""
-
-    L: Any
-    logdet: Any
-    ok: Any
-    impl: str
-
-
-def chol_factor(A: Any, *, impl: CholImpl, symmetrize: bool = False,
-                be: Backend | None = None) -> CholFactor:
-    """Cholesky of ``A`` (``0.5 (A + A^T)`` first when ``symmetrize``).
-
-    ``impl="scipy"``: WT ``Solver(dense)``, ``marginal_lnlike`` (``cho_factor``);
-    ``impl="numpy"``: GB ``_dense_quad_logdet`` / ``MatrixCache.state`` (with
-    ``symmetrize=True``, matrix.py:928-938, 978-983), GB ``fullcache`` dense and
-    ``lnl_complex`` (``symmetrize=False``).
-    """
-    be = _be(be, A)
-    xp = be.xp
-    A = be.asarray(A)
-    if symmetrize:
-        A = 0.5 * (A + xp.swapaxes(A, -1, -2))
-    L, ok = be.cholesky(A, impl=impl)
-    return CholFactor(L, _logdet_from_chol(xp, L), ok, impl)
-
-
-def chol_whiten(f: CholFactor, b: Any, *, be: Backend | None = None) -> Any:
-    """``L^-1 b`` (GB ``fullcache._solve_lower``, ``matrix._solve_lower``, ``lnl_complex``)."""
-    be = _be(be, f.L, b)
-    return be.solve_triangular(f.L, b, lower=True)
-
-
-def chol_backward(f: CholFactor, u: Any, *, be: Backend | None = None) -> Any:
-    """``L^-H u``: ``trans="T"`` for a real ``L`` (GB ``matrix._solve_lower(trans=True)``),
-    ``trans="C"`` for a complex one (GB ``fullcache._solve_upper_h``).  scipy takes a
-    different LAPACK path for the two, so the choice follows the oracle by dtype."""
-    be = _be(be, f.L, u)
-    trans = 2 if be.xp.iscomplexobj(f.L) else 1
-    return be.solve_triangular(f.L, u, lower=True, trans=trans)
-
-
-def chol_solve(f: CholFactor, b: Any, *, be: Backend | None = None) -> Any:
-    """``C^-1 b`` by ``cho_solve`` (WT ``Solver(dense)``, ``Schur``, ``PaddedMarginal``)."""
-    be = _be(be, f.L, b)
-    return be.cho_solve(f.L, b)
 
 
 # ---------------------------------------------------------------------------
@@ -342,7 +244,7 @@ def _padded_factor(diag: Any, up: Any, band_layout: BandLayout, be: Backend) -> 
         Ls = xp.concatenate([L0[None], Ls], axis=0)
     dg = xp.diagonal(Ls, axis1=1, axis2=2)
     logdet = 2.0 * xp.sum(xp.log(dg))
-    ok = xp.all(xp.isfinite(dg))
+    ok = xp.all(xp.isfinite(dg) & (dg > 0))          # finite and positive (one ok rule)
     return BlockTriFactor(Ls, Xs, logdet, ok, band_layout, "padded")
 
 
@@ -394,12 +296,6 @@ def _require_complete(f: Any) -> None:
     if _failed(f):
         raise ValueError("the factorisation failed (not positive definite): check .ok first "
                          "and map the row to -inf")
-
-
-def _check_impl(impl: str) -> None:
-    """The ``impl`` check of ``Backend.cholesky``, made before any failed-base shortcut."""
-    if impl not in ("numpy", "scipy"):
-        raise ValueError(f"impl must be 'numpy' or 'scipy'; got {impl!r}")
 
 
 def _factor_arrays(f: BlockTriFactor) -> tuple[Any, ...]:
@@ -593,199 +489,6 @@ def cblock_backward(f: CBlockFactor, u: Any, *, be: Backend | None = None) -> An
         y[i] = be.solve_triangular(Ls[i], u[i * b:(i + 1) * b] - xp.conj(Cs[i + 1]).T @ y[i + 1],
                                    lower=True, trans=2)
     return xp.concatenate(y)
-
-
-# ---------------------------------------------------------------------------
-# Schur complement over an approximate interior (edge-exact models)
-# ---------------------------------------------------------------------------
-
-SchurForm = Literal["solve", "scaled"]
-
-
-@pytree_dataclass(data=("base", "B", "W", "Ls", "logdet", "ok", "e", "i"), meta=("form", "impl"))
-@dataclass(frozen=True, eq=False)
-class SchurFactor:
-    """``C = [[A, B], [B^T, T]]`` on the edge cells ``e`` and the interior ``i`` (positions in
-    the combined vector), ``T`` factored by ``base``, ``S = A - B T^-1 B^T = Ls Ls^T``.
-
-    ``form="solve"``: ``W = T^-1 B^T`` (WT ``Schur.TiBt``).  ``form="scaled"`` (diagonal
-    ``T`` only): ``W = B T^-1`` formed on the fly (WG ``_factor``, GB ``EdgeSchurCache``
-    ``BD``).
-    """
-
-    base: Any
-    B: Any
-    W: Any
-    Ls: Any
-    logdet: Any
-    ok: Any
-    e: Any
-    i: Any
-    form: str
-    impl: str
-
-
-def schur_factor(base: Any, A_ee: Any, B_ei: Any, *, e: Any, i: Any, form: SchurForm,
-                 impl: CholImpl, be: Backend | None = None) -> SchurFactor:
-    """Factor the edge-exact hybrid.  ``A_ee`` is symmetrised first (``0.5 (A + A^T)``:
-    WT ``MatrixWdm.solver``, src/wdm_toys/matrix.py:837-838; WG ``_factor``,
-    gpu_sinusoid/wdmtoysgpu/matrix.py:567-568; GB ``EdgeSchurCache.state``,
-    galactic_binary/matrix.py:1047), then
-
-    * ``"solve"`` (WT ``Schur.__init__`` :602-607, WG tri branch :574-575):
-      ``W = T^-1 B^T``, ``S = A - B W``;
-    * ``"scaled"`` (WG diagonal branch :572, GB :1046-1047): ``W = B / v``,
-      ``S = A - W B^T``;
-
-    ``Ls = chol(0.5 (S + S^T))`` with ``impl`` (``"scipy"`` WT, ``"numpy"`` GB) and
-    ``logdet = base.logdet + 2 sum log diag Ls``.  ``form``, ``impl`` and the base type
-    are checked first, also when the base failed.
-    """
-    if form not in ("solve", "scaled"):
-        raise ValueError(f"form must be 'solve' or 'scaled'; got {form!r}")
-    if form == "scaled" and not isinstance(base, DiagFactor):
-        raise TypeError("form='scaled' needs a DiagFactor interior")
-    _check_impl(impl)
-    be = _be(be, A_ee, B_ei)
-    xp = be.xp
-    A_ee, B_ei = be.asarray(A_ee), be.asarray(B_ei)
-    if _failed(base):                     # WT: the interior's LinAlgError came first
-        return SchurFactor(base, B_ei, None, None, float("nan"), False, be.asarray(e),
-                           be.asarray(i), form, impl)
-    A = 0.5 * (A_ee + A_ee.T)
-    if form == "solve":
-        W = factor_solve(base, B_ei.T, be=be)
-        Sc = A - B_ei @ W
-    else:
-        W = B_ei / base.v[None, :]
-        Sc = A - W @ B_ei.T
-    Ls, ok = be.cholesky(0.5 * (Sc + Sc.T), impl=impl)
-    logdet = base.logdet + 2.0 * xp.sum(xp.log(xp.diagonal(Ls)))
-    return SchurFactor(base, B_ei, W, Ls, logdet, base.ok & ok, be.asarray(e), be.asarray(i),
-                       form, impl)
-
-
-def schur_solve(f: SchurFactor, b: Any, *, be: Backend | None = None) -> Any:
-    """``C^-1 b`` for ``b`` of shape ``(n,)`` or ``(n, k)``.
-
-    ``"solve"``: WT ``Schur.solve`` (matrix.py:609-618) verbatim.  ``"scaled"``: WG
-    ``_solve`` diagonal branch (matrix.py:614-625): ``x_i = t_i - T^-1 (B^T x_e)``.
-    """
-    if f.Ls is None:
-        _require_complete(f)
-    be = _be(be, b, f.B)
-    xp = be.xp
-    one = b.ndim == 1
-    bb = be.asarray(b[:, None] if one else b)
-    b_e, b_i = bb[f.e], bb[f.i]
-    ti = factor_solve(f.base, b_i, be=be)
-    xe = be.cho_solve(f.Ls, b_e - f.B @ ti)
-    if f.form == "solve":
-        xi = ti - f.W @ xe
-    else:
-        xi = ti - factor_solve(f.base, (xe.T @ f.B).T, be=be)
-    x = xp.zeros(bb.shape, dtype=bb.dtype)
-    x = be.set(x, f.e, xe, copy=False)
-    x = be.set(x, f.i, xi, copy=False)
-    return x[:, 0] if one else x
-
-
-def schur_edge_whiten(f: SchurFactor, b_e: Any, b_i: Any, *, be: Backend | None = None) -> Any:
-    """``Ls^-1 (b_e - B T^-1 b_i)``: GB ``EdgeSchurCache`` (matrix.py:1051, 1068) for
-    ``"scaled"`` (``b_e - W @ b_i``); ``b_e - B @ T^-1 b_i`` for ``"solve"``.  With it,
-    ``b^T C^-1 b = b_i^T T^-1 b_i + |t|^2``."""
-    if f.Ls is None:
-        _require_complete(f)
-    be = _be(be, b_e, f.B)
-    if f.form == "scaled":
-        r = b_e - f.W @ b_i
-    else:
-        r = b_e - f.B @ factor_solve(f.base, b_i, be=be)
-    return be.solve_triangular(f.Ls, r, lower=True)
-
-
-# ---------------------------------------------------------------------------
-# The padded models' time-domain marginal (M Lambda M)
-# ---------------------------------------------------------------------------
-
-
-@pytree_dataclass(data=("lam", "Wp", "LiWp", "Lq", "logdet", "ok"), meta=("impl",))
-@dataclass(frozen=True, eq=False)
-class PaddedFactor:
-    """``Q_pp = W_p^T Lambda^-1 W_p = Lq Lq^T`` over the extended grid's padding samples;
-    ``logdet = ln|Lambda| - N' ln dt + ln|Q_pp|`` is ``ln|C_dd|`` of the data samples."""
-
-    lam: Any
-    Wp: Any
-    LiWp: Any
-    Lq: Any
-    logdet: Any
-    ok: Any
-    impl: str
-
-
-def padded_factor(lam: Any, Wp: Any, *, n_ext: int, dt: float, impl: CholImpl,
-                  be: Backend | None = None) -> PaddedFactor:
-    """WT ``PaddedMarginal.__init__`` + ``logdet`` (matrix.py:631-635, 649-651; ``impl="scipy"``) and the
-    WG ``_factor`` pad branch (matrix.py:578-583): ``LiWp = Lambda^-1 W_p``,
-    ``Q = W_p^T LiWp``, ``Lq = chol(0.5 (Q + Q^T))``.  ``n_ext`` is the extended record's
-    sample count ``N'`` (17408 for the sinusoid).  ``impl`` is checked first, also when
-    the base failed."""
-    _check_impl(impl)
-    be = _be(be, Wp)
-    xp = be.xp
-    Wp = be.asarray(Wp)
-    if _failed(lam):                      # WT: the base factor's LinAlgError came first
-        return PaddedFactor(lam, Wp, None, None, float("nan"), False, impl)
-    LiWp = factor_solve(lam, Wp, be=be)
-    Qpp = Wp.T @ LiWp
-    Lq, ok = be.cholesky(0.5 * (Qpp + Qpp.T), impl=impl)
-    log_dt_ext = float(int(n_ext) * np.log(float(dt)))       # WG: float(g.N * np.log(g.dt))
-    logdet = lam.logdet - log_dt_ext + 2.0 * xp.sum(xp.log(xp.diagonal(Lq)))
-    return PaddedFactor(lam, Wp, LiWp, Lq, logdet, lam.ok & ok, impl)
-
-
-def padded_solve(f: PaddedFactor, w: Any, *, be: Backend | None = None) -> Any:
-    """``Lambda^-1 w - LiWp Q_pp^-1 W_p^T Lambda^-1 w`` for cell vectors ``w (cells, k)`` or
-    ``(cells,)``: the cell-space core of WT ``PaddedMarginal.solve`` (matrix.py:643-646);
-    the caller maps back to time with ``dt * W^-1`` and keeps the data samples."""
-    if f.Lq is None:
-        _require_complete(f)
-    be = _be(be, w, f.Wp)
-    Liw = factor_solve(f.lam, w, be=be)
-    c = be.cho_solve(f.Lq, f.Wp.T @ Liw)
-    return Liw - f.LiWp @ c
-
-
-def padded_reduce(f: PaddedFactor, t: Any, *, be: Backend | None = None) -> Any:
-    """``Lq^-1 W_p^T t`` (WG ``_evaluate`` pad branch ``cb``, and ``Gu`` in ``_factor``,
-    matrix.py:587, 651): with ``t = Lambda^-1 y``, ``y^T C^-1 y = y.t - |cb|^2``."""
-    if f.Lq is None:
-        _require_complete(f)
-    be = _be(be, t, f.Wp)
-    return be.solve_triangular(f.Lq, f.Wp.T @ t, lower=True)
-
-
-# ---------------------------------------------------------------------------
-# Dispatch
-# ---------------------------------------------------------------------------
-
-
-def factor_solve(f: Any, b: Any, *, be: Backend | None = None) -> Any:
-    """``C^-1 b`` for any factor of this module (dispatch on the factor's type)."""
-    if isinstance(f, DiagFactor):
-        return diag_solve(f, b, be=be)
-    if isinstance(f, CholFactor):
-        return chol_solve(f, b, be=be)
-    if isinstance(f, BlockTriFactor):
-        return blocktri_solve(f, b, be=be)
-    if isinstance(f, CBlockFactor):
-        return cblock_backward(f, cblock_forward(f, b, be=be), be=be)
-    if isinstance(f, SchurFactor):
-        return schur_solve(f, b, be=be)
-    if isinstance(f, PaddedFactor):
-        return padded_solve(f, b, be=be)
-    raise TypeError(f"not a domainia.linalg factor: {type(f).__name__}")
 
 
 # ---------------------------------------------------------------------------

@@ -1,6 +1,7 @@
 """D-A5: the wdm_dev EV linear-algebra tests retired from ``wdm`` in C8 (part-1 plan note 7),
-re-homed on ``domainia.linalg`` (originals: packages/wdm/tests/vendored/test_evolutionary.py,
-which still runs them against the frozen ``wdm_dev_ev`` oracle)."""
+re-homed on ``domainia`` (originals: packages/wdm/tests/vendored/test_evolutionary.py,
+which still runs them against the frozen ``wdm_dev_ev`` oracle); since the S4 merge (E-C2)
+on the one factor family of ``domainia.covariance``."""
 
 from __future__ import annotations
 
@@ -9,8 +10,10 @@ import pytest
 
 import wdm
 from wdm.grid import active_mask
+from wdm.backend import NUMPY
 from wdm.matrix import active_W
 from domainia import linalg as la
+from domainia.covariance import BlockTriCovFactor, CholFactor, DiagFactor, padded_factor, schur_factor
 
 NF, NT, DT = 8, 16, 0.5
 N = NF * NT
@@ -53,10 +56,11 @@ def test_solver_flavours_agree_with_numpy(rng):
     C, blocks, upper = _blocktri([4, 4, 4], rng)
     d = np.diag(C).copy()
     b = rng.standard_normal(C.shape[0])
-    for f, ref in ((la.chol_factor(C, impl="scipy"), C),
-                   (la.blocktri_factor(blocks, upper, layout="ragged"), C),
-                   (la.diag_factor(d), np.diag(d))):
-        np.testing.assert_allclose(la.factor_solve(f, b), np.linalg.solve(ref, b), atol=1e-10)
+    bt = la.blocktri_factor(blocks, upper, layout="ragged")
+    for f, ref in ((CholFactor.build(C, impl="scipy", be=NUMPY), C),
+                   (BlockTriCovFactor(bt, bt.logdet, bt.ok, "ragged"), C),
+                   (DiagFactor.build(d, NUMPY), np.diag(d))):
+        np.testing.assert_allclose(f.solve(b), np.linalg.solve(ref, b), atol=1e-10)
         assert float(f.logdet) == pytest.approx(np.linalg.slogdet(ref)[1], abs=1e-10)
 
 
@@ -65,11 +69,11 @@ def test_schur_edge_exact_matches_the_dense_matrix(rng):
     C = _spd(n, rng)
     e = np.array([0, 1, 12, 13])
     i = np.setdiff1d(np.arange(n), e)
-    T = la.chol_factor(C[np.ix_(i, i)], impl="scipy")
-    sch = la.schur_factor(T, C[np.ix_(e, e)], C[np.ix_(e, i)], e=e, i=i, form="solve",
-                          impl="scipy")
+    T = CholFactor.build(C[np.ix_(i, i)], impl="scipy", be=NUMPY)
+    sch = schur_factor(T, C[np.ix_(e, e)], C[np.ix_(e, i)], form="solve", chol_impl="scipy", be=NUMPY)
     b = rng.standard_normal((n, 2))
-    np.testing.assert_allclose(la.schur_solve(sch, b), np.linalg.solve(C, b), atol=1e-10)
+    np.testing.assert_allclose(sch.solve(b, C={"e": e, "i": i, "interior": None}), np.linalg.solve(C, b),
+                               atol=1e-10)
     assert float(sch.logdet) == pytest.approx(np.linalg.slogdet(C)[1], abs=1e-10)
 
 
@@ -83,15 +87,12 @@ def test_padded_marginal_is_the_data_block_of_the_extended_covariance(rng):
     unit = np.zeros((Np - N, Np))
     unit[np.arange(Np - N), np.arange(N, Np)] = 1.0
     Wp = wdm.forward_time_many(unit, NF, Ntp, DT)[:, mask].T
-    pm = la.padded_factor(la.chol_factor(Lam, impl="scipy"), Wp, n_ext=Np, dt=DT, impl="scipy")
+    pm = padded_factor(CholFactor.build(Lam, impl="scipy", be=NUMPY), Wp, grid=wdm.Grid(NF, Ntp, DT), n=N,
+                       chol_impl="scipy", be=NUMPY)
     C_ext = Wa.T @ Lam @ Wa / DT**2
     C_dd = C_ext[:N, :N]
     x = rng.standard_normal(N)
-    ext = np.zeros((1, Np))
-    ext[0, :N] = x
-    z = la.padded_solve(pm, wdm.forward_time_many(ext, NF, Ntp, DT)[:, mask].T)
-    full = np.zeros((1, NF + 1, Ntp))
-    full[:, mask] = z.T
-    got = DT * wdm.inverse_time_many(full, NF, Ntp, DT)[0, :N]
+    m, nn = wdm.grid.packed_cells(NF, Ntp)
+    got = pm.solve(x, C={"Wp": Wp, "m": m, "n_idx": nn, "base": None})
     np.testing.assert_allclose(got, np.linalg.solve(C_dd, x), rtol=1e-8, atol=1e-10)
     assert float(pm.logdet) == pytest.approx(np.linalg.slogdet(C_dd)[1], abs=1e-8)

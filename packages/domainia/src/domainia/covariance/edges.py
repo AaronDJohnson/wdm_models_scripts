@@ -36,7 +36,7 @@ from .eq45 import window_bins
 from .pushed import PushedRows, positions
 
 __all__ = ["PadMask", "PaddedFactor", "SchurEdge", "SchurFactor", "ZeroPadded", "assemble_edge_rows", "cut",
-           "schur_factor"]
+           "padded_factor", "schur_factor"]
 
 
 def cut(make_cov: Callable[[Any], Any], cells: Any, lead: int, trail: int) -> Any:
@@ -50,12 +50,21 @@ def cut(make_cov: Callable[[Any], Any], cells: Any, lead: int, trail: int) -> An
 # ---------------------------------------------------------------------------------------
 
 
-@pytree_dataclass(data=("T", "S", "B", "TiBt", "logdet", "ok"), meta=())
+SchurForm = Literal["solve", "scaled"]
+
+
+@pytree_dataclass(data=("T", "S", "B", "TiBt", "logdet", "ok"), meta=("form",))
 @dataclass(frozen=True, eq=False)
 class SchurFactor:
-    """WT ``Schur``: ``T`` the interior factor, ``S`` the Schur complement's Cholesky,
-    ``B = R_ei``, ``TiBt = T^-1 B^T``.  The edge / interior positions are constants: the
-    methods read ``C["e"]``, ``C["i"]`` and pass ``C["interior"]`` to ``T``."""
+    """``C = [[A, B], [B^T, T]]`` on the edge cells ``e`` and the interior ``i``: ``T`` the
+    interior factor, ``S`` the Cholesky of ``A - B T^-1 B^T``, ``B = R_ei``.  The positions
+    are constants: the methods read ``C["e"]``, ``C["i"]`` and pass ``C["interior"]`` to ``T``.
+
+    ``form="solve"`` (WT ``Schur``): ``TiBt = T^-1 B^T`` is stored.  ``form="scaled"`` (a
+    :class:`DiagFactor` interior only: WG ``_factor`` / ``_solve`` diagonal branch, GB
+    ``EdgeSchurCache``): ``B T^-1 = B / v`` is formed on the fly, never stored
+    (``TiBt = None``).
+    """
 
     T: Any
     S: Any
@@ -63,35 +72,44 @@ class SchurFactor:
     TiBt: Any
     logdet: Any
     ok: Any
+    form: str
 
     n_u = 0
 
     def solve(self, b: Any, *, C: Any = None, be: Backend | None = None) -> Any:
-        """WT ``Schur.solve`` line for line."""
+        """``"solve"``: WT ``Schur.solve`` line for line; ``"scaled"``: WG ``_solve`` diagonal
+        branch (``x_i = t_i - T^-1 (x_e^T B)^T``)."""
         if self.S is None:
             raise ValueError("the factorisation failed (not positive definite): check ok first")
         C = factor_constants(self, C, "solve")
         be = be or get_backend(b, self.B)
         one = b.ndim == 1
         b = b[:, None] if one else b
-        e, i = C["e"], C["i"]
+        e, i, Ci = C["e"], C["i"], C["interior"]
         b_e, b_i = b[e], b[i]
-        ti = self.T.solve(b_i, C=C["interior"], be=be)
+        ti = self.T.solve(b_i, C=Ci, be=be)
         xe = self.S.solve(b_e - self.B @ ti, be=be)
-        xi = ti - self.TiBt @ xe
+        if self.form == "solve":
+            xi = ti - self.TiBt @ xe
+        else:
+            xi = ti - self.T.solve((xe.T @ self.B).T, C=Ci, be=be)
         x = be.xp.zeros_like(b)
         x = be.set(x, e, xe, copy=False)
         x = be.set(x, i, xi, copy=False)
         return x[:, 0] if one else x
 
     def whiten(self, b: Any, *, C: Any = None, be: Backend | None = None) -> Any:
-        """``[L_T^-1 b_i ; L_S^-1 (b_e - B T^-1 b_i)]`` (GB ``EdgeSchurCache``)."""
+        """``[L_T^-1 b_i ; L_S^-1 (b_e - B T^-1 b_i)]``; ``"scaled"`` forms ``(B / v) b_i`` (GB
+        ``EdgeSchurCache``: ``d[E] - BD @ d[I]``)."""
         if self.S is None:
             raise ValueError("the factorisation failed (not positive definite): check ok first")
         C = factor_constants(self, C, "whiten")
         be = be or get_backend(b, self.B)
         b_e, b_i = b[C["e"]], b[C["i"]]
-        z = b_e - self.B @ self.T.solve(b_i, C=C["interior"], be=be)
+        if self.form == "solve":
+            z = b_e - self.B @ self.T.solve(b_i, C=C["interior"], be=be)
+        else:
+            z = b_e - (self.B / self.T.v[None, :]) @ b_i
         return be.xp.concatenate([self.T.whiten(b_i, C=C["interior"], be=be), self.S.whiten(z, be=be)],
                                  axis=0)
 
@@ -100,21 +118,39 @@ class SchurFactor:
 
 
 def schur_factor(T: Any, A_ee: Any, B_ei: Any, *, chol_impl: Literal["numpy", "scipy"], be: Backend,
-                 C_T: Any = None) -> SchurFactor:
+                 form: SchurForm = "solve", C_T: Any = None) -> SchurFactor:
     """Factor ``[[A, B], [B^T, T]]`` from the edge rows ``R`` split at the edge / interior
-    positions, ``A_ee = R[:, e]``, ``B_ei = R[:, i]`` (WT ``MatrixWdm.solver`` +
-    ``Schur.__init__``): ``A = (A_ee + A_ee^T)/2``, ``TiBt = T^-1 B^T``, ``S = A - B TiBt``
-    symmetrised; ``ok = T.ok & S.ok``.  ``C_T`` are ``T``'s constants (``C["interior"]``).  A
-    concretely failed ``T`` (WT: ``LinAlgError`` before the complement) gives a failed factor
-    without ``S``."""
+    positions, ``A_ee = R[:, e]``, ``B_ei = R[:, i]``; ``A = (A_ee + A_ee^T)/2`` (WT
+    ``MatrixWdm.solver``, WG ``_factor``, GB ``EdgeSchurCache.state``), then
+
+    * ``"solve"`` (WT ``Schur.__init__``, WG tri branch): ``TiBt = T^-1 B^T``,
+      ``S = A - B TiBt``;
+    * ``"scaled"`` (``T`` a :class:`DiagFactor`; WG diagonal branch, GB
+      ``EdgeSchurCache``): ``S = A - (B / v) B^T``, nothing ``n_e x n_i`` stored;
+
+    ``S`` is factorised as ``0.5 (S + S^T)`` with ``chol_impl`` (``"scipy"`` WT, ``"numpy"``
+    GB); ``logdet = T.logdet + S.logdet``, ``ok = T.ok & S.ok``.  ``C_T`` are ``T``'s
+    constants (``C["interior"]``).  ``form`` and the interior type are checked first, also
+    when ``T`` failed; a concretely failed ``T`` (WT: ``LinAlgError`` before the complement)
+    gives a failed factor without ``S``."""
+    if form not in ("solve", "scaled"):
+        raise ValueError(f"form must be 'solve' or 'scaled'; got {form!r}")
+    if chol_impl not in ("numpy", "scipy"):
+        raise ValueError(f"chol_impl must be 'numpy' or 'scipy'; got {chol_impl!r}")
+    if form == "scaled" and not isinstance(T, DiagFactor):
+        raise TypeError(f"form='scaled' needs a DiagFactor interior; got {type(T).__name__}")
     A = 0.5 * (A_ee + A_ee.T)
     B = B_ei
     if concrete_failure(T.ok):
-        return SchurFactor(T, None, B, None, float("nan"), False)
-    TiBt = T.solve(B.T, C=C_T, be=be)
-    Sc = A - B @ TiBt
+        return SchurFactor(T, None, B, None, float("nan"), False, form)
+    if form == "solve":
+        TiBt = T.solve(B.T, C=C_T, be=be)
+        Sc = A - B @ TiBt
+    else:
+        TiBt = None
+        Sc = A - (B / T.v[None, :]) @ B.T
     S = CholFactor.build(0.5 * (Sc + Sc.T), impl=chol_impl, be=be)
-    return SchurFactor(T, S, B, TiBt, T.logdet + S.logdet, T.ok & S.ok)
+    return SchurFactor(T, S, B, TiBt, T.logdet + S.logdet, T.ok & S.ok, form)
 
 
 def assemble_edge_rows(M_i: Any, R: Any, e: Any, i: Any, be: Backend) -> Any:
@@ -221,13 +257,25 @@ class SchurEdge(Covariance):
 # ---------------------------------------------------------------------------------------
 
 
-@pytree_dataclass(data=("Lam", "LiWp", "Q", "logdet", "ok"), meta=("Nf", "Nt", "dt", "n"))
+PaddedForm = Literal["solve", "reduce"]
+
+
+@pytree_dataclass(data=("Lam", "LiWp", "Q", "logdet", "ok"), meta=("Nf", "Nt", "dt", "n", "form"))
 @dataclass(frozen=True, eq=False)
 class PaddedFactor:
-    """WT ``PaddedMarginal``: ``C_dd^-1 = Q_dd - Q_dp Q_pp^-1 Q_pd`` on the data samples,
-    ``Q = W^T Lambda^-1 W``; vectors are length-``n`` time series (``solve`` only).  The
-    padding impulses ``W_p`` and the active-cell index ``(m, n_idx)`` are constants
-    (``C["Wp"]``, ``C["m"]``, ``C["n_idx"]``); ``Lam`` reads ``C["base"]``."""
+    """The padded models' time-domain marginal: ``Lambda`` on every cell of the extended grid,
+    ``Q_pp = W_p^T Lambda^-1 W_p = Q Q^T`` over the padding samples, ``C_dd^-1 = Q_dd - Q_dp
+    Q_pp^-1 Q_pd`` on the ``n`` data samples and ``logdet = ln|Lambda| - N' ln dt + ln|Q_pp|``.
+
+    The padding impulses ``W_p`` (``C["Wp"]``), the active-cell index (``C["m"]``,
+    ``C["n_idx"]``) and ``Lambda``'s constants (``C["base"]``) are constants.  Two orders:
+
+    * ``form="solve"`` (WT ``PaddedMarginal``; the NumPy golden): ``LiWp = Lambda^-1 W_p`` is
+      stored; :meth:`solve` maps time samples to time samples;
+    * ``form="reduce"`` (WG ``_factor`` / ``_evaluate`` pad branch): nothing ``n' x n_pad`` is
+      stored; the quadratic form is ``w.t - |cb|^2`` with ``w`` = :meth:`lift` of the samples,
+      ``t = Lambda^-1 w`` and ``cb`` = :meth:`reduce` of ``t`` (``Lq^-1 W_p^T t``).
+    """
 
     Lam: Any
     LiWp: Any
@@ -238,24 +286,60 @@ class PaddedFactor:
     Nt: int
     dt: float
     n: int
+    form: str
 
     n_u = 0
 
+    def _check(self) -> None:
+        if self.Q is None:
+            raise ValueError("the factorisation failed (not positive definite): check ok first")
+
+    def lift(self, x: Any, *, C: Any = None, be: Backend | None = None) -> Any:
+        """``(k, n)`` (or ``(n,)``) samples -> ``(k, n')`` (``(n',)``) cells of the zero-padded
+        record on every active cell of the extended grid (WT ``PaddedMarginal.solve``'s first
+        step; WG ``y_data`` / ``_template_cells`` with ``v.extend``)."""
+        C = factor_constants(self, C, "lift")
+        be = be or get_backend(x, self.logdet)
+        xp = be.xp
+        one = x.ndim == 1
+        X = x[None, :] if one else x
+        ext = be.set(xp.zeros((X.shape[0], self.Nf * self.Nt)), (slice(None), slice(0, self.n)), X, copy=False)
+        W = forward_time_many(ext, self.Nf, self.Nt, self.dt, be=be)[:, C["m"], C["n_idx"]]
+        return W[0] if one else W
+
+    def reduce(self, t: Any, *, C: Any = None, be: Backend | None = None) -> Any:
+        """``Lq^-1 W_p^T t`` (WG ``_evaluate`` pad branch ``cb``; ``Gu`` in ``_factor``): with
+        ``t = Lambda^-1 w``, ``w^T C_dd^-1 w = w.t - |cb|^2``."""
+        self._check()
+        C = factor_constants(self, C, "reduce")
+        be = be or get_backend(t, self.Q.L)
+        return self.Q.whiten(C["Wp"].T @ t, be=be)
+
+    def solve_cells(self, w: Any, *, C: Any = None, be: Backend | None = None) -> Any:
+        """``Lambda^-1 w - LiWp Q_pp^-1 W_p^T Lambda^-1 w`` on cells ``(n', k)`` / ``(n',)``: the
+        cell-space core of WT ``PaddedMarginal.solve`` (``form="solve"`` only)."""
+        self._check()
+        if self.form != "solve":
+            raise ValueError("solve needs form='solve' (the reduce form stores no Lambda^-1 W_p)")
+        C = factor_constants(self, C, "solve_cells")
+        be = be or get_backend(w, self.Q.L)
+        Liw = self.Lam.solve(w, C=C["base"], be=be)
+        c = self.Q.solve(C["Wp"].T @ Liw, be=be)
+        return Liw - self.LiWp @ c
+
     def solve(self, x: Any, *, C: Any = None, be: Backend | None = None) -> Any:
         """WT ``PaddedMarginal.solve`` line for line (``W^T z = dt W^-1 z``)."""
-        if self.LiWp is None:
-            raise ValueError("the factorisation failed (not positive definite): check ok first")
+        self._check()
+        if self.form != "solve":
+            raise ValueError("solve needs form='solve' (the reduce form stores no Lambda^-1 W_p)")
         C = factor_constants(self, C, "solve")
-        Wp, m, n_idx = C["Wp"], C["m"], C["n_idx"]
-        be = be or get_backend(x, Wp)
+        m, n_idx = C["m"], C["n_idx"]
+        be = be or get_backend(x, self.Q.L)
         xp = be.xp
         one = x.ndim == 1
         X = x[None, :] if one else x.T                                      # (k, n)
-        ext = be.set(xp.zeros((X.shape[0], self.Nf * self.Nt)), (slice(None), slice(0, self.n)), X, copy=False)
-        W = forward_time_many(ext, self.Nf, self.Nt, self.dt, be=be)[:, m, n_idx]
-        Liw = self.Lam.solve(W.T, C=C["base"], be=be)                       # (size, k)
-        c = self.Q.solve(Wp.T @ Liw, be=be)
-        Y = (Liw - self.LiWp @ c).T                                         # (k, size)
+        W = self.lift(X, C=C, be=be)
+        Y = self.solve_cells(W.T, C=C, be=be).T                             # (k, size)
         full = be.set(xp.zeros((Y.shape[0], self.Nf + 1, self.Nt)), (slice(None), m, n_idx), Y,
                       copy=False)
         out = self.dt * inverse_time_many(full, self.Nf, self.Nt, self.dt, be=be)[:, :self.n]
@@ -264,8 +348,42 @@ class PaddedFactor:
     def whiten(self, b: Any, *, C: Any = None, be: Backend | None = None) -> Any:
         raise NotImplementedError("the padded marginal has no whitening; use form='solve'")
 
-    def quad(self, b: Any, *, C: Any = None, form: QuadForm = "solve", be: Backend | None = None) -> Any:
-        return quad_form(self, b, form, be or get_backend(b, self.logdet), C)
+    def quad(self, b: Any, *, C: Any = None, form: QuadForm | None = None, be: Backend | None = None) -> Any:
+        """``x^T C_dd^-1 x`` of samples ``x``: ``"solve"`` = ``x . solve(x)`` (WT); ``"reduce"``
+        = ``w.t - cb.cb`` (WG).  ``form=None`` is the factor's own."""
+        be = be or get_backend(b, self.logdet)
+        form = self.form if form is None else form
+        if form == "solve":
+            return quad_form(self, b, "solve", be, C)
+        if form != "reduce":
+            raise ValueError(f"the padded marginal has no quadratic form {form!r}")
+        self._check()
+        C = factor_constants(self, C, "quad")
+        w = self.lift(b, C=C, be=be)
+        t = self.Lam.solve(w, C=C["base"], be=be)
+        cb = self.reduce(t, C=C, be=be)
+        return be.xp.dot(w, t) - be.xp.dot(cb, cb)
+
+
+def padded_factor(Lam: Any, Wp: Any, *, grid: Any, n: int, chol_impl: Literal["numpy", "scipy"], be: Backend,
+                  form: PaddedForm = "solve", C_base: Any = None) -> PaddedFactor:
+    """Factor the padded marginal over ``Lam`` (``Lambda``'s factor on every active cell of the
+    extended ``grid``; ``C_base`` its constants) and the padding impulses ``Wp`` (``(n', n_pad)``):
+    WT ``PaddedMarginal.__init__`` + ``logdet`` (``"solve"``) / the WG ``_factor`` pad branch
+    (``"reduce"``): ``Q_pp = W_p^T Lambda^-1 W_p``, ``Q = chol(0.5 (Q_pp + Q_pp^T))``.  A
+    concretely failed ``Lam`` (WT: ``LinAlgError`` before ``Q_pp``) gives a failed factor."""
+    if form not in ("solve", "reduce"):
+        raise ValueError(f"form must be 'solve' or 'reduce'; got {form!r}")
+    if chol_impl not in ("numpy", "scipy"):
+        raise ValueError(f"chol_impl must be 'numpy' or 'scipy'; got {chol_impl!r}")
+    if concrete_failure(Lam.ok):
+        return PaddedFactor(Lam, None, None, float("nan"), False, grid.Nf, grid.Nt, grid.dt, int(n), form)
+    LiWp = Lam.solve(Wp, C=C_base, be=be)
+    Qpp = Wp.T @ LiWp
+    Q = CholFactor.build(0.5 * (Qpp + Qpp.T), impl=chol_impl, be=be)
+    logdet = Lam.logdet - grid.N * np.log(grid.dt) + Q.logdet
+    return PaddedFactor(Lam, LiWp if form == "solve" else None, Q, logdet, Lam.ok & Q.ok, grid.Nf, grid.Nt,
+                        grid.dt, int(n), form)
 
 
 class ZeroPadded(Covariance):
@@ -364,14 +482,7 @@ class ZeroPadded(Covariance):
         """WT ``PaddedMarginal.__init__`` + ``logdet``."""
         g = self.grid
         Lam = self.base._factor(C["base"], nu, be)
-        Wp = C["Wp"]
-        if concrete_failure(Lam.ok):        # WT: LinAlgError in Lam -> -inf before Q_pp
-            return PaddedFactor(Lam, None, None, float("nan"), False, g.Nf, g.Nt, g.dt, self.n)
-        LiWp = Lam.solve(Wp, C=C["base"], be=be)
-        Qpp = Wp.T @ LiWp
-        Q = CholFactor.build(0.5 * (Qpp + Qpp.T), impl=self.chol_impl, be=be)
-        logdet = Lam.logdet - g.N * np.log(g.dt) + Q.logdet
-        return PaddedFactor(Lam, LiWp, Q, logdet, Lam.ok & Q.ok, g.Nf, g.Nt, g.dt, self.n)
+        return padded_factor(Lam, C["Wp"], grid=g, n=self.n, chol_impl=self.chol_impl, be=be, C_base=C["base"])
 
     # -- cell_congruence ----------------------------------------------------------------
     def _congruence_pieces(self, C: Any, nu: Any, be: Backend) -> tuple[Any, Any, Any]:

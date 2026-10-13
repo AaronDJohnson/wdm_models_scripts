@@ -1,5 +1,6 @@
 """D-A4: diagonal, dense-Cholesky and block-tridiagonal factors against dense linear
-algebra and, bit for bit, against the oracle formulas they port (NumPy)."""
+algebra and, bit for bit, against the oracle formulas they port (NumPy).  The diagonal and
+dense factors are the one family of ``domainia.covariance`` (S4 merge, E-C2)."""
 
 from __future__ import annotations
 
@@ -12,6 +13,7 @@ from wdm.backend import NUMPY
 from wdm.evolutionary import eq45_blocks_cheb, eq45_coeffs_bessel, eq45_plan
 from domainia import linalg as la
 from domainia import testing as T
+from domainia.covariance import CholFactor, DiagFactor, dense_factor
 from domainia.domains import CellSet
 
 NF, NT, DT = 8, 16, 1.0 / 16
@@ -104,22 +106,22 @@ def rel(a, b):
 def test_diag_factor_is_wt_solver_diag(rng):
     v = rng.uniform(0.5, 2.0, 40)
     b = rng.standard_normal((40, 3))
-    f = la.diag_factor(v)
+    f = DiagFactor.build(v, NUMPY)
     assert f.logdet == float(np.sum(np.log(v))) and bool(f.ok)          # Solver.logdet
-    assert np.array_equal(la.diag_solve(f, b), b / v[:, None])            # Solver.solve, 2-D
-    assert np.array_equal(la.diag_solve(f, b[:, 0]), b[:, 0] / v)
+    assert np.array_equal(f.solve(b), b / v[:, None])                     # Solver.solve, 2-D
+    assert np.array_equal(f.solve(b[:, 0]), b[:, 0] / v)
     with np.errstate(invalid="ignore"):
-        assert not bool(la.diag_factor(np.r_[v, -1.0]).ok)
+        assert not bool(DiagFactor.build(np.r_[v, -1.0], NUMPY).ok)
 
 
 def test_chol_scipy_is_wt_solver_dense(rng):
     A = rng.standard_normal((30, 30))
     C = A @ A.T + 30 * np.eye(30)
     b = rng.standard_normal((30, 2))
-    f = la.chol_factor(C, impl="scipy")
+    f = CholFactor.build(C, impl="scipy", be=NUMPY)
     cf = cho_factor(C, lower=True, check_finite=False)
     assert f.logdet == 2.0 * float(np.sum(np.log(np.diag(cf[0]))))       # Solver.logdet
-    assert np.array_equal(la.chol_solve(f, b), cho_solve(cf, b, check_finite=False))
+    assert np.array_equal(f.solve(b), cho_solve(cf, b, check_finite=False))
     assert np.array_equal(np.triu(f.L, 1), np.zeros((30, 30)))
 
 
@@ -128,22 +130,36 @@ def test_chol_numpy_is_gb_dense_quad_logdet(rng):
     A = rng.standard_normal((25, 25))
     S = A @ A.T + 25 * np.eye(25) + 1e-9 * rng.standard_normal((25, 25))  # not symmetric
     r = rng.standard_normal(25)
-    f = la.chol_factor(S, impl="numpy", symmetrize=True)
+    f = dense_factor(S, chol_impl="numpy", symmetrize=True, be=NUMPY)
     L = np.linalg.cholesky(0.5 * (S + S.T))
     v = solve_triangular(L, r, lower=True, check_finite=False)
     assert np.array_equal(f.L, L)
     assert f.logdet == 2.0 * np.sum(np.log(np.diagonal(L)))
-    u = la.chol_whiten(f, r)
+    u = f.whiten(r)
     assert np.array_equal(u, v) and u @ u == v @ v
     y = solve_triangular(L, v, lower=True, trans="T", check_finite=False)
-    assert np.array_equal(la.chol_backward(f, u), y)                    # MatrixCache y = C^-1 d
+    assert np.array_equal(f.solve(r), y)                                # MatrixCache y = C^-1 d
 
 
 def test_chol_failure_is_flagged():
-    f = la.chol_factor(-np.eye(3), impl="numpy")
+    f = CholFactor.build(-np.eye(3), impl="numpy", be=NUMPY)
     assert not bool(f.ok) and np.isnan(f.logdet)
-    f = la.chol_factor(-np.eye(3), impl="scipy")
+    f = CholFactor.build(-np.eye(3), impl="scipy", be=NUMPY)
     assert not bool(f.ok)
+
+
+def test_one_ok_rule_finite_and_positive():
+    """S4 merge decision: a factor is ok when its defining diagonal (``v``; ``diag L``) is
+    finite and positive.  S2's linalg copy took ``all(v > 0)`` and so passed a ``+inf``
+    variance (``ok`` True) where the covariance family said False."""
+    with np.errstate(divide="ignore", invalid="ignore"):
+        assert not bool(DiagFactor.build(np.array([1.0, np.inf, 2.0]), NUMPY).ok)
+        assert not bool(DiagFactor.build(np.array([1.0, np.nan, 2.0]), NUMPY).ok)
+        assert not bool(DiagFactor.build(np.array([1.0, 0.0, 2.0]), NUMPY).ok)
+        assert bool(DiagFactor.build(np.array([1.0, 3.0, 2.0]), NUMPY).ok)
+        big = np.diag([1.0, np.inf, np.inf])                          # inf on the diagonal
+        assert not bool(CholFactor.build(big, impl="numpy", be=NUMPY).ok)
+        assert not bool(CholFactor.build(big, impl="scipy", be=NUMPY).ok)
 
 
 # -- band layout ---------------------------------------------------------------------

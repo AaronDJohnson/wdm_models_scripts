@@ -215,6 +215,7 @@ class DiagFactor:
 
     @classmethod
     def build(cls, v: Any, be: Backend) -> DiagFactor:
+        """``ok``: every variance finite and positive (the one ok rule)."""
         xp = be.xp
         v = be.asarray(v)
         return cls(v, xp.sum(xp.log(v)), xp.all(v > 0) & xp.all(xp.isfinite(v)))
@@ -254,9 +255,14 @@ class CholFactor:
 
     @classmethod
     def build(cls, S: Any, *, impl: Literal["numpy", "scipy"], be: Backend) -> CholFactor:
+        """``ok``: the Cholesky succeeded and every diagonal entry of ``L`` is finite and
+        positive -- the one ok rule of the merged family (a ``DiagFactor``'s ``v`` and the
+        padded block factor's diagonal likewise; the ragged block, ``cblock`` and dense
+        Hermitian factors rely on the likelihood's finite-log-determinant mask)."""
         L, ok = be.cholesky(S, impl=impl)
         xp = be.xp
-        return cls(L, 2.0 * xp.sum(xp.log(xp.diagonal(L))), ok, impl)
+        d = xp.diagonal(L)
+        return cls(L, 2.0 * xp.sum(xp.log(d)), ok & xp.all(xp.isfinite(d) & (d > 0)), impl)
 
     def solve(self, b: Any, *, C: Any = None, be: Backend | None = None) -> Any:
         be = be or get_backend(self.L, b)
