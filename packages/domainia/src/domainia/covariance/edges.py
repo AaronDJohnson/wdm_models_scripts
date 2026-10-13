@@ -126,7 +126,7 @@ def schur_factor(T: Any, A_ee: Any, B_ei: Any, *, chol_impl: Literal["numpy", "s
     * ``"solve"`` (WT ``Schur.__init__``, WG tri branch): ``TiBt = T^-1 B^T``,
       ``S = A - B TiBt``;
     * ``"scaled"`` (``T`` a :class:`DiagFactor`; WG diagonal branch, GB
-      ``EdgeSchurCache``): ``S = A - (B / v) B^T``, nothing ``n_e x n_i`` stored;
+      ``EdgeSchurCache``): ``S = A - (B / v) B^T``, nothing ``n_e x n_i`` stored beyond ``B``;
 
     ``S`` is factorised as ``0.5 (S + S^T)`` with ``chol_impl`` (``"scipy"`` WT, ``"numpy"``
     GB); ``logdet = T.logdet + S.logdet``, ``ok = T.ok & S.ok``.  ``C_T`` are ``T``'s
