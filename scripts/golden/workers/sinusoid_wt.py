@@ -3,6 +3,7 @@
     $PY -P sinusoid_wt.py <out_dir> wd-check --data-root <dir>
     $PY -P sinusoid_wt.py <out_dir> evaluate --jobs <jobs.json> --data-root <dir> --cache-src <dir>
     $PY -P sinusoid_wt.py <out_dir> intermediates --data-root <dir> --cache-src <dir>
+    $PY -P sinusoid_wt.py <out_dir> facts
 
 PYTHONPATH = lineage A only (toy_models/vendor/wdm/src : wdm_paper_2/toy_models/src).
 Writes only into <out_dir>. The exact model's cache_dir is a private copy inside
@@ -298,6 +299,44 @@ def cmd_intermediates(out_dir: Path, argv: list[str]) -> None:
     report["runtime"] = C.runtime_fingerprint()
     np.savez(out_dir / "intermediates.npz", **arrays)
     C.write_json(out_dir / "intermediates.json", report)
+
+
+
+# --- model-layer facts (Task E-A2) -------------------------------------------------------------
+
+@command("facts")
+def cmd_facts(out_dir: Path, argv: list[str]) -> None:
+    """The oracle's model-layer facts per case: ``CONFIGS[case]()`` (asdict), the prior tables
+    ``priors.for_model("freq" | "wdm_full", cfg)``, ``bandcov.noise_bounds(cfg)``, the sha256 of
+    ``likelihood.signal(cfg, A_h, f_0, phi_0)``; and one ``noise.psd`` sample (manuscript noise)."""
+    argparse.ArgumentParser(prog="sinusoid_wt facts").parse_args(argv)
+    from dataclasses import asdict
+
+    from wdm_toys import bandcov, noise, priors
+    from wdm_toys.config import CONFIGS
+    from wdm_toys.likelihood import signal
+    report = {"cases": {}}
+    for case in CASES:
+        cfg = CONFIGS[case]()
+        tables = {}
+        for model in ("freq", "wdm_full"):
+            pr = priors.for_model(model, cfg)
+            tables[model] = {"names": list(pr.names), "lo": pr.lo.tolist(), "hi": pr.hi.tolist(),
+                             "periodic": [bool(p) for p in pr.periodic]}
+        h = signal(cfg, cfg.A_h, cfg.f_0, cfg.phi_0)
+        report["cases"][case] = {"config": asdict(cfg), "priors": tables,
+                                 "noise_bounds": bandcov.noise_bounds(cfg).tolist(),
+                                 "signal_sha256": C.sha256_array(h),
+                                 "source_names": list(cfg.source_names)}
+    cfg = CONFIGS["manuscript_mid"]()
+    f, t = cfg.rfft_freqs()[::512], cfg.times()[::1024]
+    S = noise.psd(cfg, f, t)
+    report["psd"] = {"f": f, "t": t, "values": S, "sha256": C.sha256_array(S),
+                     "midpoint": noise.psd(cfg, f), "A_n": cfg.A_n, "alpha_c": cfg.alpha_c,
+                     "alpha_d": cfg.alpha_d}
+    report["wdm_file"] = C.check_wdm(required=True)
+    report["runtime"] = C.runtime_fingerprint()
+    C.write_json(out_dir / "facts.json", report)
 
 
 def main() -> None:

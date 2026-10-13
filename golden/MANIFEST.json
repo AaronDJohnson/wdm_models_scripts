@@ -217,6 +217,7 @@
   "sinusoid/legacy_eval/A_references_fast.json": "28bfc5a6c1698704af00853c6b1909da7885ee2647ea82ea5a7ae448309066e2",
   "sinusoid/legacy_eval/B_chain_rows_fast.json": "ce368f7527068f7533084348285100315a514781e445f603cb68abc2133d5dc0",
   "sinusoid/legacy_eval/B_references_fast.json": "840512a0f2ea9b66bda17317ce9c4c127fd16f02c1718f0a2fcd4ded61632a40",
+  "sinusoid/model_facts.json": "9ef2b3243010f87123189872a84d70693649cf152f1626855ecdd5fafc5c5bce",
   "sinusoid/references/INDEX.json": "818b90eb7129e32a62d23659c4c45f42b4391a174a89cea813ed711fe7560ac2",
   "sinusoid/references/manuscript_high_band_cut_reference.npz": "490ac4754c0d3d9ca487e892b9c315d24758faffedb706498d1dc734825bc400",
   "sinusoid/references/manuscript_high_band_exact_reference.npz": "4058c6da201b02999d8165170a7cd6ed4482eac8c57935e8fb5c53b152ce9084",

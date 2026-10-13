@@ -8,6 +8,7 @@ From the release root, after ``source env/activate.sh``:
     $PY -m scripts.golden.sinusoid_goldens g2                     # A8
     $PY -m scripts.golden.sinusoid_goldens eval-chains --lineage A
     $PY -m scripts.golden.sinusoid_goldens g6                     # A9
+    $PY -m scripts.golden.sinusoid_goldens facts                  # E-A2 (model-layer facts)
 
 Apart from ship-data, every command writes only below golden/sinusoid/. Legacy code runs
 only inside lineage subprocesses (scripts.golden.legacy_eval); this process reads the
@@ -43,6 +44,7 @@ REFS = GS / "references"
 EVAL = GS / "legacy_eval"
 CHAIN_ROWS = GS / "chain_rows"
 INTERMEDIATES = GS / "intermediates"
+FACTS = GS / "model_facts.json"
 
 _CHIRP = "wdm_paper_2/final_chains/frequency_chirp_study"      # make_bundle.DATA_ROOT
 _CACHE = "wdm_paper_2/final_chains/frequency_cut_4hz/cache"     # make_bundle.CACHE_ROOT
@@ -368,6 +370,45 @@ def g6(argv: list[str]) -> dict:
     write_json(INTERMEDIATES / "manuscript_mid_truth.json", report)
     write_npz(INTERMEDIATES / "manuscript_mid_truth.npz", arrays)
     print(f"G6: {len(report['parts'])} models split into their terms; arrays {sorted(arrays)} -> {INTERMEDIATES}")
+    return report
+
+
+# --- model-layer facts (Task E-A2) -------------------------------------------------------------
+
+#: The runner's record of each final run that the model layer must reproduce
+#: (run_meta.json "target": every run has these; the 19 GPU runs also record
+#: "analysis_fmin" and "configuration", the 26 CPU flow runs do not).
+RUN_TARGET_KEYS = ("case", "model", "parameter_names", "periodic", "prior_bounds")
+RUN_TARGET_OPTIONAL = ("analysis_fmin", "configuration")
+
+
+def facts_report() -> dict:
+    """The lineage-A worker's ``facts`` plus the 45 final runs' run_meta targets (read as JSON)."""
+    from scripts.golden.lineage import run_worker
+    out = run_worker("A", "sinusoid_wt", "facts", timeout=600.0)
+    report = _portable_worker(read_json(out / "facts.json"))
+    manifest = read_json(SINUSOID_FINAL / "manifest.json")
+    runs = {}
+    for case in CASES:
+        for model in MODELS:
+            rel = manifest["runs"][case][model]
+            meta = SINUSOID_FINAL / rel / "run_meta.json"
+            target = read_json(meta)["target"]
+            runs[f"{case}/{model}"] = {"run": rel, "run_meta_sha256": sha256_file(meta),
+                                       **{k: target[k] for k in RUN_TARGET_KEYS},
+                                       **{k: target[k] for k in RUN_TARGET_OPTIONAL if k in target}}
+    report["runner"] = {"manifest": "wdm_paper_2/sinusoid_final/manifest.json",
+                        "manifest_sha256": sha256_file(SINUSOID_FINAL / "manifest.json"), "runs": runs}
+    report["schema"] = 1
+    return report
+
+
+@command("facts")
+def facts(argv: list[str]) -> dict:
+    argparse.ArgumentParser(prog="sinusoid_goldens facts").parse_args(argv)
+    report = facts_report()
+    write_json(FACTS, report)
+    print(f"model facts: {len(report['cases'])} cases, {len(report['runner']['runs'])} runs -> {FACTS}")
     return report
 
 
