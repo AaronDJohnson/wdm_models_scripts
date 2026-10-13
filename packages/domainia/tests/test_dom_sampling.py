@@ -114,6 +114,22 @@ def test_batched_likelihood_on_numpy_equals_the_likelihood():
     assert bl.counters()["pd_failed_rows"] == 1 and bl.counters()["evaluations"] == 6
 
 
+def test_batched_count_states_false_counts_rows_but_no_states():
+    """E-D1: ``count_states=False`` is the WG sinusoid's uncached diagonal models
+    (``wdmtoysgpu/matrix.py:776-786``): values, ``last_failed``, ``evaluations`` and
+    ``pd_failed_rows`` as the default; ``noise_states`` and ``pd_failed_states`` stay 0."""
+    X = noise_rows(3, 2)
+    X[1, 3] = -60.0
+    counted, plain = BatchedLikelihood(two_channel()), BatchedLikelihood(two_channel(), count_states=False)
+    assert np.array_equal(plain(X), counted(X))
+    assert plain.last_failed.tolist() == counted.last_failed.tolist()
+    assert counted.counters() == {"noise_states": 6, "pd_failed_states": 1, "pd_failed_rows": 1,
+                                  "evaluations": 6, "cache_hits": 0}
+    assert plain.counters() == {"noise_states": 0, "pd_failed_states": 0, "pd_failed_rows": 1,
+                                "evaluations": 6, "cache_hits": 0}
+    assert plain.count_states is False and counted.count_states is True
+
+
 def sinusoid_whittle(backend=None):
     N, dt = 512, 2.0 ** -9
     rng = np.random.default_rng(5)

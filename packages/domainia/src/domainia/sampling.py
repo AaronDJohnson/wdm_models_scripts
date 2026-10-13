@@ -230,15 +230,22 @@ class BatchedLikelihood(_CountersMixin):
     cache.  For the models without a cached factorisation (diagonals, Whittle): GB
     ``gpu/jax_models.BatchedLikelihood``, WG ``MatrixGPU._fn``.  On JAX a
     :class:`GaussianLikelihood` must be ``traceable`` (every covariance jittable, no
-    static key); otherwise use :class:`NoiseStateCache`."""
+    static key); otherwise use :class:`NoiseStateCache`.
 
-    def __init__(self, lik: GaussianLikelihood | FourierWhittle) -> None:
+    ``count_states``: count one noise state per row of a :class:`GaussianLikelihood`
+    (``noise_states``, ``pd_failed_states``; default).  ``False`` keeps both at 0, the WG
+    sinusoid's uncached diagonal models (``wdmtoysgpu/matrix.py:776-786``: positive by
+    construction, "nothing to factor"); ``evaluations`` and ``pd_failed_rows`` count either
+    way."""
+
+    def __init__(self, lik: GaussianLikelihood | FourierWhittle, *, count_states: bool = True) -> None:
         if not isinstance(lik, (GaussianLikelihood, FourierWhittle)):
             raise TypeError("BatchedLikelihood needs a GaussianLikelihood or a FourierWhittle")
         if isinstance(lik, GaussianLikelihood) and lik.be.name == "jax" and not lik.traceable:
             raise TypeError("BatchedLikelihood on JAX needs a traceable likelihood (jittable covariances "
                             "without a static key); use NoiseStateCache")
         self.lik = lik
+        self.count_states = bool(count_states)
         self._fn = None
         self.reset_counters()
 
@@ -267,8 +274,9 @@ class BatchedLikelihood(_CountersMixin):
             failed = np.array([bool(f) for _, f in res], dtype=bool)
         self.evaluations += X.shape[0]
         if isinstance(lik, GaussianLikelihood):
-            self.noise_states += X.shape[0]
-            self.pd_failed_states += int(failed.sum())
+            if self.count_states:
+                self.noise_states += X.shape[0]
+                self.pd_failed_states += int(failed.sum())
             self.pd_failed_rows += int(failed.sum())
         self.last_failed = failed
         return vals
