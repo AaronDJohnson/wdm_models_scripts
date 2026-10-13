@@ -33,7 +33,7 @@ EDGE = CELLS.columns(3, 1)
 
 def _rows(**kw) -> np.ndarray:
     pr = PushedRows(ExactTimeCovariance(PSD, N, DT), None, EDGE, cells=CELLS, **kw)
-    return np.asarray(pr.evaluate(pr.host_constants(), NU, NUMPY))
+    return np.asarray(pr.evaluate(pr.constants(NUMPY), NU, NUMPY))
 
 
 def test_time_rows_are_the_exact_covariance_rows():
@@ -169,10 +169,45 @@ def test_jax_rows_match_numpy(jax_be, kw):
     import jax.numpy as jnp
 
     pr = PushedRows(ExactTimeCovariance(PSD, N, DT), None, EDGE, cells=CELLS, **kw)
-    ref = np.asarray(pr.evaluate(pr.host_constants(), NU, NUMPY))
-    C = __import__("jax").device_put(pr.host_constants())
+    ref = np.asarray(pr.evaluate(pr.constants(NUMPY), NU, NUMPY))
+    C = pr.constants(jax_be)
     P = pr.order_for(NU)
     got = (pr.evaluate_staged(C, jnp.asarray(NU), jax_be, P) if pr.staged
            else pr.evaluate(C, jnp.asarray(NU), jax_be, P=P))
     assert type(got).__module__.startswith("jax")
     assert np.max(np.abs(np.asarray(got) - ref)) <= 1e-12 * np.max(np.abs(ref))
+
+
+def _phi_reference(pr, C):
+    """S2's host build of Phi (one stacked array; ``scipy.fft.rfft(workers=4)``)."""
+    import scipy.fft
+
+    atoms, T = C["atoms"], C["T"]
+    pad = (-atoms.shape[0]) % pr.chunk
+    A = np.concatenate([atoms, np.zeros((pad, atoms.shape[1]))]).reshape(-1, pr.chunk, atoms.shape[1])
+    return np.stack([scipy.fft.rfft(T[None] * a[:, None, :], axis=-1, workers=4) for a in A])
+
+
+def test_phi_is_built_per_chunk_on_the_backend():
+    """S4 deferral (c): Phi is not a host constant; ``complete_constants`` builds it chunk by
+    chunk on the backend (NumPy: the S2 numbers bit for bit, as a tuple of chunks)."""
+    pr = PushedRows(ExactTimeCovariance(PSD, N, DT), None, EDGE, cells=CELLS, phi_cache=True, chunk=5)
+    assert "Phi" not in pr.host_constants()
+    C = pr.constants(NUMPY)
+    want = _phi_reference(pr, C)
+    assert isinstance(C["Phi"], tuple) and len(C["Phi"]) == -(-EDGE.size // 5) == want.shape[0]
+    for got, ref in zip(C["Phi"], want, strict=True):
+        assert np.array_equal(got, ref)
+    assert pr.constants(NUMPY) is C                                      # cached per backend
+
+
+@pytest.mark.jax
+def test_phi_chunks_live_on_the_device(jax_be):
+    import jax
+
+    pr = PushedRows(ExactTimeCovariance(PSD, N, DT), None, EDGE, cells=CELLS, phi_cache=True, chunk=5)
+    Cj, Cn = pr.constants(jax_be), pr.constants(NUMPY)
+    assert all(isinstance(c, jax.Array) for c in Cj["Phi"])
+    scale = max(float(np.max(np.abs(c))) for c in Cn["Phi"])
+    assert max(float(np.max(np.abs(np.asarray(a) - b))) for a, b in zip(Cj["Phi"], Cn["Phi"], strict=True)) \
+        <= 1e-14 * scale

@@ -327,8 +327,9 @@ class Covariance:
 
     def constants(self, be: Backend | None = None) -> Any:
         """The constants on ``be``: built once in host NumPy, cached per backend (JAX:
-        ``require_x64()``, then one ``jax.device_put``).  They are cached for the object's
-        lifetime: build a new covariance for a new configuration, never mutate one."""
+        ``require_x64()``, then one ``jax.device_put``), then completed on ``be`` by
+        :meth:`complete_constants`.  They are cached for the object's lifetime: build a new
+        covariance for a new configuration, never mutate one."""
         be = be or NUMPY
         cache = self.__dict__.setdefault("_constants_cache", {})
         if be.name not in cache:
@@ -338,9 +339,16 @@ class Covariance:
                 import jax
 
                 own = jax.device_put(own)
+            own = self.complete_constants(own, be)
             kids = {k: c.constants(be) for k, c in self.children().items()}
             cache[be.name] = {**own, **kids} if kids else own
         return cache[be.name]
+
+    def complete_constants(self, C: Any, be: Backend) -> Any:
+        """Constants derived ON ``be`` from the device-put host constants ``C`` (default:
+        none).  ``SchurEdge`` builds the staged rows' ``Phi`` here, chunk by chunk on the
+        device, so the host never holds it (spec section 3.5; S4 deferral (c))."""
+        return C
 
     def factor(self, nu: Any, be: Backend | None = None, *, jit: bool | None = None) -> Any:
         """Factorise at the noise state ``nu`` (``A_n`` is never inside ``nu``).

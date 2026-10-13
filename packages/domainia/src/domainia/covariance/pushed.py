@@ -20,7 +20,7 @@ from math import exp, lgamma, log
 from typing import Any, Literal
 
 import numpy as np
-from wdm.backend import Backend
+from wdm.backend import NUMPY, Backend
 from wdm.transform import atom_spectrum, base_atom_spectra, forward_time_many
 
 from .exact_fourier import ExactFourierCovariance
@@ -152,6 +152,9 @@ class PushedRows:
 
     # -- constants ----------------------------------------------------------------------
     def host_constants(self) -> dict[str, Any]:
+        """The host NumPy constants: the exact covariance's, the edge atoms and the cells'
+        flat index (time), or the atoms (Fourier).  ``Phi`` is NOT here: it is built on the
+        backend by :meth:`complete_constants`."""
         if self.kind == "fourier":
             return {"exact": self.exact.host_constants(), "U": self.atoms, "UE": self.atoms[self.e]}
         g = self.cells.grid
@@ -163,14 +166,48 @@ class PushedRows:
         C = dict(self.exact.host_constants())
         C["atoms"] = atoms
         C["flat"] = np.asarray(self.cells.m, int) * g.Nt + np.asarray(self.cells.n, int)
-        if self.phi_cache:
-            import scipy.fft
-
-            pad = (-atoms.shape[0]) % self.chunk
-            A = np.concatenate([atoms, np.zeros((pad, g.N))]).reshape(-1, self.chunk, g.N)
-            T = C["T"]
-            C["Phi"] = np.stack([scipy.fft.rfft(T[None] * a[:, None, :], axis=-1, workers=4) for a in A])
         return C
+
+    def complete_constants(self, C: dict[str, Any], be: Backend) -> dict[str, Any]:
+        """``C`` plus ``Phi`` (``phi_cache``): ``Phi[c] = rfft(T_q a_e)`` for the ``chunk`` atoms
+        of chunk ``c`` (``(chunk, P, N/2 + 1)``; the last chunk zero-padded), each computed by
+        one jitted ``be.fft_pinned("rfft")`` from the atoms and ``T`` already on ``be`` and kept
+        as a tuple: the host never holds ``Phi`` (3.0 GB at the sinusoid grid) and no stacked
+        copy is made (WG built it on the device: ``wdmtoysgpu/matrix.py:449-451``).  NumPy:
+        ``scipy.fft.rfft(workers=4)`` per chunk, the S2 numbers."""
+        if self.kind != "time" or not self.phi_cache:
+            return C
+        xp = be.xp
+        atoms, T = C["atoms"], C["T"]
+        n_e, N = atoms.shape
+        fns = self.__dict__.setdefault("_phi_fn", {})
+        if be.name not in fns:
+            fns[be.name] = be.jit(lambda a, T: be.fft_pinned("rfft", T[None] * a[:, None, :], axis=-1))
+        chunks = []
+        for lo in range(0, n_e, self.chunk):
+            a = atoms[lo:lo + self.chunk]
+            if a.shape[0] < self.chunk:
+                a = xp.concatenate([a, xp.zeros((self.chunk - a.shape[0], N), dtype=a.dtype)])
+            chunks.append(fns[be.name](a, T))
+        return {**C, "Phi": tuple(chunks)}
+
+    def constants(self, be: Backend | None = None) -> dict[str, Any]:
+        """``host_constants()`` on ``be`` (JAX: one ``jax.device_put``) completed by
+        :meth:`complete_constants`; cached per backend (tests and direct callers; inside
+        ``SchurEdge`` the covariance's own ``constants`` does the same)."""
+        be = be or NUMPY
+        cache = self.__dict__.setdefault("_constants_cache", {})
+        if be.name not in cache:
+            C = self.host_constants()
+            if be.name != "numpy":
+                import jax
+
+                from wdm.backend import require_x64
+
+                require_x64()
+                C = jax.device_put(C)
+            cache[be.name] = self.complete_constants(C, be)
+        return cache[be.name]
 
     # -- the order ------------------------------------------------------------------------
     def order_for(self, nu: Any) -> int:

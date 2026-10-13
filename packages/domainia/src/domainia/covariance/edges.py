@@ -215,6 +215,10 @@ class SchurEdge(Covariance):
     def host_constants(self) -> dict[str, Any]:
         return {"rows": self.rows.host_constants(), "e": self.e, "i": self.i}
 
+    def complete_constants(self, C: Any, be: Backend) -> Any:
+        """The rows' ``Phi`` (``phi_cache``), built on ``be`` (:meth:`PushedRows.complete_constants`)."""
+        return {**C, "rows": self.rows.complete_constants(C["rows"], be)}
+
     def children(self) -> dict[str, Covariance]:
         return {"interior": self.interior}
 
