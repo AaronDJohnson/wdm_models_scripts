@@ -57,13 +57,14 @@ from .covariance.base import concrete_failure
 from .covariance.stack import ChannelStack
 from .density import ComplexGaussian, RealGaussian
 
-__all__ = ["COUNTERS", "STRATEGIES", "FourierWhittle", "GaussianLikelihood", "NoiseState",
-           "Params", "StaticSignal"]
+__all__ = ["COUNTERS", "DENSITY_ORDERS", "STRATEGIES", "FourierWhittle", "GaussianLikelihood",
+           "NoiseState", "Params", "StaticSignal"]
 
 #: What every likelihood counts (``chain_stats.COUNTERS``, ``galactic_binary/fullcache.py:189``).
 COUNTERS = ("noise_states", "pd_failed_states", "pd_failed_rows", "evaluations")
 STRATEGIES = ("residual", "expanded")
 QUAD_FORMS = ("solve", "whiten", "elementwise")
+DENSITY_ORDERS = ("default", "folded")
 
 
 # ---------------------------------------------------------------------------
@@ -191,6 +192,24 @@ def _check_pytree(parts: Any, what: str) -> None:
                             "(wdm.backend.pytree_dataclass) on the JAX backend")
 
 
+def _check_composition(data: Any, map: Any, covs: tuple = ()) -> None:
+    """Equal-sized but different domains or cell sets pass every shape check and give a
+    wrong lnL silently, so wherever the attributes exist require ``data.domain == map.src``
+    and each covariance's ``cells`` to be ``map.dst.cells`` (raw arrays, toy maps and
+    covariances without cells are not checked)."""
+    dom, src = getattr(data, "domain", None), getattr(map, "src", None)
+    if dom is not None and src is not None and dom != src:
+        raise ValueError(f"data.domain {dom!r} is not the map's src {src!r}")
+    cells = getattr(getattr(map, "dst", None), "cells", None)
+    if cells is None:
+        return
+    for c, cov in enumerate(covs):
+        own = getattr(cov, "cells", None)
+        if own is not None and own != cells:
+            raise ValueError(f"channel {c}: the covariance's cells ({own!r}) are not the map's "
+                             f"dst.cells ({cells!r})")
+
+
 def _resolve_backend(values: Any, backend: str | Backend | None) -> Backend:
     be = get_backend(values, backend=backend)
     if be.name == "jax":
@@ -239,6 +258,14 @@ class GaussianLikelihood(_CountersMixin):
     factorisation and in the cache key (WG ``ALPHA_D_CLAMP``,
     ``gpu_sinusoid/wdmtoysgpu/matrix.py:637``).  ``row_ok``: ``theta -> bool`` (jit-able).
     ``backend``: ``"numpy"``/``"jax"``/a ``Backend``; default from ``data``.
+    ``density_order``: the residual density's operation order -- ``"default"``
+    (``RealGaussian.lnl``, WT ``marginal_lnlike``) or ``"folded"`` (``RealGaussian.lnl_folded``:
+    the amplitude folded into each term first, WT ``FastFullCovariance.lnlike``, the
+    sinusoid ``exact`` model; an amplitude ``RealGaussian`` only).
+
+    Wherever the attributes exist, ``data.domain`` must be ``map.src`` and each channel's
+    ``cov.cells`` must be ``map.dst.cells`` (``ValueError`` otherwise): equal-sized but
+    different domains or cells would pass every shape check and give a wrong lnL.
     """
 
     def __init__(self, data: Any, map: Any, cov: Any, density: RealGaussian | ComplexGaussian, *,
@@ -246,17 +273,25 @@ class GaussianLikelihood(_CountersMixin):
                  strategy: Literal["residual", "expanded"] = "residual",
                  quad_form: Literal["solve", "whiten", "elementwise"] | None = None,
                  noise_clamp: Mapping[str, float] | None = None,
-                 row_ok: Callable | None = None, backend: str | Backend | None = None) -> None:
+                 row_ok: Callable | None = None, backend: str | Backend | None = None,
+                 density_order: Literal["default", "folded"] = "default") -> None:
         if strategy not in STRATEGIES:
             raise ValueError(f"strategy must be one of {STRATEGIES}; got {strategy!r}")
         if quad_form is not None and quad_form not in QUAD_FORMS:
             raise ValueError(f"quad_form must be one of {QUAD_FORMS} or None; got {quad_form!r}")
+        if density_order not in DENSITY_ORDERS:
+            raise ValueError(f"density_order must be one of {DENSITY_ORDERS}; got {density_order!r}")
         if not isinstance(density, (RealGaussian, ComplexGaussian)):
             raise TypeError(f"density must be RealGaussian or ComplexGaussian; got {type(density)}")
         if not isinstance(params, Params):
             raise TypeError("params must be a domainia.likelihood.Params")
         if strategy == "expanded" and isinstance(density, RealGaussian) and density.amplitude:
             raise ValueError("strategy='expanded' has no amplitude form; use 'residual'")
+        if density_order == "folded" and not isinstance(density, RealGaussian):
+            raise ValueError("density_order='folded' is a RealGaussian order (lnl_folded)")
+        if density_order == "folded" and not density.amplitude:
+            raise ValueError("density_order='folded' folds the amplitude: it needs a RealGaussian "
+                             "with an amplitude parameter")
         if nuisance is not None:
             if isinstance(cov, ChannelStack):
                 raise ValueError("nuisance applies to a single-channel covariance")
@@ -267,6 +302,7 @@ class GaussianLikelihood(_CountersMixin):
         self.be = be = _resolve_backend(raw, backend)
         values = np.asarray(raw)
         self.params, self.density, self.strategy, self.quad_form = params, density, strategy, quad_form
+        self.density_order = density_order
         if isinstance(cov, ChannelStack):
             covs, k = tuple(cov.covs), int(cov.k)
             slices = tuple(tuple(range(c * k, (c + 1) * k)) for c in range(len(covs)))
@@ -277,6 +313,7 @@ class GaussianLikelihood(_CountersMixin):
         else:
             covs, slices = (cov,), (tuple(range(len(params.noise))),)
             self.stacked = False
+        _check_composition(data, map, covs)
         self.covs = covs
         self.n_channels = len(covs)
         self.n_eff = tuple(int(c.n) - int(c.n_u) for c in covs)
@@ -392,7 +429,9 @@ class GaussianLikelihood(_CountersMixin):
             F, h = state.factors[c], self._chan(hc, c)
             if self.strategy == "residual":
                 q = self._quad(F, self._chan(parts.y_data, c) - h)
-                if isinstance(self.density, RealGaussian):
+                if self.density_order == "folded":
+                    val = self.density.lnl_folded(q, state.logdet[c], self.n_eff[c], log10A, be=be)
+                elif isinstance(self.density, RealGaussian):
                     val = self.density.lnl(q, state.logdet[c], self.n_eff[c], log10A, be=be)
                 else:
                     val = self.density.lnl(q, state.logdet[c], self.n_eff[c])
@@ -570,6 +609,7 @@ class FourierWhittle(_CountersMixin):
             if map is None or sI is None or sG is None or psd is not None or fmin is not None \
                     or crop is not None:
                 raise ValueError("form='complex' takes map, sI and sG, not psd/fmin/crop")
+            _check_composition(data, map)
             d = np.asarray(map.apply(values, be=NUMPY))
             sI, sG = np.asarray(sI, dtype=np.float64), np.asarray(sG, dtype=np.float64)
             if d.ndim != 2 or sI.shape != d.shape or sG.shape != d.shape:

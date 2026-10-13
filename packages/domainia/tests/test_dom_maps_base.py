@@ -143,6 +143,55 @@ def test_maps_are_frozen_dataclasses():
         R.pos = None  # type: ignore[misc]
 
 
+def test_push_without_matvec_is_a_type_error_naming_gap_g9():
+    """Spec section 4.2's WDM -> time translation (W^T Lambda W / dt^2) needs a fixed-noise-state
+    ``matvec`` that no cell covariance has (gap G9): a clear TypeError, not a bare
+    AttributeError, from ``rows`` and ``matvec`` of a real or analysis push."""
+    from domainia.covariance import DiagonalCovariance
+    from domainia.maps import TimeToFourier, WDMToTime
+
+    full, _ = _cells()
+    time = TimeDomain(GRID.N, GRID.dt)
+    cov = DiagonalCovariance(np.ones(GRID.N), GRID.N)
+    P = WDMToTime(full, time).push(cov)
+    msg = r"DiagonalCovariance has no matvec: .*\(gap G9: WDM->time translation not implemented\)"
+    with pytest.raises(TypeError, match=msg):
+        P.rows([0])
+    with pytest.raises(TypeError, match=msg):
+        P.dense()
+    with pytest.raises(TypeError, match=msg):
+        P.matvec(np.ones((1, GRID.N)))
+    with pytest.raises(TypeError, match=msg):                 # an analysis push reads matvec too
+        TimeToFourier(time).push(cov).rows([0])
+
+
+def test_a_scaled_wdm_domain_is_refused_by_every_map():
+    """``WDMDomain.scale`` is applied by no map (gap G4): a scale other than 1 is refused at
+    construction instead of being silently treated as 1.  The domain itself (a label) and
+    the identity on it stay valid."""
+    from domainia.maps import FourierToWDM, TimeToWDM, WDMToTime
+
+    full, cut = _cells()
+    full2, cut2 = WDMDomain(full.cells, 2.0), WDMDomain(cut.cells, 2.0)
+    time = TimeDomain(GRID.N, GRID.dt)
+    bins = FourierDomain(GRID.N, GRID.dt, 0, GRID.N // 2 + 1, "rfft")
+    bands = CellSet.bands(GRID, (1, 2, 3))
+    msg = r"WDMDomain.scale = 2.0 is not honoured"
+    with pytest.raises(ValueError, match=msg + r".*TimeToWDM"):
+        TimeToWDM(time, full2)
+    with pytest.raises(ValueError, match=msg + r".*WDMToTime"):
+        WDMToTime(full2, time)
+    with pytest.raises(ValueError, match=msg + r".*FourierToWDM"):
+        FourierToWDM(bins, WDMDomain(bands, 2.0))
+    for src, dst in ((full2, cut), (full, cut2), (full2, cut2)):
+        with pytest.raises(ValueError, match=msg + r".*Restrict"):
+            Restrict(src, dst)
+    assert Identity(full2).dst == full2                        # nothing to honour
+    for m in (TimeToWDM(time, full), WDMToTime(full, time), FourierToWDM(bins, WDMDomain(bands)),
+              Restrict(full, cut)):
+        assert isinstance(m, LinearMap)                        # scale 1 is unchanged
+
+
 @pytest.mark.jax
 def test_maps_are_pytrees_passed_to_jit():
     jax, JB = jax_or_skip()

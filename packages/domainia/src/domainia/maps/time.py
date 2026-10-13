@@ -57,6 +57,7 @@ class TimeToWDM(LinearMap):
 
     def __post_init__(self) -> None:
         if self.m_idx is _BUILD:
+            self.dst.require_unit_scale("TimeToWDM")
             _check_grid(self.src, self.dst)
             object.__setattr__(self, "m_idx", np.asarray(self.dst.cells.m, dtype=np.int64))
             object.__setattr__(self, "n_idx", np.asarray(self.dst.cells.n, dtype=np.int64))
@@ -112,6 +113,7 @@ class WDMToTime(LinearMap):
 
     def __post_init__(self) -> None:
         if self.m_idx is _BUILD:
+            self.src.require_unit_scale("WDMToTime")
             g = _check_grid(self.dst, self.src)
             m, n = wdm.grid.packed_cells(g.Nf, g.Nt)
             got = np.asarray(self.src.cells.m), np.asarray(self.src.cells.n)

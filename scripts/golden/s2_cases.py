@@ -7,6 +7,9 @@ here, test-locally, from ``data/`` and ``golden/`` and named as such:
 
 * the sinusoid signal ``A_h cos(2 pi f0 t + phi0)``, ``t_j = j dt`` (WT
   ``likelihood.signal``, ``wdm_toys/likelihood.py:110-117``) -- S3 owns it;
+* the sinusoid ``exact`` model's log-det correction: the shipped bandcov interpolant
+  evaluated as WT ``BandCovariance.logdet`` does (:class:`G6BandCorrection`) -- S3 owns
+  ``BandCorrection`` and the artifact checks;
 * the GB template: the golden gbonfly store template at the injection
   (``golden/galactic_binary/intermediates_<case>.npz["store_template"]``), so the GB
   cases are evaluated at the anchor only -- S5 owns the waveform;
@@ -25,6 +28,7 @@ from functools import cache
 from types import SimpleNamespace
 
 import numpy as np
+from numpy.polynomial import chebyshev as cheb
 
 import wdm
 from domainia.covariance import (ChannelStack, DiagonalCovariance, Eq45Covariance,
@@ -35,9 +39,10 @@ from domainia.density import ComplexGaussian, RealGaussian
 from domainia.domains import CellSet, ChannelAxis, FourierDomain, TimeDomain, WDMDomain
 from domainia.likelihood import FourierWhittle, GaussianLikelihood, Params, StaticSignal
 from domainia.maps import BinSelect, FourierToWDM, Identity, TimeToWDM
-from domainia.nuisance import FourierBandNuisance
+from domainia.nuisance import FourierBandNuisance, ProjectedOperatorMarginal
 from domainia.spectra import LogLinearPSD, SeparablePSD, TabulatedSpectrum
 from domainia.variance import BandAveragedVariance, MidpointVariance
+
 from scripts.golden.goldens_io import read_json, read_npz, to_float
 from scripts.golden.paths import DATA, GOLDEN
 from scripts.golden.workers._common import runtime_fingerprint
@@ -53,6 +58,10 @@ WHITTLE = Params(("A_h", "f_0", "phi_0", "log10_A_n", "alpha"), (0, 1, 2), (3, 4
 #: The S2 preview set: every edge treatment and both stationary forms (spec, S2 gate (a)).
 SIN_DEFAULT = ("whittle_raw", "whittle_cut", "band_raw", "mid_cut")
 SIN_SLOW = ("tri_raw", "band_pad", "band_exact")
+#: The sinusoid exact model's shipped artifacts (data/sinusoid/cache): the fitted alpha_d^2
+#: coefficient c_N of log|Sigma~| and the validated bandcov log-det interpolant.
+SIN_CN = DATA / "sinusoid" / "cache" / "cN_N16384_dt0.0009765625_fmin4_fref1.npy"
+SIN_BANDCOV = DATA / "sinusoid" / "cache" / "bandcov_v1_4bfb466c191c79f9879a.npz"
 #: Measured bitwise on the recording build (spec section 3.6 and the P0 measurement).
 SIN_BITWISE = ("whittle_raw", "whittle_cut", "band_raw", "mid_raw", "band_cut", "mid_cut",
                "tri_raw", "tri_cut")
@@ -125,13 +134,54 @@ def _sin_base(base: str, psd: LogLinearPSD, cells: CellSet, t_max: float | None 
     return Eq45Covariance(psd, cells, builder="bessel", t_max=t_max)
 
 
-def sinusoid_likelihood(model: str):
-    """One sinusoid model at manuscript_mid, NumPy ``historical`` strategies."""
+@dataclass(frozen=True, eq=False)
+class G6BandCorrection:
+    """WT ``BandCovariance.logdet``'s correction (``wdm_toys/bandcov.py:259-266``):
+    ``chebval2d(x, y, coefficients)`` at ``x`` the affine map of ``alpha_c`` and ``y`` of
+    ``asinh(alpha_d / drift_scale)`` onto [-1, 1] over the prior box (``_scaled``,
+    :34-38), with ``bounds`` and ``drift_scale`` read from the artifact's identity.  Test-local
+    (S3 owns ``BandCorrection``); NumPy only, as the WT oracle."""
+
+    coefficients: np.ndarray
+    bounds: np.ndarray
+    drift_scale: float
+
+    @classmethod
+    def load(cls, path=SIN_BANDCOV) -> "G6BandCorrection":
+        z = read_npz(path)
+        ident = json.loads(str(z["metadata"]))["identity"]
+        return cls(np.array(z["coefficients"], dtype=float), np.asarray(ident["bounds"], dtype=float),
+                   float(ident["drift_scale"]))
+
+    def __call__(self, nu, be=None):
+        ac, ad, b = float(nu[0]), float(nu[1]), self.bounds
+        x = 2 * (ac - b[0, 0]) / (b[0, 1] - b[0, 0]) - 1
+        lo, hi = np.arcsinh(b[1] / self.drift_scale)
+        y = 2 * (np.arcsinh(ad / self.drift_scale) - lo) / (hi - lo) - 1
+        return cheb.chebval2d(x, y, self.coefficients)
+
+
+def sinusoid_likelihood(model: str, *, density_order: str | None = None):
+    """One sinusoid model at manuscript_mid, NumPy ``historical`` strategies.
+
+    ``density_order`` (``GaussianLikelihood``): ``None`` is the model's own -- ``"folded"``
+    for ``exact`` (WT ``FastFullCovariance.lnlike``), ``"default"`` for the matrix models.
+    The ``exact`` model is not an S2 preview (its composition is an S3 item): it is here
+    for the density-order check against its G1 references."""
     s = sinusoid_inputs()
     time = TimeDomain(N, DT)
     data = TimeSeries(s.d, time)
     psd = LogLinearPSD(f_floor=FMIN, f_ref=1.0, T=N * DT)
     signal = StaticSignal(sinusoid_signal)
+    if model.startswith("whittle") and density_order is not None:
+        raise ValueError("the Whittle forms have no density_order")
+    if model == "exact":
+        cov = ProjectedOperatorMarginal(
+            ExactTimeCovariance(psd, N, DT, P=24, c_N=float(np.load(SIN_CN)), tol=1e-7),
+            FourierBandNuisance(N, DT, FMIN), G6BandCorrection.load())
+        return GaussianLikelihood(data, Identity(time), cov, RealGaussian(0.0, "log10_A_n"), signal=signal,
+                                  params=DRIFT, density_order=density_order or "folded")
+    order = density_order or "default"
     if model == "whittle_raw":
         return FourierWhittle("real-orthonormal", data, psd=psd, fmin=FMIN, signal=signal, params=WHITTLE)
     if model == "whittle_cut":
@@ -144,7 +194,7 @@ def sinusoid_likelihood(model: str):
         cov = ZeroPadded(_sin_base(base, psd, CellSet.all_active(ext), t_max=ext.Nt * wdm.delta_T(NF, DT)),
                          strategy="time_marginal", grid=ext, pad_columns=PAD)
         return GaussianLikelihood(data, Identity(time), cov, RealGaussian(0.0, "log10_A_n"), signal=signal,
-                                  params=DRIFT, nuisance=nuis.discarded_basis().T)
+                                  params=DRIFT, nuisance=nuis.discarded_basis().T, density_order=order)
     cells = CellSet.all_active(wdm.Grid(NF, NT, DT))
     if edge == "cut":
         cells = cells.drop_columns(*CUT)
@@ -157,7 +207,7 @@ def sinusoid_likelihood(model: str):
     else:
         cov = _sin_base(base, psd, cells)
     return GaussianLikelihood(data, tmap, cov, RealGaussian(0.5 * N * float(np.log(DT)), "log10_A_n"),
-                              signal=signal, params=DRIFT, nuisance=U)
+                              signal=signal, params=DRIFT, nuisance=U, density_order=order)
 
 
 def sinusoid_compare(model: str) -> dict:

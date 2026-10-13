@@ -125,8 +125,9 @@ def assemble_edge_rows(M_i: Any, R: Any, e: Any, i: Any, be: Backend) -> Any:
 class SchurEdge(Covariance):
     """Exact edge rows over an approximate interior (module docstring).
 
-    ``interior`` covers the destination cells minus ``edge`` (band order); ``rows`` is a
-    :class:`PushedRows` onto the destination cells whose row cells are ``edge``.
+    ``interior`` covers the destination cells minus ``edge`` (band order; checked against
+    ``interior.cells`` when it has them); ``rows`` is a :class:`PushedRows` onto the
+    destination cells whose row cells are ``edge``.
     ``chol_impl`` pins the complement's (``"schur"``) or the matrix's (``"dense"``)
     Cholesky: ``"scipy"`` (WT ``Schur``) or ``"numpy"`` (GB).  ``assembly="dense"``
     needs an interior with a dense form (``_matrix``).
@@ -155,6 +156,10 @@ class SchurEdge(Covariance):
         self.i = np.setdiff1d(np.arange(self.n), self.e)
         if interior.n != self.i.size:
             raise ValueError(f"the interior has {interior.n} cells; expected {self.i.size}")
+        inner = getattr(interior, "cells", None)
+        if inner is not None and inner != self.cells.complement(edge):
+            raise ValueError(f"the interior's cells ({inner!r}) are not the destination cells "
+                             f"minus the edge ({self.cells.complement(edge)!r})")
         self.jittable = interior.jittable
 
     def host_constants(self) -> dict[str, Any]:

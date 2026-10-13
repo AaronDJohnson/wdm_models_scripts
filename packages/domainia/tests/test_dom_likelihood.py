@@ -156,6 +156,48 @@ def test_amplitude_outside_the_factorisation_is_wt_order():
     assert got == want                                       # DiagFactor quad 'solve' = WT y @ (y / v)
 
 
+def test_density_order_folded_is_lnl_folded_and_default_is_unchanged():
+    """``density_order="folded"`` evaluates ``RealGaussian.lnl_folded`` (WT
+    ``FastFullCovariance.lnlike``, the sinusoid exact model's order); ``"default"`` (and no
+    argument) keeps ``RealGaussian.lnl``.  The two associations differ in the last bits."""
+    rng = np.random.default_rng(4)
+    n = 40
+    v0 = rng.uniform(0.5, 2.0, n)
+    W = rng.standard_normal((n, n))
+    data = 30.0 * rng.standard_normal(n)
+    B = rng.standard_normal((2, n))
+    params = Params(("s0", "s1", "log10_A_n", "a"), (0, 1), (3,))
+    dens = RealGaussian(-3.5, "log10_A_n")
+    make = lambda **kw: GaussianLikelihood(data, ToyMap(W), diag_cov(v0, n), dens,  # noqa: E731
+                                           signal=ToySignal(B), params=params, **kw)
+    plain, default, folded = make(), make(density_order="default"), make(density_order="folded")
+    assert (plain.density_order, folded.density_order) == ("default", "folded")
+    X = np.column_stack([rng.standard_normal((40, 2)), rng.uniform(-3.0, 3.0, 40), rng.uniform(-0.5, 0.5, 40)])
+    got_plain, got_default, got_folded = plain(X), default(X), folded(X)
+    want_lnl, want_folded = [], []
+    for x in X:
+        (q, ld), = plain.quad_logdet(x)
+        want_lnl.append(dens.lnl(np.float64(q), np.float64(ld), n, x[2]))
+        want_folded.append(dens.lnl_folded(np.float64(q), np.float64(ld), n, x[2]))
+    assert np.array_equal(got_plain, want_lnl) and np.array_equal(got_default, got_plain)
+    assert np.array_equal(got_folded, want_folded)
+    assert np.any(got_folded != got_plain)                   # the flag is load-bearing
+    assert np.max(np.abs(got_folded - got_plain) / np.abs(got_plain)) <= 1e-14
+
+
+def test_density_order_is_checked():
+    n = 4
+    kw = dict(signal=ToySignal(np.ones((1, n))), params=Params(("s", "log10_A_n", "a"), (0,), (2,)))
+    cov = diag_cov(np.ones(n), n)
+    with pytest.raises(ValueError, match="density_order"):
+        GaussianLikelihood(np.zeros(n), ToyMap(np.eye(n)), cov, RealGaussian(0.0, "log10_A_n"),
+                           density_order="fold", **kw)
+    with pytest.raises(ValueError, match="amplitude"):
+        GaussianLikelihood(np.zeros(n), ToyMap(np.eye(n)), cov, RealGaussian(), density_order="folded", **kw)
+    with pytest.raises(ValueError, match="RealGaussian"):
+        GaussianLikelihood(np.zeros(n), ToyMap(np.eye(n)), cov, ComplexGaussian(), density_order="folded", **kw)
+
+
 def test_flat_marginal_through_nuisance_is_wt_marginal_lnlike_bitwise():
     """``nuisance=U`` is ``FlatMarginal(cov, U)``: wdm_toys/matrix.py:654-669 verbatim."""
     from domainia.nuisance import FlatMarginal
@@ -300,6 +342,21 @@ def test_jax_matches_numpy_and_keeps_constants_out_of_the_program():
     assert isinstance(st.factors[0].L, jax.Array)
     hlo = jax.jit(lik_jx._evaluate).lower(lik_jx.parts, jax.numpy.asarray(X[0]), st).as_text()
     assert len(hlo) < 20_000, len(hlo)   # 5.8 KB measured; closing over parts and state gives 54 KB
+
+
+def test_jax_folded_density_order_matches_numpy():
+    pytest.importorskip("jax")
+    rng = np.random.default_rng(11)
+    n = 30
+    v0, W, data, B = rng.uniform(0.5, 2.0, n), rng.standard_normal((n, n)), rng.standard_normal(n), \
+        rng.standard_normal((2, n))
+    params = Params(("s0", "s1", "log10_A_n", "a"), (0, 1), (3,))
+    liks = [GaussianLikelihood(data, ToyMap(W), diag_cov(v0, n), RealGaussian(-3.5, "log10_A_n"),
+                               signal=ToySignal(B), params=params, density_order="folded", backend=b)
+            for b in (None, "jax")]
+    X = np.column_stack([rng.standard_normal((4, 2)), rng.uniform(-3.0, 3.0, 4), rng.uniform(-0.5, 0.5, 4)])
+    a, b = liks[0](X), liks[1](X)
+    assert np.max(np.abs(a - b) / np.abs(a)) <= 1e-12
 
 
 def test_jax_expanded_complex_matches_numpy():

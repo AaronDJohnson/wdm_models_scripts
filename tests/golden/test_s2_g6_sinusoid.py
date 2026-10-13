@@ -7,6 +7,8 @@ blocks, the 1024^2 pad marginal and 959 exact rows take ~20 s).  Gates: (quad, l
 relative 1e-12 and lnL at the approved NumPy reference gate (``atol + rtol |lnL|``,
 golden/sinusoid/tolerances_measured.json); on the recording build the bitwise-class
 models must be exact.  The mapped data and nuisance directions are checked as G6 maps.
+The ``exact`` model (an S3 composition, not a preview) is checked here only for its density
+order against its G1 references (G-F1, D1); it records no G6 item.
 """
 
 from __future__ import annotations
@@ -57,3 +59,55 @@ def test_mapped_data_and_nuisance_directions(model, record_property):
         if EXACT_HERE:
             assert s["sha256"] == g["sha256"], (model, key)
         assert d <= 1e-12, (model, key, d)
+
+
+#: The truth and the two G1 points where the default density order is not bitwise (G-F1, D1).
+EXACT_G1_POINTS = (0, 8, 18)
+
+
+def test_exact_folded_density_order_reproduces_g1():
+    """D1 (G-F1): the sinusoid ``exact`` composition (``ProjectedOperatorMarginal`` over the
+    shipped ``c_N`` and bandcov interpolant) with ``density_order="folded"`` -- WT
+    ``FastFullCovariance.lnlike``'s association, the registry default for ``exact`` --
+    reproduces the G1 reference loglike (golden/sinusoid/references/
+    manuscript_mid_exact_reference.npz) bitwise at the truth and at points 8 and 18 on the
+    recording build.  The ``"default"`` order (``RealGaussian.lnl``) is unchanged: inside
+    the approved gate everywhere, bitwise at the truth, off in the last bits at 8 and 18."""
+    from scripts.golden.goldens_io import read_npz
+    from scripts.golden.paths import GOLDEN
+
+    ref = read_npz(GOLDEN / "sinusoid" / "references" / "manuscript_mid_exact_reference.npz")
+    idx = list(EXACT_G1_POINTS)
+    theta, want = ref["theta"][idx], ref["loglike"][idx]
+    folded = sinusoid_likelihood("exact")
+    default = sinusoid_likelihood("exact", density_order="default")
+    assert (folded.density_order, default.density_order) == ("folded", "default")
+    assert folded.n_eff == (16384 - 128,)
+    got, got_default = folded(theta), default(theta)
+    atol, rtol = sinusoid_gate("exact")
+    gate = atol + rtol * np.abs(want)
+    assert np.all(np.abs(got - want) <= gate) and np.all(np.abs(got_default - want) <= gate)
+    if EXACT_HERE:
+        assert np.array_equal(got, want), (got - want)
+        assert got_default[0] == want[0] and np.all(got_default[1:] != want[1:]), (got_default - want)
+
+
+@pytest.mark.slow
+def test_exact_folded_density_order_at_every_g1_point():
+    """All 30 G1 points (``slow``, ~7 s): the folded order is bitwise at every point on the
+    recording build; the default order differs at exactly points 8 and 18 (the review's
+    measurement), and both stay inside the approved gate."""
+    from scripts.golden.goldens_io import read_npz
+    from scripts.golden.paths import GOLDEN
+
+    ref = read_npz(GOLDEN / "sinusoid" / "references" / "manuscript_mid_exact_reference.npz")
+    theta, want = ref["theta"], ref["loglike"]
+    assert np.all(np.isfinite(want))
+    got = sinusoid_likelihood("exact")(theta)
+    got_default = sinusoid_likelihood("exact", density_order="default")(theta)
+    atol, rtol = sinusoid_gate("exact")
+    gate = atol + rtol * np.abs(want)
+    assert np.all(np.abs(got - want) <= gate) and np.all(np.abs(got_default - want) <= gate)
+    if EXACT_HERE:
+        assert np.array_equal(got, want), np.flatnonzero(got != want)
+        assert np.flatnonzero(got_default != want).tolist() == [8, 18]

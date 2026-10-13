@@ -46,13 +46,57 @@ def test_import_does_not_import_jax():
     subprocess.run([sys.executable, "-P", "-c", code], check=True, env=env, cwd=str(SRC.parent))
 
 
-@pytest.mark.parametrize("cls", [cov.DiagFactor, cov.CholFactor, cov.BlockTriCovFactor, cov.HermitianFactor,
-                                 cov.SchurFactor, cov.PaddedFactor, cov.OperatorFactor, cov.StackFactor,
-                                 MarginalFactor, ProjectedFactor])
+#: The ``Factor`` protocol methods each concrete factor class really implements.  ``quad``
+#: is universal; the rest are stubs raising ``NotImplementedError`` by design (a marginal
+#: exposes quad and logdet only; an operator / the padded marginal have no whitening), as
+#: the ``Factor`` docstring in ``domainia.covariance.base`` states.
+SUPPORTED = {
+    cov.DiagFactor: {"solve", "whiten", "quad"},
+    cov.CholFactor: {"solve", "whiten", "quad"},
+    cov.BlockTriCovFactor: {"solve", "whiten", "quad"},
+    cov.HermitianFactor: {"solve", "whiten", "quad"},
+    cov.SchurFactor: {"solve", "whiten", "quad"},
+    cov.StackFactor: {"solve", "whiten", "quad"},
+    cov.PaddedFactor: {"solve", "quad"},
+    cov.OperatorFactor: {"solve", "quad"},
+    MarginalFactor: {"quad"},
+    ProjectedFactor: {"quad"},
+}
+PROTOCOL = ("solve", "whiten", "quad")
+
+
+def _raises_not_implemented(fn) -> bool:
+    """Does ``fn`` name ``NotImplementedError`` (a stub)?  No real method does."""
+    return "NotImplementedError" in fn.__code__.co_names
+
+
+def test_every_concrete_factor_class_is_in_the_table():
+    exported = {getattr(cov, n) for n in cov.__all__ if n.endswith("Factor") and n != "Factor"}
+    assert exported | {MarginalFactor, ProjectedFactor} == set(SUPPORTED)
+
+
+@pytest.mark.parametrize("cls", list(SUPPORTED), ids=lambda c: c.__name__)
 def test_factor_classes_follow_the_protocol(cls):
-    for attr in ("solve", "whiten", "quad"):
-        assert callable(getattr(cls, attr)), (cls.__name__, attr)
-    assert "n_u" in dir(cls)
+    """The supported methods are real (no ``NotImplementedError`` in their bodies, and a call
+    on a bare instance fails, if at all, for want of state); the others are the documented
+    stubs (they raise ``NotImplementedError`` before reading any state)."""
+    assert "quad" in SUPPORTED[cls] and "n_u" in dir(cls)
+    bare = object.__new__(cls)
+    for name in PROTOCOL:
+        fn = getattr(cls, name)
+        assert callable(fn), (cls.__name__, name)
+        if name in SUPPORTED[cls]:
+            assert not _raises_not_implemented(fn), f"{cls.__name__}.{name} is a stub"
+            try:
+                getattr(bare, name)(np.ones(3))
+            except NotImplementedError:
+                pytest.fail(f"{cls.__name__}.{name} raised NotImplementedError")
+            except Exception:  # noqa: BLE001 -- a bare instance has no arrays: any other error is fine
+                pass
+        else:
+            assert _raises_not_implemented(fn), f"{cls.__name__}.{name} is not in the table"
+            with pytest.raises(NotImplementedError):
+                getattr(bare, name)(np.ones(3))
 
 
 @pytest.mark.jax

@@ -165,6 +165,7 @@ class FlatMarginal(Covariance):
         if U.shape[1] == 0:                 # nuisance_basis needs a column (WT skipped u.shape[1] == 0)
             raise ValueError(f"U must have at least one column; got {U.shape}: use the covariance itself")
         self.cov, self.form = cov, form
+        self.cells = getattr(cov, "cells", None)          # the likelihood's map/cells check
         self.U = nuisance_basis(U, rtol)
         self.n = cov.n
         self.n_u = int(self.U.shape[1]) + cov.n_u

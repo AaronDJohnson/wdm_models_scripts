@@ -84,7 +84,8 @@ class PushedRows:
         The data map; its ``dst.cells`` are the destination cells (time:
         ``maps.TimeToWDM``) and its ``C`` the cells' unit-norm atoms on the exact
         covariance's bins (Fourier: ``maps.FourierToWDM(bins, dst, restrict=True)``).
-        ``cells=`` / ``atoms=`` override them.
+        ``cells=`` / ``atoms=`` stand in for them (``cells=`` must equal the map's
+        ``dst.cells`` when both are given).
     rows
         The edge cells (a ``CellSet`` inside the destination cells).
     order, phi_cache, staged, chunk
@@ -98,6 +99,9 @@ class PushedRows:
         self.exact, self.rows_cells = exact, rows
         if cells is None and map is None:
             raise ValueError("pass a map (its dst.cells are the destination cells) or cells=")
+        map_cells = getattr(getattr(map, "dst", None), "cells", None)
+        if cells is not None and map_cells is not None and cells != map_cells:
+            raise ValueError(f"cells= ({cells!r}) are not the map's dst.cells ({map_cells!r})")
         self.cells = cells if cells is not None else map.dst.cells
         self.e = positions(rows, self.cells)
         self.n = len(self.cells.m)

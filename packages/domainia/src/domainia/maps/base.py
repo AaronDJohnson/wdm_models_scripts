@@ -22,6 +22,10 @@ kind        apply                       push(cov) (``PushedCovariance``)
 "complex"   complex -> complex          ``A M' A^H`` for complex-linear maps (BinSelect)
 "widely"    complex -> complex          not pushable (A z + B conj z; raises TypeError)
 ==========  ==========================  ================================================
+
+A covariance without ``matvec`` -- every covariance on WDM cells -- cannot be pushed through
+a real or analysis map: ``PushedCovariance.rows``/``matvec`` raise a ``TypeError`` naming
+gap G9 (spec section 4.2's WDM -> time ``W^T Lambda W / dt^2`` is not implemented).
 """
 
 from __future__ import annotations
@@ -181,19 +185,33 @@ class PushedCovariance:
     def size(self) -> int:
         return self.map.shape[0]
 
+    def _matvec(self) -> Any:
+        """``cov.matvec``, or a TypeError naming gap G9: a covariance on WDM cells
+        (``DiagonalCovariance``, ``Eq45Covariance``, ...) has no fixed-noise-state ``matvec``,
+        so spec section 4.2's WDM -> time translation ``W^T Lambda W / dt^2`` is not available."""
+        fn = getattr(self.cov, "matvec", None)
+        if fn is None:
+            raise TypeError(f"{type(self.cov).__name__} has no matvec: a push through a "
+                            f"{self.map.kind!r} map needs a fixed-noise-state SupportsMatvec "
+                            "(X -> X Sigma, e.g. ExactTimeCovariance.at(nu)) "
+                            "(gap G9: WDM->time translation not implemented)")
+        return fn
+
     def rows(self, idx: Any, be: Backend | None = None) -> Any:
         idx = np.atleast_1d(np.asarray(idx, dtype=np.int64))
         kind = self.map.kind
         if kind == "real":
+            matvec = self._matvec()
             R = self.map.rows(idx)
-            return self.map.apply(self.cov.matvec(R, be), be)
+            return self.map.apply(matvec(R, be), be)
         if kind == "cells":
             return self.map.push_rows(self.cov.dense(be), idx, be)
         if kind == "complex":
             return self.map.push_rows(self.cov.dense(be), idx, be)
         if kind == "analysis":
+            matvec = self._matvec()
             F = self.map.rows(idx)                                   # (k, N) complex
-            Y = self.cov.matvec(F.real, be) + 1j * self.cov.matvec(F.imag, be)
+            Y = matvec(F.real, be) + 1j * matvec(F.imag, be)
             return np.conj(self.map.apply_complex(np.conj(Y), be))
         raise TypeError(f"cannot push through a {kind!r} map")
 
@@ -210,7 +228,7 @@ class PushedCovariance:
         """``X (M Sigma M^T)`` row by row (real kinds), so pushes compose."""
         if self.map.kind != "real":
             raise TypeError("matvec of a pushed covariance is defined for real maps only")
-        return self.map.apply(self.cov.matvec(self.map.adjoint(X, be), be), be)
+        return self.map.apply(self._matvec()(self.map.adjoint(X, be), be), be)
 
 
 @pytree_dataclass(data=(), meta=("src",))
@@ -296,6 +314,8 @@ class Restrict(LinearMap):
 
     def __post_init__(self) -> None:
         if self.pos is _BUILD:
+            self.src.require_unit_scale("Restrict")
+            self.dst.require_unit_scale("Restrict")
             where = {c: i for i, c in enumerate(zip(self.src.cells.m, self.src.cells.n))}
             missing = [c for c in zip(self.dst.cells.m, self.dst.cells.n) if c not in where]
             if missing or self.src.cells.grid != self.dst.cells.grid:

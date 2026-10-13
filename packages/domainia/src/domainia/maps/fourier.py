@@ -226,8 +226,8 @@ class FourierToWDM(LinearMap):
     ``impl="dense"`` evaluates ``Re(z[..., lo:lo+width] @ C.T)`` (GB ``cells``, the golden
     default); ``impl="fft"`` evaluates ``wdm.forward_bands`` (opt-in, <= 1e-12 relative).
     For a record ``z = rfft(x)`` the cells are ``sqrt(N / (2 dt))`` times
-    ``TimeToWDM.apply(x)`` on the same cells (``WDMDomain.scale`` records that factor
-    together with the data's own normalisation; it is not used in arithmetic).
+    ``TimeToWDM.apply(x)`` on the same cells (no map applies ``WDMDomain.scale`` yet, so
+    ``dst.scale`` must be 1: gap G4).
     """
 
     src: FourierDomain
@@ -243,6 +243,7 @@ class FourierToWDM(LinearMap):
             return
         if self.impl not in ("dense", "fft"):
             raise ValueError(f"impl must be 'dense' or 'fft'; got {self.impl!r}")
+        self.dst.require_unit_scale("FourierToWDM")
         g = self.dst.cells.grid
         if (self.src.N, self.src.dt) != (g.N, g.dt):
             raise ValueError(f"bins of an N={self.src.N} record cannot feed cells of an N={g.N} grid")

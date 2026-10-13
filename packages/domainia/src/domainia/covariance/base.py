@@ -53,7 +53,13 @@ QuadForm = Literal["solve", "whiten", "elementwise"]
 
 @runtime_checkable
 class Factor(Protocol):
-    """What a likelihood reads from a factorised covariance."""
+    """What a likelihood reads from a factorised covariance.
+
+    ``quad`` is universal; ``solve`` and ``whiten`` are not: ``MarginalFactor`` and
+    ``ProjectedFactor`` (``domainia.nuisance``) expose ``quad`` and ``logdet`` only, and
+    ``OperatorFactor`` / ``PaddedFactor`` have no whitening (``form="solve"``).  Those
+    methods raise ``NotImplementedError``; ``tests/test_dom_cov_api.py`` pins the table.
+    """
 
     logdet: Any
     ok: Any
