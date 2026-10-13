@@ -91,3 +91,84 @@ def record(record_property, item: str, observed: float, gate: float) -> None:
     """The G6 reporting convention read by ``scripts/golden/s2_report.py``: one junit
     property ``g6`` per comparison."""
     record_property("g6", json.dumps({"item": item, "observed": float(observed), "gate": float(gate)}))
+
+
+# --- sinusoid --------------------------------------------------------------------------------
+@cache
+def sinusoid_golden() -> SimpleNamespace:
+    path = GOLDEN / "sinusoid" / "intermediates" / f"{SIN_CASE}_truth.json"
+    return SimpleNamespace(json=read_json(path), path=path)
+
+
+@cache
+def sinusoid_inputs() -> SimpleNamespace:
+    z = read_npz(DATA / "sinusoid" / SIN_CASE / "toy_data.npz")
+    cfg = {str(k): float(v) for k, v in zip(z["_cfg_keys"], z["_cfg_vals"], strict=True)}
+    log10A = float(np.log10(cfg["A_n"]))
+    src = [cfg["A_h"], cfg["f_0"], cfg["phi_0"]]
+    return SimpleNamespace(
+        d=np.asarray(z["d"], dtype=np.float64), cfg=cfg,
+        truth=np.array(src + [log10A, cfg["alpha_c"], cfg["alpha_d"]]),
+        truth_whittle=np.array(src + [log10A, cfg["alpha_c"]]))
+
+
+def sinusoid_signal(src, t=np.arange(N) * DT):
+    """WT ``likelihood.signal`` (fdot = 0): ``phase = 2 pi f0 t + phi0; A_h cos(phase)``."""
+    return src[0] * np.cos(2.0 * np.pi * src[1] * t + src[2])
+
+
+def _sin_base(base: str, psd: LogLinearPSD, cells: CellSet, t_max: float | None = None):
+    if base == "band":
+        return DiagonalCovariance(BandAveragedVariance(psd, cells), len(cells.m))
+    if base == "mid":
+        return DiagonalCovariance(MidpointVariance(psd, cells), len(cells.m))
+    return Eq45Covariance(psd, cells, builder="bessel", t_max=t_max)
+
+
+def sinusoid_likelihood(model: str):
+    """One sinusoid model at manuscript_mid, NumPy ``historical`` strategies."""
+    s = sinusoid_inputs()
+    time = TimeDomain(N, DT)
+    data = TimeSeries(s.d, time)
+    psd = LogLinearPSD(f_floor=FMIN, f_ref=1.0, T=N * DT)
+    signal = StaticSignal(sinusoid_signal)
+    if model == "whittle_raw":
+        return FourierWhittle("real-orthonormal", data, psd=psd, fmin=FMIN, signal=signal, params=WHITTLE)
+    if model == "whittle_cut":
+        return FourierWhittle("real-orthonormal", data, psd=psd, fmin=FMIN, signal=signal, params=WHITTLE,
+                              crop=(CUT[0] * NF, (NT - CUT[1]) * NF))
+    base, edge = model.split("_")
+    nuis = FourierBandNuisance(N, DT, FMIN)
+    if edge == "pad":
+        ext = wdm.Grid(NF, NT + PAD, DT)
+        cov = ZeroPadded(_sin_base(base, psd, CellSet.all_active(ext), t_max=ext.Nt * wdm.delta_T(NF, DT)),
+                         strategy="time_marginal", grid=ext, pad_columns=PAD)
+        return GaussianLikelihood(data, Identity(time), cov, RealGaussian(0.0, "log10_A_n"), signal=signal,
+                                  params=DRIFT, nuisance=nuis.discarded_basis().T)
+    cells = CellSet.all_active(wdm.Grid(NF, NT, DT))
+    if edge == "cut":
+        cells = cells.drop_columns(*CUT)
+    tmap = TimeToWDM(time, WDMDomain(cells))
+    U = tmap.apply(nuis.discarded_basis()).T          # FlatMarginal applies nuisance_basis (WT)
+    if edge == "exact":
+        e = cells.columns(*EDGE)
+        rows = PushedRows(ExactTimeCovariance(psd, N, DT, form="operator", P=24), tmap, e, order="fixed")
+        cov = SchurEdge(_sin_base(base, psd, cells.complement(e)), rows, e)
+    else:
+        cov = _sin_base(base, psd, cells)
+    return GaussianLikelihood(data, tmap, cov, RealGaussian(0.5 * N * float(np.log(DT)), "log10_A_n"),
+                              signal=signal, params=DRIFT, nuisance=U)
+
+
+def sinusoid_compare(model: str) -> dict:
+    """``{quad, logdet, lnL}`` -> ``(value, golden, |delta|)`` at the truth."""
+    s, p = sinusoid_inputs(), sinusoid_golden().json["parts"][model]
+    lik = sinusoid_likelihood(model)
+    theta = s.truth_whittle if model.startswith("whittle") else s.truth
+    (quad, logdet), = lik.quad_logdet(theta)
+    lnl = float(lik(theta[None, :])[0])
+    out = {}
+    for key, val in (("quad", quad), ("logdet", logdet), ("lnL", lnl)):
+        ref = to_float(p[key])
+        out[key] = (val, ref, abs(val - ref))
+    return out
