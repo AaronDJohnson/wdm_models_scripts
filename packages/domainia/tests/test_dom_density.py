@@ -105,3 +105,5 @@ def test_folded_form_is_wt_fast_full_covariance():
     assert RealGaussian(0.0, "log10_A_n").lnl_folded(quad_unit, logdet_unit, n, log10A) == want
     with pytest.raises(ValueError, match="needs an amplitude"):
         RealGaussian().lnl_folded(1.0, 2.0, 3, 0.0)
+    with pytest.raises(ValueError, match="needs the 'log10_A_n' value"):
+        RealGaussian(0.0, "log10_A_n").lnl_folded(1.0, 2.0, 3, None)

@@ -18,7 +18,7 @@ keeps the stored references bitwise where they are bitwise today:
   (``galactic_binary/matrix.py:991`` and ``:1070``), where the noise state carries
   ``logdet + P ln 2 pi`` (``:983``, ``:1059``);
 * :meth:`ComplexGaussian.lnl`: ``likelihoods.lnl_complex`` / ``lnl_frequency``
-  (``galactic_binary/likelihoods.py:142-166``): ``-quad - logdet``;
+  (``galactic_binary/likelihoods.py:142-162``): ``-quad - logdet``;
 * :meth:`ComplexGaussian.lnl_expanded`: ``fullcache.lnl_from_state``
   (``galactic_binary/fullcache.py:141-144``).
 
@@ -89,6 +89,8 @@ class RealGaussian:
         model's order, which differs from :meth:`lnl` in the association)."""
         if self.amplitude is None:
             raise ValueError("lnl_folded needs an amplitude density")
+        if log10_amplitude is None:
+            raise ValueError(f"this density needs the {self.amplitude!r} value")
         be = be or get_backend(quad, logdet, log10_amplitude)
         A = 10.0 ** log10_amplitude
         q = quad / A
