@@ -20,17 +20,18 @@ with ``M`` the map (``map.apply``), ``s`` the signal and ``nu`` the noise slice 
 
 **The covariance protocol** (section D-C, ``domainia.covariance.base``; this module calls
 nothing else): a covariance is static structure with ``n``, ``n_u`` (directions a flat
-marginal removes; ``n_eff = n - n_u``), ``jittable``, ``constants(be)`` (host-built
-arrays, device-put once), the pure ``_factor(C, nu, be)``, the user-facing
-``factor(nu, be)`` (its own jit/eager dispatch) and ``state_key(nu)`` (``None`` unless
-the factorisation dispatches on a static key, e.g. ``SchurEdge``'s adaptive Chebyshev
-order).  A factor ``F`` has ``ok``, ``logdet``, ``n_u``, ``quad(b, form=...)``,
-``whiten(b)`` (``L^-1 b``) and ``solve(b)`` (``C^-1 b``; for the GB factors --
-``CholFactor(impl="numpy")``, ``HermitianFactor`` -- ``solve`` is ``L^-H (L^-1 b)``, the
-``MatrixCache``/``FullCache`` order).  Optional ``F.expanded_terms(d, *, C) -> (q0, y)``
-and ``F.signal_quad(h, *, C)`` replace the whiten-based expanded order where an oracle
-differs (``EdgeSchurCache``); like every factor method they receive the covariance's
-constants as ``C=`` (``parts.covs[c]``, E-C1).
+marginal removes; ``n_eff = n - n_u``), ``jittable``, ``batchable`` (its noise states
+may be stacked into one ``vmap``: every child's; ``False`` for ``SchurEdge`` over time
+rows), ``constants(be)`` (host-built arrays, device-put once), the pure
+``_factor(C, nu, be)``, the user-facing ``factor(nu, be)`` (its own jit/eager dispatch)
+and ``state_key(nu)`` (``None`` unless the factorisation dispatches on a static key, e.g.
+``SchurEdge``'s adaptive Chebyshev order).  A factor ``F`` has ``ok``, ``logdet``,
+``n_u``, ``quad(b, form=...)``, ``whiten(b)`` (``L^-1 b``) and ``solve(b)``
+(``C^-1 b``; for the GB factors -- ``CholFactor(impl="numpy")``, ``HermitianFactor`` --
+``solve`` is ``L^-H (L^-1 b)``, the ``MatrixCache``/``FullCache`` order).  Optional
+``F.expanded_terms(d, *, C) -> (q0, y)`` and ``F.signal_quad(h, *, C)`` replace the
+whiten-based expanded order where an oracle differs (``EdgeSchurCache``); like every
+factor method they receive the covariance's constants as ``C=`` (``parts.covs[c]``, E-C1).
 
 **JAX** (spec section 3.3): the map and the signal must be JAX pytrees
 (``wdm.backend.pytree_dataclass``); the covariances stay static and their constants
