@@ -199,8 +199,8 @@ def test_jax_schur_edge(jax_be, rng, kw):
 
 
 #: The second envelope state of the GB edge-rows test: mu_fit plus a stronger, asymmetric
-#: modulation (Im M' is 24-37% of max |M'| at both states, so a transposed or conjugated
-#: M' and conjugated atoms change the cell covariance at O(1)).
+#: modulation (Im M' is 10-37% of max |M'| over the two cases and two states, so a
+#: transposed or conjugated M' and conjugated atoms change the cell covariance at O(1)).
 GB_MU_SHIFT = np.array([0.3, -0.4, 0.25, 0.2, -0.15])
 
 
