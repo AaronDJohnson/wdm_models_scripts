@@ -8,7 +8,10 @@ root-lane regression is ``tests/golden/test_s2_g6_gb.py``).  Now:
   ``map.dst.cells == cov.cells`` wherever those attributes exist (``DiagonalCovariance``
   takes its cells from a ``domainia.variance`` variance; ``FlatMarginal`` forwards them);
 * ``PushedRows`` requires ``cells=`` to equal the map's ``dst.cells`` when both are given;
-* ``SchurEdge`` requires an interior with cells to cover ``rows.cells.complement(edge)``.
+* ``SchurEdge`` requires an interior with cells to cover ``rows.cells.complement(edge)``;
+* ``GaussianLikelihood`` refuses a ``WDMDomain`` with ``scale != 1`` as ``data.domain``,
+  ``map.src`` or ``map.dst`` (no map or covariance applies the scale, gap G4): through
+  ``Identity`` a scaled domain used to give the unscaled lnL bit for bit.
 
 Toys without the attributes (raw arrays, ``dom_toys`` maps, callable variances) are not
 checked (``test_dom_likelihood.py``).
@@ -16,16 +19,19 @@ checked (``test_dom_likelihood.py``).
 
 from __future__ import annotations
 
+from types import SimpleNamespace
+
 import numpy as np
 import pytest
 import wdm
+from dom_toys import ToySelect
 
 from domainia.covariance import DiagonalCovariance, Eq45Covariance, ExactTimeCovariance, PushedRows, SchurEdge
-from domainia.data import TimeSeries
+from domainia.data import TimeSeries, WDMCells
 from domainia.density import RealGaussian
 from domainia.domains import CellSet, TimeDomain, WDMDomain
-from domainia.likelihood import GaussianLikelihood, Params, StaticSignal
-from domainia.maps import TimeToWDM
+from domainia.likelihood import FourierWhittle, GaussianLikelihood, Params, StaticSignal
+from domainia.maps import Identity, TimeToWDM
 from domainia.nuisance import FlatMarginal
 from domainia.spectra import LogLinearPSD
 from domainia.variance import BandAveragedVariance, MidpointVariance
@@ -107,3 +113,40 @@ def test_schur_edge_refuses_an_interior_on_other_cells():
     with pytest.raises(ValueError, match="cells"):
         SchurEdge(DiagonalCovariance(BandAveragedVariance(PSD, wrong), wrong.size), rows, EDGE)
     SchurEdge(DiagonalCovariance(np.ones(interior.size), interior.size), rows, EDGE)   # no cells: size only
+
+
+def _cells_lik(data, dom):
+    return GaussianLikelihood(data, Identity(dom), DiagonalCovariance(BandAveragedVariance(PSD, CELLS), N),
+                              RealGaussian(0.0, "log10_A_n"), signal=StaticSignal(lambda s: np.full(N, s[0])),
+                              params=PARAMS)
+
+
+def test_likelihood_refuses_a_scaled_wdm_domain_through_identity():
+    """``Identity`` carries a scaled ``WDMDomain`` unchanged (nothing to apply), and the
+    covariance is in unscaled cell units, so the likelihood is where the scale would be
+    ignored: scale 2 used to return the scale-1 lnL bit for bit (-908.6222886712847)."""
+    x = np.random.default_rng(0).standard_normal(N)
+    one, two = WDMDomain(CELLS), WDMDomain(CELLS, 2.0)
+    assert np.isfinite(_cells_lik(WDMCells(x, one), one)(THETA)[0])
+    assert np.isfinite(_cells_lik(x, one)(THETA)[0])                  # raw data: no domain to check
+    msg = r"WDMDomain.scale = 2.0 is not honoured by GaussianLikelihood"
+    with pytest.raises(ValueError, match=msg):
+        _cells_lik(WDMCells(x, two), two)                              # data, src and dst all scaled
+    with pytest.raises(ValueError, match=msg):
+        _cells_lik(x, two)                                             # raw data: the map's domains
+    with pytest.raises(ValueError, match=msg):
+        _cells_lik(WDMCells(x, two), one)                              # data scaled, map not
+    with pytest.raises(ValueError, match=msg):
+        _cells_lik(WDMCells(x, one), two)                              # map scaled, data not
+
+
+def test_fourier_whittle_complex_form_refuses_a_scaled_wdm_domain():
+    """The complex form shares the composition check and names itself in the error."""
+    z, sI = np.ones((2, 8), dtype=complex), np.ones((2, 4))
+    params = Params(("s0", "mu_A", "mu_E"), (0,), (1, 2))
+    kw = dict(map=ToySelect(2, 6), sI=sI, sG=sI, signal=StaticSignal(lambda s: np.zeros((2, 8))),
+              params=params)
+    assert np.isfinite(FourierWhittle("complex", SimpleNamespace(values=z, domain=WDMDomain(CELLS)),
+                                      **kw)(np.zeros((1, 3)))[0])
+    with pytest.raises(ValueError, match=r"WDMDomain.scale = 2.0 is not honoured by FourierWhittle"):
+        FourierWhittle("complex", SimpleNamespace(values=z, domain=WDMDomain(CELLS, 2.0)), **kw)

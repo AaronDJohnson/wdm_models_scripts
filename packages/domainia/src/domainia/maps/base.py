@@ -234,7 +234,9 @@ class PushedCovariance:
 @pytree_dataclass(data=(), meta=("src",))
 @dataclass(frozen=True, eq=False)
 class Identity(LinearMap):
-    """The identity on ``src`` (the sinusoid pad model's samples, spec §4.8)."""
+    """The identity on ``src`` (the sinusoid pad model's samples, spec §4.8).  A scaled
+    ``WDMDomain`` passes through unchanged (nothing to apply); ``GaussianLikelihood``
+    refuses it (gap G4)."""
 
     src: Any
 

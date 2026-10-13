@@ -56,6 +56,7 @@ from wdm.backend import NUMPY, Backend, get_backend, pytree_dataclass
 from .covariance.base import concrete_failure
 from .covariance.stack import ChannelStack
 from .density import ComplexGaussian, RealGaussian
+from .domains import WDMDomain
 
 __all__ = ["COUNTERS", "DENSITY_ORDERS", "STRATEGIES", "FourierWhittle", "GaussianLikelihood",
            "NoiseState", "Params", "StaticSignal"]
@@ -192,12 +193,19 @@ def _check_pytree(parts: Any, what: str) -> None:
                             "(wdm.backend.pytree_dataclass) on the JAX backend")
 
 
-def _check_composition(data: Any, map: Any, covs: tuple = ()) -> None:
+def _check_composition(data: Any, map: Any, covs: tuple = (), *,
+                       user: str = "GaussianLikelihood") -> None:
     """Equal-sized but different domains or cell sets pass every shape check and give a
     wrong lnL silently, so wherever the attributes exist require ``data.domain == map.src``
     and each covariance's ``cells`` to be ``map.dst.cells`` (raw arrays, toy maps and
-    covariances without cells are not checked)."""
+    covariances without cells are not checked).  No map or covariance applies
+    ``WDMDomain.scale`` (gap G4) and ``Identity`` carries a scaled domain unchanged, so a
+    ``WDMDomain`` with ``scale != 1`` as ``data.domain``, ``map.src`` or ``map.dst`` is
+    refused here rather than ignored."""
     dom, src = getattr(data, "domain", None), getattr(map, "src", None)
+    for d in (dom, src, getattr(map, "dst", None)):
+        if isinstance(d, WDMDomain):
+            d.require_unit_scale(user)
     if dom is not None and src is not None and dom != src:
         raise ValueError(f"data.domain {dom!r} is not the map's src {src!r}")
     cells = getattr(getattr(map, "dst", None), "cells", None)
@@ -609,7 +617,7 @@ class FourierWhittle(_CountersMixin):
             if map is None or sI is None or sG is None or psd is not None or fmin is not None \
                     or crop is not None:
                 raise ValueError("form='complex' takes map, sI and sG, not psd/fmin/crop")
-            _check_composition(data, map)
+            _check_composition(data, map, user="FourierWhittle")
             d = np.asarray(map.apply(values, be=NUMPY))
             sI, sG = np.asarray(sI, dtype=np.float64), np.asarray(sG, dtype=np.float64)
             if d.ndim != 2 or sI.shape != d.shape or sG.shape != d.shape:

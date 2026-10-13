@@ -186,7 +186,7 @@ def test_a_scaled_wdm_domain_is_refused_by_every_map():
     for src, dst in ((full2, cut), (full, cut2), (full2, cut2)):
         with pytest.raises(ValueError, match=msg + r".*Restrict"):
             Restrict(src, dst)
-    assert Identity(full2).dst == full2                        # nothing to honour
+    assert Identity(full2).dst == full2         # nothing to apply; GaussianLikelihood refuses it
     for m in (TimeToWDM(time, full), WDMToTime(full, time), FourierToWDM(bins, WDMDomain(bands)),
               Restrict(full, cut)):
         assert isinstance(m, LinearMap)                        # scale 1 is unchanged
