@@ -4,7 +4,8 @@
   ``wdm.evolutionary.exact_covariance``); the strategies fixed / adaptive / phi_cache /
   staged agree; the adaptive order is a deterministic function of alpha_d with tail
   bound < 1e-14.  G6: 10 picked rows of the 959 at the truth (all 959 under ``slow``).
-* Fourier (GB): 1/2 Re(U_E M' U^H) on the window bins; G6 exact-row fingerprints.
+* Fourier (GB): 1/2 Re(U_E M' U^H) on the window bins; G6 exact-row fingerprints; the
+  periodic 12-month record has none (G6 ``V_exact_rows`` is empty).
 * JAX: the WT order mapped over atoms and the staged Phi path, against NumPy.
 """
 
@@ -17,7 +18,8 @@ from wdm.backend import NUMPY
 from wdm.evolutionary import exact_covariance
 
 import domtest_inputs as T
-from domainia.covariance import CHEB_TOL, ExactFourierCovariance, ExactTimeCovariance, PushedRows, cheb_order, cheb_tail
+from domainia.covariance import (CHEB_TOL, ExactFourierCovariance, ExactTimeCovariance, PushedRows, cheb_order,
+                                 cheb_tail, positions)
 from domainia.domains import CellSet
 from domainia.spectra import LogLinearPSD
 
@@ -37,8 +39,6 @@ def _rows(**kw) -> np.ndarray:
 def test_time_rows_are_the_exact_covariance_rows():
     exact = exact_covariance(NF, NT, DT, lambda f, t: PSD(f, t, NU))
     rows = _rows()
-    from domainia.covariance import positions
-
     e = positions(EDGE, CELLS)
     assert rows.shape == (e.size, N)
     assert np.max(np.abs(rows - exact[e])) < 1e-9 * np.max(np.abs(exact))
@@ -147,6 +147,20 @@ def test_g6_gb_exact_rows(case):
         PushedRows(ExactFourierCovariance(c.psd, w), None, edge, cells=c.cells)
     with pytest.raises(ValueError, match="time rows only"):
         PushedRows(ExactFourierCovariance(c.psd, w), None, edge, cells=c.cells, atoms=U, order="adaptive")
+
+
+def test_g6_gb_12mo_has_no_exact_rows():
+    """The periodic 12-month record keeps every column (no lead/trail edge columns: the
+    registry's rule, test-local here), so its exact-edge rows are empty: the golden
+    ``V_exact_rows`` is the empty int64 array, which is what the edge set
+    ``cells.columns(0, 0)`` gives, and the exact variant's cells are all the cells."""
+    c = T.gb_case("gb_12mo")
+    want = c.A["V_exact_rows"]
+    edge = c.cells.columns(0, 0)
+    got = positions(edge, c.cells)
+    assert want.shape == got.shape == (0,) and got.dtype == want.dtype == np.int64
+    assert c.cells.complement(edge) == c.cells
+    assert c.g6["scalars"]["V_exact"]["P"] == len(c.cells.m) == 3 * c.NT
 
 
 @pytest.mark.jax

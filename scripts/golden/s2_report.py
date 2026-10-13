@@ -11,10 +11,14 @@ report then lists, against the inventory of G6 items in ``golden/``: every recor
 asserted inside a passing per-module test of sections D-A..D-C (:data:`ASSERTED`: those
 tests compare the golden values in their bodies and record no property), those deferred
 to a later sub-project (owner named), and those uncovered.  Exit 1 if a recorded item
-exceeds its gate (a non-finite delta always does), a test failed or no test ran (pytest
-itself exiting other than 0 or 1 aborts the report); ``--strict`` also exits 1 on any
-uncovered item (the S2 gate).
-``--full`` includes the ``slow`` tests (deselected by the root ``addopts``).  Writes
+exceeds its gate (a non-finite delta always does), a test failed, no test ran, every test
+was skipped, or nothing G6 was checked (no record and no asserted item) -- with or
+without ``--strict`` (pytest itself exiting other than 0 or 1 aborts the report);
+``--strict`` also exits 1 on any uncovered item.
+``--full`` includes the ``slow`` tests (deselected by the root ``addopts``); some items
+are asserted only by ``slow`` nodes (``sinusoid/manuscript_mid/exact_rows``: all 959
+rows), so a run without ``--full`` leaves them uncovered.  The S2 gate is
+``--full --strict`` (expect 0 uncovered); every other invocation is diagnostic.  Writes
 nothing under the release tree: the XML goes to ``$TMPDIR/golden_run``.
 """
 
@@ -48,7 +52,8 @@ ASSERTED: tuple[tuple[str, tuple[str, ...]], ...] = (
     (r"sinusoid/manuscript_mid/variances/(band|mid)_pad",
      ("test_dom_variance::test_g6_sinusoid_pad_variances_are_bitwise",)),
     (r"sinusoid/manuscript_mid/tri_blocks/(?P<model>tri_\w+)", ("test_dom_eq45::test_g6_tri_blocks[{model}]",)),
-    (r"sinusoid/manuscript_mid/exact_rows", ("test_dom_pushed_rows::test_g6_picked_exact_rows",)),
+    (r"sinusoid/manuscript_mid/exact_rows", ("test_dom_pushed_rows::test_g6_picked_exact_rows",
+                                             "test_dom_pushed_rows::test_g6_all_exact_rows")),
     (r"sinusoid/manuscript_mid/maps/Wp", ("test_dom_maps_wdm::test_g6_sinusoid_padding_impulses_Wp_are_bitwise",
                                           "test_dom_zero_padded::test_g6_padding_impulses")),
     (r"sinusoid/manuscript_mid/maps/(band|mid|tri)_(raw|cut|exact)/y_data",
@@ -61,13 +66,13 @@ ASSERTED: tuple[tuple[str, tuple[str, ...]], ...] = (
     (_GB + r"/(fingerprints/V_pad_[CUbn]|arrays/V_pad_cells)",
      ("test_dom_maps_cells::test_g6_pad_cell_matrix_and_its_cells[{case}]",)),
     (_GB + r"/arrays/V_raw_cells", ("test_dom_maps_cells::test_g6_cells_of_the_store_data[{case}]",)),
-    (_GB + r"/(fingerprints/(KI|KG|half|cov_tri_raw_c[01])|arrays/(KI_diag|KG_diag|cov_tri_raw_diag))",
+    (_GB + r"/(fingerprints/(KI|KG|half|cov_tri_raw_c[01])|arrays/(KI_diag|KG_diag|cov_tri_raw_diag|basis_half))",
      ("test_dom_eq45_separable::test_g6_kernels_half_and_tri_raw[{case}]",)),
-    (_GB + r"/arrays/basis_half", ("test_dom_eq45_separable::test_envelope_stand_in_is_the_golden_basis[{case}]",)),
     (_GB + r"/(fingerprints/Mprime_c[01]|scalars/Mprime_c[01]|arrays/ghat_c[01])",
      ("test_dom_hermitian::test_g6_mprime_q0_logdet_and_ghat[{case}]",)),
-    (_GB + r"/(arrays/V_exact_rows|arrays/exact_rows_c[01]_sel|fingerprints/exact_rows_c[01])",
-     ("test_dom_pushed_rows::test_g6_gb_exact_rows[{case}]",)),
+    (r"galactic_binary/(?P<case>gb_(3|6)mo)/(arrays/V_exact_rows|arrays/exact_rows_c[01]_sel"
+     r"|fingerprints/exact_rows_c[01])", ("test_dom_pushed_rows::test_g6_gb_exact_rows[{case}]",)),
+    (r"galactic_binary/gb_12mo/arrays/V_exact_rows", ("test_dom_pushed_rows::test_g6_gb_12mo_has_no_exact_rows",)),
     (_GB + r"/(fingerprints/pad_AE|arrays/(pad_E|pad_Kpos|pad_AE_row0))",
      ("test_dom_pad_mask::test_g6_pad_map_and_mask[{case}]",)),
     (_GB + r"/(fingerprints/cov_(?P<base>band|mid|tri)_pad_c[01])",
@@ -123,14 +128,13 @@ def deferred() -> dict[str, str]:
             out[item] = "S6: the full GB registry (spec section 7.6)"
         elif item.endswith("/arrays/store_template"):
             out[item] = "S5: the waveform (binary_galactica) and its template goldens (G5)"
-        elif item == "galactic_binary/gb_12mo/arrays/V_exact_rows":
-            out[item] = "S6: the periodic 12-month record has no exact-edge rows (an empty array; the registry's rule)"
     return out
 
 
 def collect(xml_path: Path) -> tuple[list[dict], dict[str, int], set[str]]:
     """``g6`` records, the test outcome counts and the passed test nodes
-    (``<module>::<name>``) of a junit XML report."""
+    (``<module>::<name>``) of a junit XML report.  A skipped test checked nothing: a record
+    it wrote before skipping is dropped."""
     tree = ET.parse(xml_path)
     records: list[dict] = []
     counts = {"tests": 0, "failures": 0, "errors": 0, "skipped": 0}
@@ -144,6 +148,8 @@ def collect(xml_path: Path) -> tuple[list[dict], dict[str, int], set[str]]:
                 counts["failures" if tag == "failure" else "errors" if tag == "error" else "skipped"] += 1
         if not bad:
             passed.add(f"{(case.get('classname') or '').rsplit('.', 1)[-1]}::{case.get('name')}")
+        if case.find("skipped") is not None:
+            continue
         test = f"{case.get('classname')}::{case.get('name')}"
         for prop in case.iter("property"):
             if prop.get("name") == "g6":
@@ -170,13 +176,19 @@ def summarise(records: list[dict], counts: dict[str, int], items: list[str],
                 if i not in covered and asserted_by(i) and all(n in passed for n in asserted_by(i))}
     uncovered = [i for i in items if i not in covered and i not in asserted and i not in later]
     failed = sorted(k for k, e in by_item.items() if not e["ok"])
+    problems = [p for p, bad in (
+        ("no test ran (empty junit report)", counts["tests"] == 0),
+        ("every test was skipped", 0 < counts["tests"] == counts["skipped"]),
+        ("no G6 comparison was recorded or asserted", not by_item and not asserted),
+        (f"{counts['failures']} test(s) failed", counts["failures"] > 0),
+        (f"{counts['errors']} test error(s)", counts["errors"] > 0),
+        (f"{len(failed)} item(s) over their gate", bool(failed))) if bad]
     return {"records": dict(sorted(by_item.items())), "tests": counts,
             "inventory": {"total": len(items), "covered": len(covered), "asserted": asserted,
                           "deferred": {i: later[i] for i in items if i in later and i not in covered},
                           "uncovered": uncovered},
-            "failed_items": failed,
-            "ok": (not failed and counts["tests"] > 0          # an empty report ran nothing
-                   and counts["failures"] == 0 and counts["errors"] == 0)}
+            "failed_items": failed, "problems": problems,
+            "ok": not problems}
 
 
 def run_tests(patterns: list[str], *, full: bool) -> Path:
@@ -220,6 +232,7 @@ def main(argv: list[str] | None = None) -> int:
           f"tests {counts['tests']} ({counts['failures']} failed, {counts['errors']} errors, "
           f"{counts['skipped']} skipped)", file=sys.stderr)
     if not rep["ok"]:
+        print(f"[s2_report] FAIL: {'; '.join(rep['problems'])}", file=sys.stderr)
         return 1
     return 1 if a.strict and rep["inventory"]["uncovered"] else 0
 

@@ -1,8 +1,8 @@
 """D-C3: Eq. (45) for separable spectra S_c = s_I + g(t) s_G (galactic binary).
 
 * The envelope stand-in reproduces the golden half-step basis bit for bit.
-* G6 at the anchor: K^I, K^G (fingerprints + diagonals), the half-step index, the dense
-  tri_raw covariance per channel, and (quad, logdet) of tri_raw / tri_cut (GB order:
+* G6 at the anchor: K^I, K^G (fingerprints + diagonals), the half-step index and basis,
+  the dense tri_raw covariance per channel, and (quad, logdet) of tri_raw / tri_cut (GB order:
   np.linalg.cholesky of 0.5 (S + S^T), forward solve).
 * The block-tridiagonal assembly (GB ``pad_static``) equals the dense one on full bands.
 * JAX: both assemblies jitted with the kernels as arguments.
@@ -46,6 +46,9 @@ def test_g6_kernels_half_and_tri_raw(case):
     assert np.allclose(np.stack([np.diagonal(K) for K in KG]), c.A["KG_diag"], rtol=1e-13, atol=0)
     assert np.array_equal(C[0]["half"], C[1]["half"])
     T.assert_summary(C[0]["half"], fp["half"], rtol=0)
+    # the half-step envelope basis domainia evaluates g on (B(t) at t = k dT / 2) is the golden one
+    for Cc in C:
+        assert np.array_equal(Cc["Bh"], c.A["basis_half"])
     for ch in range(2):
         D = covs[ch].dense(c.mu[ch])
         T.assert_summary(D, fp[f"cov_tri_raw_c{ch}"])

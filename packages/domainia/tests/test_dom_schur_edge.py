@@ -198,33 +198,69 @@ def test_jax_schur_edge(jax_be, rng, kw):
     assert float(Fj.quad(jnp.asarray(y))) == pytest.approx(float(Fn.quad(y)), rel=1e-11)
 
 
+#: The second envelope state of the GB edge-rows test: mu_fit plus a stronger, asymmetric
+#: modulation (Im M' is 24-37% of max |M'| at both states, so a transposed or conjugated
+#: M' and conjugated atoms change the cell covariance at O(1)).
+GB_MU_SHIFT = np.array([0.3, -0.4, 0.25, 0.2, -0.15])
+
+
+def _gb_exact_cells_oracle(c: T.GBCase, mu: np.ndarray, ch: int) -> np.ndarray:
+    r"""The exact cell covariance :math:`\tfrac12\mathrm{Re}(U M' U^H)` on the analysis window,
+    built without ``ExactFourierCovariance``, ``FourierToWDM`` or ``PushedRows``.
+
+    * ``U``: the unit-norm band atoms placed on the window bins by the test-local
+      ``GBCase.atoms`` (``wdm.transform.band_atoms``, as ``test_dom_hermitian.py``).
+    * ``M'[j, k] = s_I(j) delta_jk + sqrt(s_G(j) s_G(k)) ghat[j - k]`` (``= conj(ghat)[k - j]``,
+      ``g`` is real): the modulated process ``sqrt(g) n_G`` couples bins ``j``, ``k`` through
+      the ``(j - k)``-th Fourier coefficient of ``g = exp(mu @ basis_L)``.  ``s_I``, ``s_G``
+      are the prepared store tables sliced to the window; ``ghat`` is
+      ``domainia.testing.hhat`` at ``2 mu`` (``hhat`` transforms ``sqrt(g)``:
+      ``exp(0.5 (2 mu) @ B) = exp(mu @ B)`` exactly).
+    """
+    from domainia.testing import hhat
+
+    w = c.window
+    lo = w.k0 - c.store_k0
+    sI = np.asarray(c.P["store_sI"], float)[ch, lo:lo + w.n]
+    sG = np.asarray(c.P["store_sG"], float)[ch, lo:lo + w.n]
+    j = np.arange(w.n)
+    gh = hhat(2.0 * np.asarray(mu, float), np.asarray(c.P["basis_L"], float), j[:, None] - j[None, :])
+    M = np.diag(sI).astype(complex) + np.sqrt(sG)[:, None] * np.sqrt(sG)[None, :] * gh
+    U = c.atoms(c.cells, w.k0, w.n)
+    return 0.5 * np.real(U @ M @ np.conj(U).T)
+
+
 @pytest.mark.parametrize("case", ["gb_3mo", "gb_6mo"])
 def test_gb_edge_rows_are_the_exact_covariance(case):
-    """Ported GB test_matrix.py::test_edge_exact_rows_are_the_exact_covariance, the rows pushed
-    through D-B's map ``FourierToWDM(window, cells, restrict=True)`` (``PushedRows`` reads its
-    atoms ``C``): the 27 edge rows of the assembled mid/tri_exact covariance are the exact
-    covariance's rows ``FourierToWDM.push_rows`` (1e-12 of max), the matrix is symmetric
-    (1e-14), and with every cell a row the pushed rows are the exact cell covariance."""
+    """Ported GB test_matrix.py::test_edge_exact_rows_are_the_exact_covariance with an
+    independent oracle (:func:`_gb_exact_cells_oracle`; the legacy test used
+    ``wdm_full.dense_lambda``): the 27 edge rows of the assembled mid/tri_exact covariance
+    (rows pushed through D-B's ``FourierToWDM(window, cells, restrict=True)``) are the exact
+    cell covariance's rows (1e-12 of max), the matrix is symmetric (1e-14), and with every
+    cell a row the pushed rows are the exact cell covariance -- at mu_fit and at a second
+    state ``mu_fit + GB_MU_SHIFT``."""
     from domainia.domains import WDMDomain
     from domainia.maps import FourierToWDM
 
     c = T.gb_case(case)
     edge = c.cells.columns(5, 4)
     assert len(edge.m) == 3 * (5 + 4)
+    n = np.asarray(c.cells.n)
+    e = np.flatnonzero((n < 5) | (n >= c.NT - 4))                   # the edge rows, in cell order
     fmap = FourierToWDM(c.window, WDMDomain(c.cells), restrict=True)
-    mu = c.mu[0]
     ex = ExactFourierCovariance(c.psd, c.window, channel=0)
-    every = np.arange(len(c.cells.m))
-    exact = np.asarray(fmap.push_rows(ex.evaluate(ex.host_constants(), mu, NUMPY), every, NUMPY))
     rows = PushedRows(ex, fmap, edge)
+    assert np.array_equal(rows.e, e)
     interior_cells = c.cells.complement(edge)
-    keep = np.isin(every, positions(interior_cells, c.cells))
-    v = c.A["var_mid_raw"][0][keep]
-    for interior in (DiagonalCovariance(v, v.size),
-                     Eq45Covariance(c.psd, interior_cells, builder="separable", assembly="dense", channel=0)):
-        C = SchurEdge(interior, rows, edge, assembly="dense", chol_impl="numpy").dense(mu)
-        assert np.max(np.abs(C[rows.e] - exact[rows.e])) < 1e-12 * np.max(np.abs(exact))
-        assert np.max(np.abs(C - C.T)) < 1e-14 * np.max(np.abs(C))
+    v = np.delete(c.A["var_mid_raw"][0], e)        # mu_fit's variances: only the edge rows are compared
     full = PushedRows(ex, fmap, c.cells)
-    R = np.asarray(full.evaluate(full.host_constants(), mu, NUMPY))
-    assert np.max(np.abs(R - exact)) < 1e-12 * np.max(np.abs(exact))
+    for mu in (c.mu[0], c.mu[0] + GB_MU_SHIFT):
+        exact = _gb_exact_cells_oracle(c, mu, 0)
+        tol = 1e-12 * np.max(np.abs(exact))
+        for interior in (DiagonalCovariance(v, v.size),
+                         Eq45Covariance(c.psd, interior_cells, builder="separable", assembly="dense", channel=0)):
+            C = SchurEdge(interior, rows, edge, assembly="dense", chol_impl="numpy").dense(mu)
+            assert np.max(np.abs(C[e] - exact[e])) < tol
+            assert np.max(np.abs(C - C.T)) < 1e-14 * np.max(np.abs(C))
+        R = np.asarray(full.evaluate(full.host_constants(), mu, NUMPY))
+        assert np.max(np.abs(R - exact)) < tol
