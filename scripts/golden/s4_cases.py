@@ -112,3 +112,28 @@ def state_bytes(state: Any) -> int:
     import jax
 
     return int(sum(int(x.nbytes) for x in jax.tree_util.tree_leaves(state)))
+
+
+def sinusoid_jax_whittle(model: str) -> Any:
+    """``whittle_raw`` / ``whittle_cut`` at manuscript_mid on JAX (``FourierWhittle``)."""
+    from domainia.likelihood import FourierWhittle
+
+    from scripts.golden.s2_cases import WHITTLE
+
+    s = sinusoid_inputs()
+    data = TimeSeries(s.d, TimeDomain(N, DT))
+    psd = LogLinearPSD(f_floor=FMIN, f_ref=1.0, T=N * DT)
+    crop = (CUT[0] * NF, (NT - CUT[1]) * NF) if model == "whittle_cut" else None
+    return FourierWhittle("real-orthonormal", data, psd=psd, fmin=FMIN, signal=SinusoidSignal(np.arange(N) * DT),
+                          params=WHITTLE, crop=crop, backend="jax")
+
+
+#: A dense literal of the lowered StableHLO text: ``dense<"0x...">`` or ``dense<[...]>``.
+LITERAL = r'dense<("0x[0-9A-Fa-f]*"|[^>]*)>'
+
+
+def big_literals(text: str, min_chars: int = 200) -> list[str]:
+    """The dense literals of a lowered program longer than ``min_chars`` characters."""
+    import re
+
+    return [m.group(1) for m in re.finditer(LITERAL, text) if len(m.group(1)) > min_chars]

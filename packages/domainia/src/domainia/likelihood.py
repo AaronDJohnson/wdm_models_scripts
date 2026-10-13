@@ -541,10 +541,11 @@ class GaussianLikelihood(_CountersMixin):
 # ---------------------------------------------------------------------------
 
 
-@pytree_dataclass(data=("data", "L", "sI", "sG", "map", "signal"), meta=())
+@pytree_dataclass(data=("data", "L", "keep", "sI", "sG", "map", "signal"), meta=())
 class _WhittleParts:
     data: Any
     L: Any
+    keep: Any            # real form: the retained rfft bins (a jit argument, not an HLO literal)
     sI: Any
     sG: Any
     map: Any
@@ -617,7 +618,7 @@ class FourierWhittle(_CountersMixin):
             self.keep = np.flatnonzero(keep)
             self.n_keep = 2 * int(self.keep.size)
             L = np.asarray(psd.L(f[self.keep]), dtype=np.float64)
-            parts = _WhittleParts(values, L, None, None, None, signal)
+            parts = _WhittleParts(values, L, self.keep, None, None, None, signal)
         else:
             if map is None or sI is None or sG is None or psd is not None or fmin is not None \
                     or crop is not None:
@@ -631,7 +632,7 @@ class FourierWhittle(_CountersMixin):
             if len(params.noise) != d.shape[0]:
                 raise ValueError("form='complex' needs one noise entry per channel")
             self.n_keep = int(d.shape[1])
-            parts = _WhittleParts(d, None, sI, sG, map, signal)
+            parts = _WhittleParts(d, None, None, sI, sG, map, signal)
         if be.name == "jax":
             import jax
 
@@ -657,7 +658,7 @@ class FourierWhittle(_CountersMixin):
         if self.form == "real-orthonormal":
             r = parts.data - parts.signal(theta[self._src])
             x = r[self.crop[0]:self.crop[1]]
-            R = be.fft.rfft(x)[self.keep]
+            R = be.fft.rfft(x)[parts.keep]
             log10A, alpha = theta[self._noise[0]], theta[self._noise[1]]
             lam = 10.0 ** log10A * xp.exp(alpha * parts.L) / (2.0 * self.dt)
             return [(2.0 / self.Nc * xp.sum(xp.abs(R) ** 2 / lam), 2.0 * xp.sum(xp.log(lam)))]
