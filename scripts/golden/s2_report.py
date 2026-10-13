@@ -11,8 +11,9 @@ report then lists, against the inventory of G6 items in ``golden/``: every recor
 asserted inside a passing per-module test of sections D-A..D-C (:data:`ASSERTED`: those
 tests compare the golden values in their bodies and record no property), those deferred
 to a later sub-project (owner named), and those uncovered.  Exit 1 if a recorded item
-exceeds its gate or a test failed; ``--strict`` also exits 1 on any uncovered item (the
-S2 gate).
+exceeds its gate (a non-finite delta always does), a test failed or no test ran (pytest
+itself exiting other than 0 or 1 aborts the report); ``--strict`` also exits 1 on any
+uncovered item (the S2 gate).
 ``--full`` includes the ``slow`` tests (deselected by the root ``addopts``).  Writes
 nothing under the release tree: the XML goes to ``$TMPDIR/golden_run``.
 """
@@ -21,6 +22,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 import re
 import subprocess
 import sys
@@ -156,7 +158,8 @@ def summarise(records: list[dict], counts: dict[str, int], items: list[str],
     by_item: dict[str, dict] = {}
     for r in records:
         e = by_item.setdefault(r["item"], {"observed": 0.0, "gate": r["gate"], "tests": []})
-        e["observed"] = max(e["observed"], r["observed"])
+        # fail closed: a non-finite delta (max() would drop a NaN) is over every gate
+        e["observed"] = max(e["observed"], r["observed"] if math.isfinite(r["observed"]) else math.inf)
         e["gate"] = min(e["gate"], r["gate"])
         e["tests"].append(r["test"])
     for e in by_item.values():
@@ -172,7 +175,8 @@ def summarise(records: list[dict], counts: dict[str, int], items: list[str],
                           "deferred": {i: later[i] for i in items if i in later and i not in covered},
                           "uncovered": uncovered},
             "failed_items": failed,
-            "ok": not failed and counts["failures"] == 0 and counts["errors"] == 0}
+            "ok": (not failed and counts["tests"] > 0          # an empty report ran nothing
+                   and counts["failures"] == 0 and counts["errors"] == 0)}
 
 
 def run_tests(patterns: list[str], *, full: bool) -> Path:
@@ -183,9 +187,11 @@ def run_tests(patterns: list[str], *, full: bool) -> Path:
     cmd = [sys.executable, "-P", "-m", "pytest", "-c", "pytest.ini", "-p", "no:cacheprovider", "-q",
            "-o", "junit_family=xunit1",            # xunit2 (the default) warns on record_property
            f"--junitxml={xml}", *(["-m", "not golden_full"] if full else []), *files]
-    subprocess.run(cmd, cwd=str(REL), check=False)
+    rc = subprocess.run(cmd, cwd=str(REL), check=False).returncode
     if not xml.is_file():
         raise SystemExit("pytest wrote no junit report")
+    if rc not in (0, 1):                       # 1: test failures, summarised from the report
+        raise SystemExit(f"pytest exited with code {rc} (interrupted, internal or usage error, or no tests)")
     return xml
 
 
@@ -197,14 +203,14 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--junit", type=Path, help="summarise an existing junit XML instead of running pytest")
     ap.add_argument("--out", type=Path, help="also write the JSON report here (outside the release tree)")
     a = ap.parse_args(argv)
+    out = a.out.resolve() if a.out is not None else None
+    if out is not None and out.is_relative_to(REL.resolve()):     # refuse before the test run
+        raise SystemExit("--out must lie outside the release tree")
     xml = a.junit if a.junit is not None else run_tests(a.tests, full=a.full)
     records, counts, passed = collect(xml)
     rep = summarise(records, counts, inventory(), deferred(), passed)
     text = json.dumps(rep, indent=1, sort_keys=False)
-    if a.out is not None:
-        out = a.out.resolve()
-        if out.is_relative_to(REL.resolve()):
-            raise SystemExit("--out must lie outside the release tree")
+    if out is not None:
         out.write_text(text + "\n")
     print(text)
     print(f"[s2_report] {len(rep['records'])} items recorded, {len(rep['failed_items'])} over gate; "

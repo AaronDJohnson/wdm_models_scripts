@@ -106,6 +106,34 @@ def test_main_exit_codes(tmp_path):
         R.main(["--junit", str(ok), "--out", str(REL / "s2_report.json")])
 
 
+def test_the_report_fails_closed(tmp_path, monkeypatch):
+    """An empty report, a non-finite delta and an aborted pytest run never pass; ``--out``
+    inside the release tree is refused before any test runs."""
+    empty = _junit(tmp_path / "empty.xml", [])
+    assert not R.summarise(*R.collect(empty)[:2], R.inventory(), R.deferred())["ok"]
+    assert R.main(["--junit", str(empty)]) == 1                          # nothing ran
+    nan = _junit(tmp_path / "nan.xml", [("sinusoid/manuscript_mid/exact_rows", float("nan"), 1e-12)])
+    rep = R.summarise(*R.collect(nan)[:2], R.inventory(), R.deferred())
+    assert rep["failed_items"] == ["sinusoid/manuscript_mid/exact_rows"] and not rep["ok"]
+
+    def no_run(*a, **k):
+        raise AssertionError("ran the tests")
+    monkeypatch.setattr(R, "run_tests", no_run)
+    with pytest.raises(SystemExit, match="outside the release tree"):
+        R.main(["--out", str(REL / "s2_report.json")])
+    monkeypatch.undo()
+
+    ok = _junit(tmp_path / "rc.xml", [("sinusoid/manuscript_mid/exact_rows", 0.0, 1e-12)])
+
+    def aborted(cmd, **k):                     # pytest interrupted after writing a partial report
+        xml = next(c for c in cmd if c.startswith("--junitxml="))[len("--junitxml="):]
+        R.Path(xml).write_text(ok.read_text())
+        return subprocess.CompletedProcess(cmd, 2)
+    monkeypatch.setattr(R.subprocess, "run", aborted)
+    with pytest.raises(SystemExit, match="pytest exited with code 2"):
+        R.run_tests(["tests/golden/test_s2_report.py"], full=False)
+
+
 @pytest.mark.slow
 def test_the_report_runs_the_s2_gate_tests(tmp_path):
     out = tmp_path / "report.json"
