@@ -4,7 +4,8 @@ r"""``PushedRows``: rows of an exact covariance pushed to WDM cells (edge-exact 
   every destination cell -- WT ``MatrixWdm._exact_rows`` (``order="fixed"`` P = 24, one
   ``CovOperator`` per atom, the NumPy golden) or WG ``_exact_rows_staged`` (``"adaptive"``
   even ``P >= 8`` from :func:`cheb_order`, ``phi_cache``: the noise-free
-  :math:`\Phi = \mathrm{rfft}(T_q g_e)` precomputed, ``staged``: separately compiled
+  :math:`\Phi = \mathrm{rfft}(T_q g_e)` precomputed chunk by chunk on the backend
+  (:meth:`PushedRows.complete_constants`; never a host constant), ``staged``: separately compiled
   stages on XLA-CPU; the JAX golden).
 * Fourier (GB): :math:`R = \tfrac12\mathrm{Re}(U_E M' U^{\mathsf H})` with ``U`` the
   destination cells' unit-norm atoms on the window bins -- GB ``exact_rows_builder``.
@@ -172,7 +173,7 @@ class PushedRows:
         """``C`` plus ``Phi`` (``phi_cache``): ``Phi[c] = rfft(T_q a_e)`` for the ``chunk`` atoms
         of chunk ``c`` (``(chunk, P, N/2 + 1)``; the last chunk zero-padded), each computed by
         one jitted ``be.fft_pinned("rfft")`` from the atoms and ``T`` already on ``be`` and kept
-        as a tuple: the host never holds ``Phi`` (3.0 GB at the sinusoid grid) and no stacked
+        as a tuple: the host never holds ``Phi`` (3.0 GB = 2.8 GiB at the sinusoid grid) and no stacked
         copy is made (WG built it on the device: ``wdmtoysgpu/matrix.py:449-451``).  NumPy:
         ``scipy.fft.rfft(workers=4)`` per chunk, the S2 numbers."""
         if self.kind != "time" or not self.phi_cache:
