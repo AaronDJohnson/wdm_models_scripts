@@ -405,8 +405,8 @@ class ZeroPadded(Covariance):
     ``form`` (time_marginal only): ``"solve"`` stores ``Lambda^-1 W_p`` and evaluates WT's
     time-domain solve (the NumPy golden); ``"reduce"`` stores the WG-shaped state (``Q``'s
     Cholesky only; with :class:`~domainia.nuisance.FlatMarginal` ``form="reduce"`` also ``Gu``)
-    and evaluates the WG cell-space order ``w.t - |cb|^2`` (the JAX default: 9.3 MiB per
-    state instead of ~300 MiB at the sinusoid grid).
+    and evaluates the WG cell-space order ``w.t - |cb|^2`` (the JAX default: 9.26 MiB per
+    marginal state instead of 144 MiB at the sinusoid grid).
 
     ``strategy="cell_congruence"`` (GB): ``base_ext`` covers the store bands x ``Nt'``
     columns of the padded grid (a ``DiagonalCovariance``, or a covariance with
