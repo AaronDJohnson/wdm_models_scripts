@@ -58,3 +58,103 @@ def g3_gate(case: str, model: str) -> float:
 
 def g6_items() -> list[str]:
     return [f"galactic_binary/{c}/{m}/g6/{k}" for c, m in targets() for k in G6_KEYS]
+
+
+G3_KINDS = ("g3", "g3_gbonfly")
+G5_KEYS = ("prepared_sha256", "describe", "template_store_sum_h2", "template_store_re_zh", "template_window_sum_h2",
+           "template_window_re_zh", "prior_box")
+STRESS_CASES = ("gb_3mo", "gb_6mo")
+#: Points with a PD margin at least this are gated (approved G4 rule).
+WELL = 1e-6
+CACHED = ("tri_raw", "tri_cut", "tri_pad", "tri_exact", "band_exact", "mid_exact", "band_pad", "mid_pad", "exact")
+
+
+def _json(rel: str) -> dict:
+    return json.loads((GOLDEN / "galactic_binary" / rel).read_text())
+
+
+def g3_items(kind: str) -> list[str]:
+    """Every fast-tier G3 row item of ``kind`` (plus ``lineage_C``), mask and counters."""
+    items: list[str] = []
+    for case, model in targets():
+        root = f"galactic_binary/{case}/{model}/{kind}"
+        for run in _json(f"chain_rows/{case}/index.json")["targets"][model]:
+            for r in _json(f"chain_rows/{case}/{run}.fast.json")["rows"]:
+                items += [f"{root}/{run}/row{r['row']}", f"{root}/{run}/row{r['row']}/lineage_C"]
+        items += [f"{root}/mask", f"{root}/counters"]
+    return items
+
+
+def g4_items() -> list[str]:
+    """Every fast-tier G4 item: masks and counters always, deltas at the well-conditioned points
+    whose reference (cache) value is finite."""
+    items: list[str] = []
+    for case, model in targets():
+        if case not in STRESS_CASES:
+            continue
+        st = _json(f"stress/{case}/{model}.fast.json")
+        root = f"galactic_binary/{case}/{model}/g4"
+        for sub, key in (("", "lnl_ref"), ("cache/", "lnl_cache")):
+            if sub and model not in CACHED:
+                continue
+            for p in st["points"]:
+                items.append(f"{root}/{sub}{p['name']}/mask")
+                v = p[key]
+                if not isinstance(v, str) and v == v and abs(v) != float("inf") and p["pd_margin"] >= WELL:
+                    items.append(f"{root}/{sub}{p['name']}")
+            items.append(f"{root}/{sub}counters")
+    return items
+
+
+def g5_items() -> list[str]:
+    return [f"galactic_binary/{c}/g5/{k}" for c in TARGETS for k in G5_KEYS]
+
+
+def inventory() -> list[str]:
+    """The S6 gate: G3 (both template sources), G4, G5, G6 -- fast tier."""
+    return g3_items("g3") + g3_items("g3_gbonfly") + g4_items() + g5_items() + g6_items()
+
+
+def record_g3(record_property, target: dict, kind: str, *, exact_lineage: bool) -> None:
+    """The ``s6`` records of one ``validate.run`` target's G3 entry."""
+    e = target.get("g3")
+    if e is None or "runs" not in e:
+        return                                          # nothing evaluated: the items stay uncovered
+    root = f"galactic_binary/{target['case']}/{target['model']}/{kind}"
+    mask = counters = 0
+    for run, r in e["runs"].items():
+        for row, d, allowed, dl in zip(r["rows"], r["abs_delta"], r["allowed"], r["lineage_c"]["abs_delta"],
+                                       strict=True):
+            record(record_property, f"{root}/{run}/row{int(row)}", d, allowed)
+            record(record_property, f"{root}/{run}/row{int(row)}/lineage_C", dl, 0.0 if exact_lineage else allowed)
+        mask += r["inf_mismatch"] + r["invalid"]
+        counters += sum(p.startswith(("counter", "last_failed")) for p in r["problems"])
+    record(record_property, f"{root}/mask", mask, 0.0)
+    record(record_property, f"{root}/counters", counters, 0.0)
+
+
+def record_g4(record_property, target: dict) -> None:
+    """The ``s6`` records of one ``validate.run`` target's G4 entry (reference, cache)."""
+    e = target.get("g4")
+    if e is None or "reference" not in e:
+        return
+    root = f"galactic_binary/{target['case']}/{target['model']}/g4"
+    for sub, key in (("", "reference"), ("cache/", "cache")):
+        if key not in e:
+            continue
+        c = e[key]
+        for i, name in enumerate(e["names"]):
+            record(record_property, f"{root}/{sub}{name}/mask", float(bool(c["mask_bad"][i])), 0.0)
+            if c["well"][i]:
+                record(record_property, f"{root}/{sub}{name}", c["abs_delta"][i], c["allowed"][i])
+        probs = [p for p in e["problems"] if (p.startswith("cache ") if sub else p.startswith(("counter", "last")))]
+        record(record_property, f"{root}/{sub}counters", len(probs), 0.0)
+
+
+def record_g5(record_property, case: str, entry: dict) -> None:
+    for k, v in entry.get("items", {}).items():
+        record(record_property, f"galactic_binary/{case}/g5/{k}", v["observed"], v["gate"])
+
+
+#: The onfly audit's junit property (reported by s6_report, never gated).
+AUDIT_PROPERTY = "s6_audit"
