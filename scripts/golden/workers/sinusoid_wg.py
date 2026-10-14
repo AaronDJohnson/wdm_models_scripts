@@ -96,6 +96,49 @@ def cmd_evaluate(out_dir: Path, argv: list[str]) -> None:
         "cache_sha256": cache_sha, "jobs": jobs_out})
 
 
+@command("counters")
+def cmd_counters(out_dir: Path, argv: list[str]) -> None:
+    """Scripted batches through ONE WG likelihood (E-D6): after every ``lnlike`` call the
+    counters, the values and ``last_failed``.  Construction as ``evaluate``; the batches are
+    ``b0, b1, ...`` of an .npz, evaluated in that order on one object (the LRU carries over)."""
+    ap = argparse.ArgumentParser(prog="sinusoid_wg counters")
+    ap.add_argument("--case", required=True)
+    ap.add_argument("--model", required=True)
+    ap.add_argument("--batches", type=Path, required=True)
+    ap.add_argument("--data-root", type=Path, required=True)
+    ap.add_argument("--cache-src", type=Path, required=True)
+    a = ap.parse_args(argv)
+    import wdmtoysgpu  # noqa: F401  (enables x64 before anything touches jax)
+    import jax
+    from wdmtoysgpu.matrix import build_matrix
+    from wdm_toys.config import CONFIGS
+    from wdm_toys.data import load
+    C.check_wdm(required=True)
+    if jax.default_backend() != "cpu" or not jax.config.jax_enable_x64:
+        raise SystemExit(f"lineage B runs on CPU-JAX with x64; got {jax.default_backend()}, "
+                         f"x64={jax.config.jax_enable_x64}")
+    cache = out_dir / "cache"
+    cache_sha = C.copy_cache(a.cache_src, cache)
+    cfg = CONFIGS[a.case]()
+    data = np.asarray(load(str(a.data_root / a.case / "toy_data.npz"), cfg)["d"], dtype=float)
+    kw = dict(P=FULL_ORDER, tol=FULL_TOL, cache_dir=str(cache)) if a.model == "exact" else {}
+    lik = build_matrix(a.model, cfg, data, analysis_fmin=ANALYSIS_FMIN, **kw)
+    with np.load(a.batches, allow_pickle=False) as z:
+        names = sorted(z.files, key=lambda k: int(k[1:]))
+        batches = [np.asarray(z[k], dtype=float) for k in names]
+    calls = []
+    for X in batches:
+        values = np.asarray(lik.lnlike(X), dtype=float)
+        last = getattr(lik, "last_failed", None)
+        calls.append({"values": values, "failed": None if last is None else np.asarray(last, dtype=bool),
+                      "counters": {k: int(getattr(lik, k)) for k in COUNTERS if hasattr(lik, k)}})
+    C.assert_cache_unchanged(cache, cache_sha)
+    C.write_json(out_dir / "counters.json", {
+        "case": a.case, "model": a.model, "class": type(lik).__name__, "batches": names,
+        "cache_size": getattr(lik, "cache_size", None), "calls": calls,
+        "wdm_file": C.check_wdm(required=True), "runtime": C.runtime_fingerprint()})
+
+
 def main() -> None:
     out_dir, argv = C.start(("B",))
     if not argv or argv[0] not in COMMANDS:
