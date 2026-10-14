@@ -22,11 +22,12 @@ exceeds its gate (a non-finite delta always does), a test failed or errored, no 
 test was skipped, or nothing was recorded; ``--strict`` also exits 1 on any uncovered item.
 ``--full`` includes the ``slow`` tests (the 6- and 12-month ``mu_fit``/``calc_Nt`` items and
 prepared regeneration); without it those items stay uncovered.  The S5 gate is
-``--full --strict``; it needs binary_galactica installed from the pinned main commit (F-A11:
-``test_imports.py`` checks it) and the frozen trees (the lineage-C tests; a skipped test records
-nothing, so their items stay uncovered).  The foreground MAP items (:data:`DEFERRED`) need
-impulse (S9) and are listed as deferred unless recorded.  Writes nothing under the release
-tree: the XML goes to ``$TMPDIR/golden_run``.
+``--full --strict``; it needs the pinned PyPI release binary-galactica 0.5.0 (F-A11:
+``test_imports.py`` checks the version and that pip installed it from the index) and the frozen
+trees (the lineage-C tests; a skipped test records nothing, so their items stay uncovered).  A
+named (non-glob) test file that does not exist aborts the run.  The foreground MAP items
+(:data:`DEFERRED`) need impulse (S9) and are listed as deferred unless recorded.  Writes nothing
+under the release tree: the XML goes to ``$TMPDIR/golden_run``.
 """
 
 from __future__ import annotations
@@ -152,6 +153,11 @@ def summarise(records: list[dict], audit: list[dict], counts: dict[str, int], it
 
 
 def run_tests(patterns: list[str], *, full: bool) -> Path:
+    # fail closed: a named file that is gone (renamed, typo) would otherwise drop out silently;
+    # test_s2_g6_gb_waveform.py and test_imports.py record no s5 item, so --strict misses them
+    missing = [p for p in patterns if not any(c in p for c in "*?[") and not (REL / p).is_file()]
+    if missing:
+        raise SystemExit(f"no test file {missing}")
     files = sorted({str(p.relative_to(REL)) for pat in patterns for p in REL.glob(pat)} - set(EXCLUDE))
     if not files:
         raise SystemExit(f"no test files match {patterns}")

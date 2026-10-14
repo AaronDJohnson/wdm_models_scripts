@@ -107,6 +107,8 @@ def test_the_report_fails_closed(tmp_path, monkeypatch):
     assert R.main(["--junit", str(ok), "--strict"]) == 1                      # 98 items uncovered
     with pytest.raises(SystemExit, match="outside the release tree"):
         R.main(["--junit", str(ok), "--out", str(REL / "s5_report.json")])
+    with pytest.raises(SystemExit, match="no test file"):                   # a named file that is gone
+        R.run_tests([*R.DEFAULT_TESTS, "tests/identity/test_gone.py"], full=False)
 
     seen = {}
 
@@ -124,7 +126,7 @@ def test_the_report_fails_closed(tmp_path, monkeypatch):
 @pytest.mark.slow
 def test_the_report_is_the_s5_gate(tmp_path):
     """The S5 gate: every inventory item recorded and inside its gate, every S5 test passing
-    (binary_galactica installed from the pinned main commit, the frozen trees present)."""
+    (the pinned PyPI release binary-galactica 0.5.0 installed, the frozen trees present)."""
     out = tmp_path / "report.json"
     proc = subprocess.run([sys.executable, "-P", "-m", "scripts.golden.s5_report", "--full", "--strict",
                            "--out", str(out)], cwd=str(REL), capture_output=True, text=True)
