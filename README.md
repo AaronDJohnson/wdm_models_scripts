@@ -22,6 +22,10 @@ License: MIT (see `LICENSE`). Citation: see `CITATION.cff`.
 Environment: `conda env create -f env/environment-cpu.yml -n wdmrel`, then `source env/activate.sh`
 from this directory; the galactic binary's waveform package, binary-galactica (JAX-only, PyPI release 0.5.0),
 goes on top at its pinned release: `$PY -m pip install --no-deps --force-reinstall -r env/requirements-bg.txt`.
+The GLASS foreground MAP (and, from v1.0.0, the sampling runners) needs impulse v2, the
+`wdm-models[sampling]` extra (`impulse-mcmc>=2`); it is not on PyPI, whose impulse-mcmc 1.0.0 is the
+pre-rewrite API and is refused: `$PY -m pip install -c env/constraints.txt "impulse-mcmc>=2"` installs
+commit 964283c from git.
 Tests: `$PY -m pytest` (fast tier; `-m golden_full` / `-m slow` are opt-in).
 
 ## GPU validation of the sinusoid (user-run; sub-project S4)
@@ -120,3 +124,9 @@ only (38 targets, about a minute after compilation).
    (its `run_meta` must read `"device_kind": "gpu"` and `"deterministic_ops": true`; `--validate`
    refuses a report from any other device, a CPU fallback included -- the cell's
    `JAX_PLATFORMS=cuda` makes a runtime without a usable GPU fail instead of falling back).
+
+A G4 failure **only** at `gb_6mo/exact` `edge_h1` is conditioning, not a defect, and is accepted in
+advance: that stress point's PD margin is 1.86e-6, just above the 1e-6 well-conditioned cut, so it
+is gated at 8.32e-8 although its roundoff bound (eps |lnL| / margin) is about 10.7x that gate; CPU-JAX
+sits at 31% of the gate (2.56e-8). A failure at any other point, or at this one by more than its
+roundoff bound (about 8.9e-7), is a defect.

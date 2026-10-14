@@ -36,3 +36,12 @@ def test_readme_and_validate_name_the_same_gpu_command():
         assert "PYTHONPATH=$PWD:$PWD/packages/wdm/src:$PWD/packages/domainia/src:$PWD/packages/wdm_models/src" in text
     assert "scripts.golden.s7_report --validate" in section
     assert '"device_kind": "gpu"' in section and '"deterministic_ops": true' in section
+
+
+def test_the_readme_accepts_a_lone_edge_h1_failure_as_conditioning_in_advance():
+    """P4P (decision D4): a GPU G4 failure ONLY at gb_6mo/exact edge_h1 -- PD margin 1.86e-6 against
+    the 1e-6 well-conditioned cut, roundoff bound ~10.7x the pooled gate -- is conditioning."""
+    readme = (REL / "README.md").read_text()
+    section = " ".join(readme.split(HEADER, 1)[1].split("\n## ", 1)[0].split())
+    for text in ("gb_6mo/exact", "edge_h1", "1.86e-6", "1e-6", "10.7x", "8.32e-8", "conditioning, not a defect"):
+        assert text in section, text

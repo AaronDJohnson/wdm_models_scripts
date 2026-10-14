@@ -5,8 +5,10 @@ r"""The galactic-binary template in prepared units (spec §5.2 waveform.py): bin
   states) is the release default.  ``backend="fourier"`` is the legacy fast-slow reduced DFT
   that the paper's data and chains used through gbonfly: binary_galactica >= 0.5.0 reproduces
   gbonfly to ~2e-16 relative, so the golden harness passes it **explicitly**.  At the toys'
-  1 mHz the two agree to 1 - FF <= 3.1e-6 on the store window; ``onfly`` is audited (reported),
-  never gated.
+  1 mHz the two agree on the store window to 1 - FF <= 2.2e-6 at the injection (1.85e-6,
+  2.20e-6, 1.0e-8 at 3, 6, 12 months with binary-galactica 0.5.0; the spec quotes 3.1e-6) and
+  to 3.98e-6 at most over the G3 chain rows of the 38 targets (the onfly audit); ``onfly`` is
+  audited (reported), never gated.
 * **Units**: ``template_on_window(p8, T, bin_lo, n_bins, BW, positions=orbit) / (DT sigma0)``
   -- no factor 2 (binary_galactica 0.5.0 restored the physical amplitude: its native GLASS
   vector now equals gbonfly's).

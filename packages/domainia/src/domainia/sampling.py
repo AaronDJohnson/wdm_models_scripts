@@ -76,7 +76,9 @@ class NoiseStateCache(_CountersMixin):
     ``lik.batchable`` JAX likelihood on an accelerator, off on CPU and never for a
     covariance that is not ``batchable`` (the sinusoid edge-exact states, ~120 MiB each);
     ``True`` there is refused.  GB ``batch_signal`` batched on every device: the model layer
-    (S7) passes ``batch_rows=True`` for the GB models.  ``misses``:
+    (S7, ``wdm_models.options``) passes ``batch_rows=True`` for the cached GB models on JAX except
+    ``exact`` (``batch_rows=False``: lineage C's ``FullCache`` looped over the rows), and
+    ``False`` on NumPy.  ``misses``:
     ``"serial"`` (golden default, one factorisation per new state in row order) or
     ``"batched"`` (opt-in, gated in S8: new states grouped by ``lik.state_key`` -- the
     covariances' ``state_key``, e.g. the adaptive Chebyshev order -- with
