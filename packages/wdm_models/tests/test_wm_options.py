@@ -17,7 +17,8 @@ def test_the_defaults():
     o = ModelOptions()
     assert (o.strategy, o.tri_build, o.rows_order, o.cells, o.gb_pad_factor, o.waveform_backend,
             o.cache_size, o.exact_chunk, o.whitened) == ("historical", None, None, None, None,
-                                                         "fourier", None, None, False)
+                                                         "onfly", None, None, False)
+    assert o.evaluator is None                # F-C2: the GB evaluator override; onfly: the release default
     assert (o.layout, o.phi_cache, o.staged, o.marginal_form, o.batch_rows) == (None,) * 5
     assert hash(o) == hash(ModelOptions())
 
@@ -88,8 +89,8 @@ def test_bad_options_are_refused():
         resolve("sinusoid", "band_win", "numpy")
     with pytest.raises(ValueError, match="backend"):
         resolve("sinusoid", "band_raw", "torch")
-    with pytest.raises(KeyError, match="galactic_binary"):
-        resolve("galactic_binary", "band_raw", "numpy")
+    with pytest.raises(KeyError, match="chirp"):            # F-C2: galactic_binary has a table now
+        resolve("chirp", "band_raw", "numpy")
     with pytest.raises(ValueError, match="device"):
         resolve("sinusoid", "band_raw", "jax", device="tpu")
     with pytest.raises(dataclasses.FrozenInstanceError):
