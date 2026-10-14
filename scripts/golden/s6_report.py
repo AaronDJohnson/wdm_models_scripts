@@ -11,9 +11,10 @@ fast-tier G3 rows of the 58 run directories with binary_galactica ``fourier`` an
 gbonfly adapter, the G4 stress points of the 30 three- and six-month targets with their masks
 and counters, the G5 products of the 3 cases and the 38 G6 anchor compositions), the inventory
 items left uncovered, and the audit (``1 - FF``, ``lnL_onfly - lnL_fourier``: reported, never
-gated).  Exit 1 if a recorded item exceeds its gate (a non-finite delta always does), a test
-failed or errored, no test ran, every test was skipped, nothing was recorded, or (``--full``)
-the S2 gate (``s2_report --full --strict``) failed -- with or without ``--strict``;
+gated).  Exit 1 if a recorded item exceeds its gate (a non-finite delta or gate always does), a
+test failed or errored, no test ran, every test was skipped, nothing was recorded, no onfly audit
+target was recorded, an audit value is not finite, a named (non-glob) test file does not exist,
+or (``--full``) the S2 gate (``s2_report --full --strict``) failed -- with or without ``--strict``;
 ``--strict`` also exits 1 on any uncovered item (a skipped test, e.g. the gbonfly adapter
 without the frozen trees, leaves its items uncovered).  ``--full`` includes the ``slow`` tests
 (the 12-month tri_raw and pads, the 6-month tri_pad) and the S2 gate; the S6 gate is
@@ -83,12 +84,14 @@ def summarise(records: list[dict], audit: list[dict], counts: dict[str, int], it
     by_item: dict[str, dict] = {}
     for r in records:
         e = by_item.setdefault(r["item"], {"observed": 0.0, "gate": r["gate"], "tests": []})
-        # fail closed: a non-finite delta (max() would drop a NaN) is over every gate
+        # fail closed: a non-finite delta (max() would drop a NaN) is over every gate, and a
+        # non-finite gate (inf <= inf; min() keeps a NaN only in first place) passes nothing
         e["observed"] = max(e["observed"], r["observed"] if math.isfinite(r["observed"]) else math.inf)
-        e["gate"] = min(e["gate"], r["gate"])
+        e["gate"] = (min(e["gate"], r["gate"]) if math.isfinite(e["gate"]) and math.isfinite(r["gate"])
+                     else math.nan)
         e["tests"].append(r["test"])
     for e in by_item.values():
-        e["ok"] = e["observed"] <= e["gate"]
+        e["ok"] = math.isfinite(e["gate"]) and e["observed"] <= e["gate"]
         e["tests"] = sorted(set(e["tests"]))
     uncovered = [i for i in items if i not in by_item]
     failed = sorted(k for k, e in by_item.items() if not e["ok"])
@@ -108,6 +111,7 @@ def summarise(records: list[dict], audit: list[dict], counts: dict[str, int], it
         (f"{counts['failures']} test(s) failed", counts["failures"] > 0),
         (f"{counts['errors']} test error(s)", counts["errors"] > 0),
         (f"{len(failed)} item(s) over their gate", bool(failed)),
+        ("no onfly audit target was recorded", not audit),
         (f"non-finite audit values at {bad_audit}", bool(bad_audit))) if bad]
     return {"records": dict(sorted(by_item.items())), "tests": counts, "families": families,
             "audit": {"targets": len(audit),
@@ -120,6 +124,10 @@ def summarise(records: list[dict], audit: list[dict], counts: dict[str, int], it
 
 
 def run_tests(patterns: list[str], *, full: bool) -> Path:
+    # fail closed: a named file that is gone (renamed, typo) would otherwise drop out silently
+    missing = [p for p in patterns if not any(c in p for c in "*?[") and not (REL / p).is_file()]
+    if missing:
+        raise SystemExit(f"no test file {missing}")
     files = sorted({str(p.relative_to(REL)) for pat in patterns for p in REL.glob(pat)})
     if not files:
         raise SystemExit(f"no test files match {patterns}")

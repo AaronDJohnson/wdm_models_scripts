@@ -18,8 +18,8 @@ The report lists every recorded item (max observed, smallest gate, pass) against
 inventory (:func:`inventory`, 99 items) and the inventory items left uncovered; the checks the
 S5 tests assert in-test (the construction guard, the binary_galactica pin, the policies of
 ``prepare.py --from-shipped``, ...) count through the test outcomes.  Exit 1 if a recorded item
-exceeds its gate (a non-finite delta always does), a test failed or errored, no test ran, every
-test was skipped, or nothing was recorded; ``--strict`` also exits 1 on any uncovered item.
+exceeds its gate (a non-finite delta or gate always does), a test failed or errored, no test ran,
+every test was skipped, or nothing was recorded; ``--strict`` also exits 1 on any uncovered item.
 ``--full`` includes the ``slow`` tests (the 6- and 12-month ``mu_fit``/``calc_Nt`` items and
 prepared regeneration); without it those items stay uncovered.  The S5 gate is
 ``--full --strict``; it needs the pinned PyPI release binary-galactica 0.5.0 (F-A11:
@@ -124,12 +124,14 @@ def summarise(records: list[dict], audit: list[dict], counts: dict[str, int], it
     by_item: dict[str, dict] = {}
     for r in records:
         e = by_item.setdefault(r["item"], {"observed": 0.0, "gate": r["gate"], "tests": []})
-        # fail closed: a non-finite delta (max() would drop a NaN) is over every gate
+        # fail closed: a non-finite delta (max() would drop a NaN) is over every gate, and a
+        # non-finite gate (inf <= inf; min() keeps a NaN only in first place) passes nothing
         e["observed"] = max(e["observed"], r["observed"] if math.isfinite(r["observed"]) else math.inf)
-        e["gate"] = min(e["gate"], r["gate"])
+        e["gate"] = (min(e["gate"], r["gate"]) if math.isfinite(e["gate"]) and math.isfinite(r["gate"])
+                     else math.nan)
         e["tests"].append(r["test"])
     for e in by_item.values():
-        e["ok"] = e["observed"] <= e["gate"]
+        e["ok"] = math.isfinite(e["gate"]) and e["observed"] <= e["gate"]
         e["tests"] = sorted(set(e["tests"]))
     uncovered = [i for i in items if i not in by_item]
     failed = sorted(k for k, e in by_item.items() if not e["ok"])

@@ -72,6 +72,33 @@ def test_summary_marks_covered_failed_uncovered_and_the_audit(tmp_path):
     assert "galactic_binary/gb_3mo/g5/describe" in rep["inventory"]["uncovered"]
 
 
+def test_a_non_finite_gate_or_observation_fails_and_so_does_no_audit(tmp_path):
+    """P4P: a record fails unless its gate and observed value are finite (inf <= inf, and the
+    order-dependent min with a NaN gate, passed at v0.10.0); no onfly audit target fails."""
+    good = {"item": "galactic_binary/gb_3mo/band_raw/audit", "max_one_minus_ff": 1e-6, "max_abs_dlnl": 0.01,
+            "rows": 3}
+    item = "galactic_binary/gb_3mo/band_raw/g4/anchor"
+    for i, records in enumerate(([(item, float("inf"), float("inf"))], [(item, 5.0, float("inf"))],
+                                 [(item, 0.0, 1e-8), (item, 0.0, float("nan"))],
+                                 [(item, 0.0, float("nan")), (item, 0.0, 1e-8)])):
+        rep = R.summarise(*R.collect(_junit(tmp_path / f"g{i}.xml", records, audit=[good])), S6.inventory())
+        assert not rep["ok"] and rep["failed_items"] == [item], records
+    ok = R.summarise(*R.collect(_junit(tmp_path / "ok.xml", [(item, 1e-12, 1e-10)], audit=[good])), S6.inventory())
+    assert ok["ok"] and ok["failed_items"] == []
+    none = R.summarise(*R.collect(_junit(tmp_path / "none.xml", [(item, 1e-12, 1e-10)])), S6.inventory())
+    assert not none["ok"] and "no onfly audit target was recorded" in none["problems"]
+
+
+def test_a_named_test_file_that_is_gone_aborts_before_pytest(monkeypatch):
+    """P4P: the missing-file guard s5_report and s7_report have (a renamed file would otherwise
+    drop out of the gate silently)."""
+    def ran(*a, **k):
+        raise AssertionError("pytest ran")
+    monkeypatch.setattr(R.subprocess, "run", ran)
+    with pytest.raises(SystemExit, match="no test file"):
+        R.run_tests([*R.DEFAULT_TESTS, "tests/golden/test_gone.py"], full=False)
+
+
 def test_out_inside_the_release_is_refused():
     p = subprocess.run([sys.executable, "-P", "-m", "scripts.golden.s6_report", "--junit", "x.xml",
                         "--out", str(REL / "s6.json")], cwd=str(REL), capture_output=True, text=True)

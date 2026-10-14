@@ -99,6 +99,11 @@ def test_the_report_fails_closed(tmp_path, monkeypatch):
     assert R.summarise(*R.collect(plain), R.inventory())["problems"] == ["no S5 comparison was recorded"]
     nan = _junit(tmp_path / "nan.xml", [("G5/segments/gb_3mo/window", float("nan"), 0.0)])
     assert R.summarise(*R.collect(nan), R.inventory())["failed_items"] == ["G5/segments/gb_3mo/window"]
+    item, inf, nan_ = "G5/segments/gb_3mo/window", float("inf"), float("nan")
+    for i, recs in enumerate(([(item, inf, inf)], [(item, 5.0, inf)], [(item, 0.0, 1e-8), (item, 0.0, nan_)],
+                              [(item, 0.0, nan_), (item, 0.0, 1e-8)])):      # P4P: a non-finite gate fails
+        rep = R.summarise(*R.collect(_junit(tmp_path / f"g{i}.xml", recs)), R.inventory())
+        assert rep["failed_items"] == [item] and not rep["ok"], recs
     bad = _junit(tmp_path / "bad.xml", [("G5/segments/gb_3mo/window", 0.0, 0.0)], failed=(0,))
     assert R.main(["--junit", str(bad)]) == 1
     ok = _junit(tmp_path / "ok.xml", [("G5/segments/gb_3mo/window", 0.0, 0.0)])
