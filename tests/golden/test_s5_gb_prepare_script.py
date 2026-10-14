@@ -113,7 +113,23 @@ def test_the_prepare_cli_gates_on_the_policy(tmp_path, monkeypatch, capsys, scal
 
 def test_the_prepare_cli_fails_closed_and_refuses_the_release_tree(tmp_path, monkeypatch):
     monkeypatch.setitem(PR.ENGINES, "release", _stub_engine(fail=True))
-    assert PR.main(["--from-shipped", "--case", "gb_3mo", "--out", str(tmp_path)]) == 1
+    report = tmp_path / "report.json"
+    assert PR.main(["--from-shipped", "--case", "gb_3mo", "--out", str(tmp_path), "--report", str(report)]) == 1
+    rep = json.loads(report.read_text())
+    assert rep["ok"] is False and rep["error"] == "rebuild raised RuntimeError: no port"
+
+    def no_report(cases, out_dir, data_root):         # a rebuilt case without its <case>_report.json
+        _stub_engine()(cases, out_dir, data_root)
+        for case in cases:
+            (out_dir / f"{case}_report.json").unlink()
+        return {case: out_dir / f"{case}.npz" for case in cases}
+
+    monkeypatch.setitem(PR.ENGINES, "release", no_report)
+    report.write_text(json.dumps({"ok": True}))        # a stale passing report is overwritten
+    assert PR.main(["--from-shipped", "--case", "gb_3mo", "--out", str(tmp_path / "out"),
+                    "--report", str(report)]) == 1
+    rep = json.loads(report.read_text())
+    assert rep["ok"] is False and rep["error"].startswith("comparison raised FileNotFoundError")
     with pytest.raises(SystemExit) as e:
         PR.main(["--from-shipped", "--out", str(REL / "tmp_out")])
     assert e.value.code == 2

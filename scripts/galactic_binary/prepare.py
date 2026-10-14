@@ -41,8 +41,9 @@ deterministic paper keys ``array_equal``, ``mu_fit`` within 1.7e-16 / 1.1e-16 / 
 key equal (``mu_fit`` and ``mu_freq`` 0.0, the eight legacy-only keys too) and ``nt_star``
 246.86598221011158 / 444.3893998481366 / 925.7765186242784.
 
-Exit status 0: every case passes.  1: a comparison failed (or a rebuild raised).  2: usage,
-including an ``--out``/``--report`` inside the release tree.
+Exit status 0: every case passes.  1: a comparison failed, or a rebuild or a comparison raised
+(the reason is the report's ``error``; ``--report`` is written either way).  2: usage, including
+an ``--out``/``--report`` inside the release tree.
 """
 
 from __future__ import annotations
@@ -253,14 +254,18 @@ def run(cases: Sequence[str], engine: str, out_dir: Path, data_root: Path) -> di
     try:
         paths = ENGINES[engine](cases, out_dir, data_root)
     except Exception as exc:                                  # fail closed, with the reason
-        return {"engine": engine, "ok": False, "error": f"{type(exc).__name__}: {exc}", "cases": {}}
+        return {"engine": engine, "ok": False, "error": f"rebuild raised {type(exc).__name__}: {exc}",
+                "cases": {}}
     rep: dict[str, Any] = {"engine": engine, "out": str(out_dir), "seconds": time.perf_counter() - t0,
                            "cases": {}}
-    for case in cases:
-        npz, report = shipped_case(case, data_root)
-        new_report = json.loads((paths[case].parent / f"{case}_report.json").read_text())
-        rep["cases"][case] = {"npz": compare_prepared(_load_npz(paths[case]), npz),
-                              "report": compare_report(new_report, report)}
+    try:
+        for case in cases:
+            npz, report = shipped_case(case, data_root)
+            new_report = json.loads((paths[case].parent / f"{case}_report.json").read_text())
+            rep["cases"][case] = {"npz": compare_prepared(_load_npz(paths[case]), npz),
+                                  "report": compare_report(new_report, report)}
+    except Exception as exc:          # a rebuilt file missing, a shipped one off the manifest: fail closed
+        return dict(rep, ok=False, error=f"comparison raised {type(exc).__name__}: {exc}")
     rep["ok"] = all(c["npz"]["ok"] and c["report"]["ok"] for c in rep["cases"].values())
     return rep
 
@@ -305,7 +310,7 @@ def main(argv: list[str] | None = None) -> int:
         a.report.parent.mkdir(parents=True, exist_ok=True)
         a.report.write_text(json.dumps(rep, indent=1, default=str) + "\n")
     if "error" in rep:
-        print(f"[prepare] FAIL: {a.engine} rebuild raised {rep['error']}", file=sys.stderr)
+        print(f"[prepare] FAIL: {a.engine} {rep['error']}", file=sys.stderr)
         return 1
     for case, c in rep["cases"].items():
         print(summary_line(case, a.engine, c))
