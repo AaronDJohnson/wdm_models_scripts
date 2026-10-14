@@ -51,8 +51,20 @@ validation rule: the binary_galactica templates run on CPU-JAX even on the NumPy
 the report's fingerprint records ``XLA_FLAGS``.  The full tier (32 rows per run directory, 12
 stress points) has no captured goldens
 yet: capturing them (``scripts.golden.capture_gb --tier full``, lineage C, ~1 h) and running it
-need the user's approval (spec section 6).  ``--backend jax`` is S7's (section F-D): until then
-every target reports "build failed".
+need the user's approval (spec section 6).
+
+JAX (S7, section F-D): ``--backend jax`` evaluates the registry's JAX evaluator -- lineage C's
+``gpu/jax_models.build`` classes: ``NoiseStateCache`` for the cached models, ``BatchedLikelihood``
+otherwise -- at ``approved.G3.jax`` and the pooled G4 JAX gate (8.32e-8 at well-conditioned
+points).  Its counters are lineage C's own JAX counters on the same call (``jax_counters`` per
+run directory, ``counters_jax`` per stress file; the uncached models count rows only: lineage C's
+``BatchedLikelihood`` kept none), not the NumPy reference's one state per row, and G4 has no
+separate cache pass (on JAX the default evaluator IS the cache).  The CPU flag above is what
+makes CPU-JAX deterministic (on a GPU validation sets ``--xla_gpu_deterministic_ops=true``); the
+report records the flags in force as ``run_meta`` (``wdm_models.sampling.device``) and, per run
+directory and stress file, ``ms_per_eval`` and
+``repeat_max_abs`` of a warm repeat (fresh counters and cache, the programs compiled) and the
+largest difference from lineage C's own JAX values -- reported, never gated.  Colab GPU: ``COLAB``.
 """
 
 from __future__ import annotations
@@ -84,6 +96,7 @@ for _src in reversed(SOURCES):
 from wdm_models.galactic_binary import models as gb_models  # noqa: E402  (after the path bootstrap)
 from wdm_models.options import GB_CACHED, ModelOptions  # noqa: E402
 from wdm_models.registry import MODELS, TARGETS, describe  # noqa: E402
+from wdm_models.sampling.device import run_meta  # noqa: E402
 from wdm_models.sampling.validate import (Gate, ValidationError, build_fingerprint, compare, evaluate,  # noqa: E402
                                           write_report)
 
@@ -191,7 +204,9 @@ def chain_runs(case: str, model: str, tier: str, golden: Path = GOLDEN) -> list[
         out.append({"run": run, "theta": np.array([r["theta"] for r in rows], dtype=np.float64),
                     "reference": np.array([_f(r["lnlike_stored"]) for r in rows]),
                     "lineage_c": np.array([_f(r["lnlike_numpy"]) for r in rows]),
-                    "rows": np.array([int(r["row"]) for r in rows]), "prepared_sha256": rec["prepared_sha256"]})
+                    "rows": np.array([int(r["row"]) for r in rows]), "prepared_sha256": rec["prepared_sha256"],
+                    "lineage_jax": np.array([_f(r["lnlike_jax"]) for r in rows]),
+                    "jax_counters": rec.get("jax_counters")})
     return out
 
 
@@ -215,7 +230,8 @@ def stress_points(case: str, model: str, tier: str, golden: Path = GOLDEN) -> di
             "margin": margin, "marginal": np.array([bool(p["marginal"]) for p in pts]),
             "source_out": np.array([bool(p["source_out"]) for p in pts]),
             "expected_neg_inf": np.array([bool(p["expected_neg_inf"]) for p in pts]),
-            "counters_cache": rec.get("counters_cache"), "threshold": thr,
+            "counters_cache": rec.get("counters_cache"), "counters_jax": rec.get("counters_jax"),
+            "lnl_jax": np.array([_f(p["lnl_jax"]) for p in pts]), "threshold": thr,
             "prepared_sha256": rec["prepared_sha256"]}
 
 
@@ -293,6 +309,30 @@ def bare_counters(lik: Any, n: int, failed: np.ndarray) -> dict:
     return {"evaluations": n, "noise_states": states, "pd_failed_rows": k, "pd_failed_states": k}
 
 
+def jax_counters(lik: Any, n: int, golden: dict | None) -> dict:
+    """The JAX evaluator's expected counters: lineage C's own on the same call (``jax_counters`` /
+    ``counters_jax``) for a cached model; rows only for an uncached ``BatchedLikelihood`` (lineage
+    C's had no counters; the release counts no noise state for it, F-D3)."""
+    if golden is not None:
+        return {k: int(golden[k]) for k in COUNTER_KEYS}
+    if getattr(lik, "count_states", True):
+        raise ValidationError(f"no lineage-C JAX counters to compare a {type(lik).__name__} with")
+    return {"evaluations": n, "noise_states": 0, "pd_failed_rows": 0, "pd_failed_states": 0}
+
+
+def jax_repeat(lik: Any, theta: np.ndarray, first: dict, legacy: np.ndarray) -> dict:
+    """A warm repeat (``evaluate``: fresh counters and cache, the programs compiled): its
+    ``ms_per_eval``, ``repeat_max_abs`` (largest difference from the gated call) and
+    ``lineage_c_jax_max_abs`` (from lineage C's own JAX values) -- reported, never gated."""
+    again = evaluate(lik, theta)
+    n = len(theta)
+    v = np.asarray(first["values"], dtype=float)
+    both = np.isfinite(v) & np.isfinite(legacy)
+    return {"ms_per_eval": 1e3 * again["seconds"] / n,
+            "repeat_max_abs": compare(again["values"], v, np.ones(n, bool), Gate(0.0), exact=True)["max_abs"],
+            "lineage_c_jax_max_abs": float(np.max(np.abs(v[both] - legacy[both]), initial=0.0))}
+
+
 # --- one target ------------------------------------------------------------------------------
 
 def _build(builder: Builder, case: str, model: str, backend: str, options: ModelOptions, template: Any,
@@ -305,7 +345,7 @@ def _build(builder: Builder, case: str, model: str, backend: str, options: Model
 
 
 def validate_g3(lik: Any, case: str, model: str, tier: str, gate: float, *, exact_lineage: bool,
-                golden: Path) -> dict:
+                golden: Path, backend: str = "numpy") -> dict:
     """Every run directory of the target: stored lnlike at ``gate``; lineage C NumPy exactly when
     ``exact_lineage`` (gbonfly adapter, recording build), else reported."""
     runs = chain_runs(case, model, tier, golden)
@@ -318,8 +358,9 @@ def validate_g3(lik: Any, case: str, model: str, tier: str, gate: float, *, exac
         n = len(run["reference"])
         cmp = compare(res["values"], run["reference"], np.ones(n, bool), Gate(gate))
         cl = compare(res["values"], run["lineage_c"], np.ones(n, bool), Gate(gate), exact=exact_lineage)
-        probs = counter_problems(res, bare_counters(getattr(lik, "lik", lik), n, np.zeros(n, bool)),
-                                 failed_mask=np.zeros(n, bool))
+        expected = (jax_counters(lik, n, run["jax_counters"]) if backend == "jax"
+                    else bare_counters(getattr(lik, "lik", lik), n, np.zeros(n, bool)))
+        probs = counter_problems(res, expected, failed_mask=np.zeros(n, bool))
         if cmp["invalid"] or cmp["inf_mismatch"]:
             probs.append(f"{cmp['invalid']} NaN/+inf and {cmp['inf_mismatch']} -inf mismatch(es)")
         if not cmp["ok"]:
@@ -334,7 +375,10 @@ def validate_g3(lik: Any, case: str, model: str, tier: str, gate: float, *, exac
                                                    "bitwise_rows": int(np.sum(cl["abs_delta"] == 0.0))},
                                      "counters": res["counters"], "inf_mismatch": cmp["inf_mismatch"],
                                      "invalid": cmp["invalid"], "seconds": res["seconds"], "problems": probs,
-                                     "prepared_sha256": run["prepared_sha256"]}
+                                     "prepared_sha256": run["prepared_sha256"], "counters_golden": expected,
+                                     "ms_per_eval": 1e3 * res["seconds"] / n}
+        if backend == "jax":
+            entry["runs"][run["run"]].update(jax_repeat(lik, run["theta"], res, run["lineage_jax"]))
         entry["problems"] += [f"{run['run']}: {p}" for p in probs]
     deltas = [d for r in entry["runs"].values() for d in r["abs_delta"]]
     entry.update(max_abs=float(max(deltas)), n_rows=len(deltas), gate=gate,
@@ -356,11 +400,16 @@ def validate_g4(case: str, model: str, tier: str, *, builder: Builder, backend: 
     res = evaluate(lik, pts["theta"])
     cmp = stress_compare(res["values"], pts, pts["lnl_ref"], abs_gate=abs_gate, rel_gate=rel_gate, well=rules["well"])
     failed = (pts["lnl_ref"] == -np.inf) & ~pts["source_out"]
-    probs = counter_problems(res, bare_counters(lik, n, failed),
+    expected = jax_counters(lik, n, pts["counters_jax"]) if backend == "jax" else bare_counters(lik, n, failed)
+    probs = counter_problems(res, expected,
                              failed_mask=None if type(lik).__name__ == "FourierWhittle" else failed)
     out["reference"] = {"value": res["values"], "counters": res["counters"], **cmp}
+    out["counters_golden"] = expected
+    out["ms_per_eval"] = 1e3 * res["seconds"] / n
+    if backend == "jax":                      # the default JAX evaluator IS the cache: no second pass
+        out.update(jax_repeat(lik, pts["theta"], res, pts["lnl_jax"]))
     del lik
-    if model in GB_CACHED:
+    if backend == "numpy" and model in GB_CACHED:
         if pts["lnl_cache"] is None or pts["counters_cache"] is None:
             raise ValidationError(f"stress/{case}/{model}: a cached model without lnl_cache / counters_cache")
         cache = _build(builder, case, model, backend, dataclasses.replace(options, evaluator="cache"), template,
@@ -518,6 +567,7 @@ def run(*, backend: str = "numpy", tier: str = "fast", cases: Sequence[str] | No
 
         enable_x64()
     fp = build_fingerprint(backend)
+    meta = run_meta(backend)
     recording = recording_build(golden)
     options = ModelOptions(waveform_backend=waveform)
     if tables is not None and templates != "gbonfly":
@@ -543,7 +593,8 @@ def run(*, backend: str = "numpy", tier: str = "fast", cases: Sequence[str] | No
                 if kind == "g3":
                     lik = _build(builder, case, model, backend, options, template, data_root)
                     res["g3"] = validate_g3(lik, case, model, tier, gates["G3"][backend][key],
-                                            exact_lineage=templates == "gbonfly" and recording, golden=golden)
+                                            exact_lineage=templates == "gbonfly" and recording, golden=golden,
+                                            backend=backend)
                     del lik
                 elif kind == "g4":
                     if case not in STRESS_CASES:
@@ -587,7 +638,7 @@ def run(*, backend: str = "numpy", tier: str = "fast", cases: Sequence[str] | No
             "waveform": waveform, "templates": templates, "recording_build": recording,
             "selection": {"cases": sorted({c for c, _ in targets}, key=CASES.index),
                           "models": sorted({m for _, m in targets}, key=MODELS.index)},
-            "fingerprint": fp, "gates": {"G3": gates["G3"][backend], "G4": gates["G4"]},
+            "fingerprint": fp, "run_meta": meta, "gates": {"G3": gates["G3"][backend], "G4": gates["G4"]},
             "targets": out_targets, "g5": g5, "n_targets": len(out_targets), "failed": failed,
             "problems": problems, "ok": not problems and not failed}
 
