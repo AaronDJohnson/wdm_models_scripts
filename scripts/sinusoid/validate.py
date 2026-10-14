@@ -35,11 +35,21 @@ Exit status 0: every check passed.  1: a check failed, or the validation could n
 carried out (empty selection, a missing or altered reference, an unapproved gate, a build
 error).  2: usage.  The full tier on NumPy (2232 evaluations; estimated 45-50 min, never
 run here: edge-exact ~3-5 s per point) needs the user's approval locally (spec section 6).
+
+JAX (S4): ``--backend jax`` turns on float64 first (``wdm.backend.enable_x64``), gates at
+``approved.jax`` (no lineage comparison; lineage B is ``scripts.golden.s4_report``'s), and
+records ``run_meta`` (``wdm_models.sampling.device``: device kind, platform, jax/jaxlib, x64,
+``XLA_FLAGS`` and whether ``--xla_gpu_deterministic_ops=true`` is set) plus, per target and
+golden kind, ``ms_per_eval`` from a second, warm call (fresh counters and cache, the
+programs compiled) and ``repeat_max_abs``, its largest difference from the gated call --
+both reported, never gated.  On NumPy ``ms_per_eval`` is the gated call's.  Each target
+is released before the next (an edge-exact target holds ~2.8 GB of Phi).
 """
 
 from __future__ import annotations
 
 import argparse
+import gc
 import hashlib
 import json
 import sys
@@ -63,6 +73,7 @@ from wdm_models.registry import MODELS, TARGETS  # noqa: E402  (after the path b
 from wdm_models.sampling.validate import (Gate, ValidationError, build_fingerprint, check_counters,  # noqa: E402
                                           check_reference, compare, evaluate, same_build, wrap_periodic,
                                           write_report)
+from wdm_models.sampling.device import run_meta
 from wdm_models.sinusoid import priors  # noqa: E402
 
 GOLDEN = REL / "golden"
@@ -233,7 +244,18 @@ def validate_target(case: str, model: str, *, backend: str, tier: str, goldens: 
                  "seconds": res["seconds"], "gate": {"atol": gates[kind][model].atol, "rtol": gates[kind][model].rtol},
                  **{k: cmp[k] for k in ("abs_delta", "rel_delta", "allowed", "passed", "inf_mismatch", "invalid",
                                         "max_abs", "near_max_abs", "stress_max_abs", "stress_max_rel")},
-                 "problems": problems}
+                 "problems": problems, "ms_per_eval": 1e3 * res["seconds"] / len(pts["reference"])}
+        if backend == "jax":
+            # the gated call compiled; a warm repeat (fresh counters and cache) times the
+            # steady state and shows run-to-run agreement -- reported, never gated
+            try:
+                again = evaluate(lik, pts["theta"])
+            except Exception as err:
+                problems.append(f"repeat evaluation failed: {type(err).__name__}: {err}")
+            else:
+                entry["ms_per_eval"] = 1e3 * again["seconds"] / len(pts["reference"])
+                entry["repeat_max_abs"] = compare(again["values"], res["values"], pts["near"],
+                                                  Gate(0.0), exact=True)["max_abs"]
         if cmp["invalid"]:
             problems.append(f"{cmp['invalid']} NaN/+inf value(s)")
         if cmp["inf_mismatch"]:
@@ -288,7 +310,12 @@ def run(*, backend: str = "numpy", tier: str = "fast", cases: Sequence[str] | No
         raise ValidationError(f"goldens {goldens!r} must be a non-empty subset of {GOLDENS}")
     targets = select(cases, models)
     gates = {k: approved_gates(backend, KIND[k][0], golden) for k in goldens}
+    if backend == "jax":
+        from wdm.backend import enable_x64
+
+        enable_x64()                 # spec section 3.4: scripts turn float64 on first
     fp = build_fingerprint(backend)
+    meta = run_meta(backend)
     lineage: dict[str, dict | None] = {k: None for k in goldens}
     lineage_gates = None
     recording = False
@@ -305,6 +332,7 @@ def run(*, backend: str = "numpy", tier: str = "fast", cases: Sequence[str] | No
                               data_root=data_root, builder=builder, options=options)
         res["seconds"] = time.perf_counter() - t0
         out_targets[f"{case}/{model}"] = res
+        gc.collect()                     # release the target (its likelihood is out of scope)
         if progress is not None:
             progress(f"{case}/{model}: {'ok' if res['ok'] else 'FAIL'} ({res['seconds']:.1f} s)")
     failed = [k for k, v in out_targets.items() if not v["ok"]]
@@ -317,7 +345,7 @@ def run(*, backend: str = "numpy", tier: str = "fast", cases: Sequence[str] | No
     return {"schema": 1, "family": TOY, "backend": backend, "tier": tier, "goldens": list(goldens),
             "selection": {"cases": sorted({c for c, _ in targets}, key=CASES.index),
                           "models": sorted({m for _, m in targets}, key=MODELS.index)},
-            "fingerprint": fp, "recording_build": recording,
+            "fingerprint": fp, "run_meta": meta, "recording_build": recording,
             "bitwise_against": {k: lineage[k] is not None for k in goldens},
             "gates": {k: {m: {"atol": g.atol, "rtol": g.rtol} for m, g in gates[k].items()} for k in goldens},
             "targets": out_targets, "models": {k: _summary(out_targets, k) for k in goldens},
