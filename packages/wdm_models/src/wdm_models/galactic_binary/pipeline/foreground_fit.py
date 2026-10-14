@@ -63,10 +63,10 @@ from ..instrument import SANGRIA_NOISE_PARAMS, tdi_instrumental_psd_AE
 
 __all__ = ["BATCH_BINS", "BLOCK_DLNF", "BLOCK_MIN_BINS", "COMPONENTS", "DT", "FIELDS", "FIT_ATOL_KEYS",
            "FIT_BAND", "FIT_EXACT_KEYS", "FIT_RTOL_KEYS", "GLASS_NAMES", "GLASS_PRIOR", "GLASS_START",
-           "Generator", "IMPULSE_PIN", "IMPULSE_URL", "NATIVE", "PROXY_MARGIN", "SMOOTH_BAND", "SMOOTH_BLOCKS", "YEAR", "accumulate",
-           "band_snr2", "binned_power", "block_mean", "blocks", "compare_fit", "confusion_psd",
-           "glass_objective", "impulse_sampler", "labels", "map_fit_binned", "map_fit_glass", "native_of", "polish",
-           "proxy_snr", "read_column", "read_gb_ae", "resolve", "s_inst", "write"]
+           "Generator", "IMPULSE_PIN", "IMPULSE_URL", "NATIVE", "PROXY_MARGIN", "SMOOTH_BAND", "SMOOTH_BLOCKS",
+           "YEAR", "accumulate", "band_snr2", "binned_power", "block_mean", "blocks", "compare_fit",
+           "confusion_psd", "glass_objective", "impulse_sampler", "labels", "map_fit_binned", "map_fit_glass",
+           "native_of", "polish", "proxy_snr", "read_column", "read_gb_ae", "resolve", "s_inst", "write"]
 
 DT = 5.0
 YEAR = 31536000.0
