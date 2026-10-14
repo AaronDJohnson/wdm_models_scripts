@@ -55,3 +55,23 @@ samples; the run evaluates the G1/G2 goldens only (45 targets, a few minutes).
    (its `run_meta` must read `"device_kind": "gpu"` and `"deterministic_ops": true`; `--validate`
    refuses a report from any other device, a CPU fallback included -- the cell's
    `JAX_PLATFORMS=cuda` makes a runtime without a usable GPU fail instead of falling back).
+
+
+## Validating the galactic binary on NumPy (sub-project S6)
+
+The 38 galactic-binary targets (`wdm_models.registry.TARGETS["galactic_binary"]`) are gated
+against the frozen lineage-C goldens; nothing here samples. From this directory, after
+`source env/activate.sh`:
+
+* `$PY -P -m scripts.galactic_binary.validate --tier fast --report "$TMPDIR/gb_validate.json"` --
+  G3 (174 stored chain rows), G4 (the stress points of the 30 three- and six-month targets),
+  G5 (data products) and G6 (the anchors); about 1.5 min. The golden checks use
+  binary_galactica `fourier` (the chains' gbonfly templates); the release default `onfly` is
+  audited, not gated: `--golden audit`.
+* `--templates gbonfly` swaps in gbonfly templates streamed from the frozen lineage C (needs the
+  `wdm_test` workspace): the likelihood numerics alone, bitwise against lineage C on the
+  recording build.
+* The S6 gate: `$PY -m scripts.golden.s6_report --full --strict --out "$TMPDIR/s6.json"`
+  (every G3/G4/G5/G6 item, the onfly audit, and the S2 gate; about 9 min).
+* The full tier (32 rows per run directory, 12 stress points) needs the user's approval: its
+  goldens are not captured yet (`tests/golden/test_s6_full_tier.py` lists the commands).
