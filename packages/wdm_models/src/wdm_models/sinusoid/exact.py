@@ -43,7 +43,8 @@ from .config import ANALYSIS_FMIN, EXACT_P, EXACT_TOL, SinusoidConfig
 from .priors import noise_bounds
 from .psd import as_loglinear
 
-__all__ = ["BANDCOV_KEY", "BANDCOV_SHA256", "BandCorrection", "CN_SHA256", "ExactLogDet",
+__all__ = ["BANDCOV_KEY", "BANDCOV_SHA256", "BandCorrection", "CN_SHA256", "CORRECTION_ALGORITHMS",
+           "ExactLogDet",
            "ProjectedExact", "bandcov_filename", "bandcov_identity", "check_bandcov", "cn_filename",
            "scaled"]
 
@@ -56,6 +57,8 @@ BANDCOV_VERSION = 1
 MAX_CACHE_ERROR = 2e-5
 MAX_CACHE_SOLVER_TOL = 1e-9
 CN_ATOL = 1e-12
+#: S4: the evaluation orders of the bandcov correction (WT NumPy golden, WG JAX golden).
+CORRECTION_ALGORITHMS = ("chebval2d", "table")
 _MANUSCRIPT = SinusoidConfig()
 
 
@@ -90,6 +93,17 @@ def scaled(ac: Any, ad: Any, bounds: np.ndarray, drift_scale: float) -> tuple[An
     lo, hi = np.arcsinh(bounds[1]/drift_scale)
     y = 2*(np.arcsinh(ad/drift_scale)-lo)/(hi-lo)-1
     return x, y
+
+
+def _cheb_table(x: Any, degree: int, xp: Any) -> Any:
+    """``[T_0(x), ..., T_degree(x)]`` by the three-term recurrence (WG ``_cheb_values``,
+    ``gpu_sinusoid/wdmtoysgpu/bandcov.py:87-94``)."""
+    terms = [xp.ones_like(x)]
+    if degree:
+        terms.append(x)
+    for _ in range(2, degree + 1):
+        terms.append(2*x*terms[-1] - terms[-2])
+    return xp.stack(terms, axis=-1)
 
 
 def check_bandcov(arrays: dict[str, np.ndarray], identity: dict[str, Any]) -> dict[str, Any]:
@@ -170,14 +184,21 @@ class ExactLogDet:
 
 @dataclass(frozen=True, eq=False)
 class BandCorrection:
-    """The bandcov interpolant ``chebval2d(scaled(alpha_c, alpha_d), coefficients)``; refuses
-    noise outside the validated box (WT ``_check_domain``)."""
+    """The bandcov interpolant ``chebval2d(scaled(alpha_c, alpha_d), coefficients)``.
+
+    ``algorithm`` names the evaluation order (S4): ``"chebval2d"`` -- WT
+    ``BandCovariance.logdet`` on host floats, refusing noise outside the validated box
+    (WT ``_check_domain``; the NumPy golden, eager on JAX); ``"table"`` -- WG
+    ``BandFullCovarianceGPU._correction`` (the Chebyshev tables by recurrence, ``tx C ty`` by
+    one einsum; traceable, the JAX golden).  The table order cannot refuse under tracing:
+    the JAX ``exact`` model masks rows outside the box with its ``row_ok``, as WG did."""
 
     coefficients: np.ndarray
     bounds: np.ndarray
     drift_scale: float
     metadata: dict = field(repr=False)
     path: Path
+    algorithm: str = "chebval2d"
 
     @property
     def c_N(self) -> float:
@@ -190,7 +211,10 @@ class BandCorrection:
 
     @classmethod
     def load(cls, cfg: SinusoidConfig = _MANUSCRIPT, *, data_root: str | os.PathLike | None = None,
-             analysis_fmin: float = ANALYSIS_FMIN, P: int = EXACT_P) -> BandCorrection:
+             analysis_fmin: float = ANALYSIS_FMIN, P: int = EXACT_P,
+             algorithm: str = "chebval2d") -> BandCorrection:
+        if algorithm not in CORRECTION_ALGORITHMS:
+            raise ValueError(f"algorithm must be one of {CORRECTION_ALGORITHMS}; got {algorithm!r}")
         identity = bandcov_identity(cfg, analysis_fmin, P)
         rel = f"{CACHE_REL}/{bandcov_filename(cfg, analysis_fmin, P)}"
         art = shipped(resolve_data_root(data_root), rel, BANDCOV_SHA256)
@@ -200,7 +224,7 @@ class BandCorrection:
         coeff.setflags(write=False)
         bounds = np.asarray(identity["bounds"], dtype=float)
         bounds.setflags(write=False)
-        return cls(coeff, bounds, float(identity["drift_scale"]), meta, art.path)
+        return cls(coeff, bounds, float(identity["drift_scale"]), meta, art.path, algorithm)
 
     def check_domain(self, alpha_c: float, alpha_d: float) -> None:
         values = np.asarray([alpha_c, alpha_d], dtype=float)
@@ -209,15 +233,33 @@ class BandCorrection:
             raise ValueError(f"noise indices {values.tolist()} are outside the validated cache/prior "
                              f"domain {self.bounds.tolist()}")
 
-    def __call__(self, nu: Any, be: Backend | None = None) -> Any:
-        """The correction at ``nu = (alpha_c, alpha_d)`` (NumPy; the traced evaluation is S4's)."""
-        be = be or get_backend(nu)
-        if be.name != "numpy":
-            raise NotImplementedError("BandCorrection evaluates on NumPy only; its traced (JAX) "
-                                      "Chebyshev evaluation is sub-project S4's")
-        ac, ad = float(nu[0]), float(nu[1])
+    def host_constants(self) -> dict[str, np.ndarray]:
+        """The coefficients as a covariance constant: ``ProjectedOperatorMarginal`` carries
+        them and passes them back as ``C`` (on JAX a jit argument, never a literal)."""
+        return {"coefficients": self.coefficients}
+
+    def __call__(self, nu: Any, be: Backend | None = None, *, C: Any = None) -> Any:
+        """The correction at ``nu = (alpha_c, alpha_d)`` in :attr:`algorithm`'s order
+        (``C``: :meth:`host_constants` on the evaluating backend; the host order reads its
+        own coefficients)."""
+        if self.algorithm == "table":
+            return self._table(nu, be, C)
+        ac, ad = float(nu[0]), float(nu[1])          # host floats: refuses a tracer
         self.check_domain(ac, ad)
         return cheb.chebval2d(*scaled(ac, ad, self.bounds, self.drift_scale), self.coefficients)
+
+    def _table(self, nu: Any, be: Backend | None = None, C: Any = None) -> Any:
+        """WG ``BandFullCovarianceGPU._correction`` for one row (``bandcov.py:96-103``):
+        the affine and asinh maps onto [-1, 1], the Chebyshev tables, ``tx C ty``."""
+        be = be or get_backend(nu)
+        xp, b = be.xp, self.bounds
+        coefficients = self.coefficients if C is None else C["coefficients"]
+        x = 2*(nu[0]-b[0, 0]) / (b[0, 1]-b[0, 0])-1
+        lo, hi = xp.arcsinh(be.asarray(b[1])/self.drift_scale)
+        y = 2*(xp.arcsinh(nu[1]/self.drift_scale)-lo)/(hi-lo)-1
+        tx = _cheb_table(x, coefficients.shape[0]-1, xp)
+        ty = _cheb_table(y, coefficients.shape[1]-1, xp)
+        return xp.einsum("i,ij,j->", tx, be.asarray(coefficients), ty)
 
 
 @dataclass(frozen=True, eq=False)
@@ -239,9 +281,12 @@ class ProjectedExact:
 
     @classmethod
     def load(cls, cfg: SinusoidConfig = _MANUSCRIPT, *, data_root: str | os.PathLike | None = None,
-             analysis_fmin: float = ANALYSIS_FMIN, P: int = EXACT_P) -> ProjectedExact:
+             analysis_fmin: float = ANALYSIS_FMIN, P: int = EXACT_P,
+             algorithm: str = "chebval2d") -> ProjectedExact:
+        """``algorithm``: the correction's evaluation order (``Resolved.correction``)."""
         return cls(ExactLogDet.load(cfg, data_root=data_root),
-                   BandCorrection.load(cfg, data_root=data_root, analysis_fmin=analysis_fmin, P=P),
+                   BandCorrection.load(cfg, data_root=data_root, analysis_fmin=analysis_fmin, P=P,
+                                       algorithm=algorithm),
                    FourierBandNuisance(cfg.N, cfg.dt, analysis_fmin))
 
     def covariance(self, *, P: int = EXACT_P, tol: float = EXACT_TOL, maxit: int = 200,

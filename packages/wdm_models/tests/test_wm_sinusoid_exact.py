@@ -81,12 +81,6 @@ def test_the_correction_refuses_noise_outside_the_validated_box():
     assert np.isfinite(corr(np.array([-4.0, -2.0]))) and np.isfinite(corr(np.array([0.0, 2.0])))
 
 
-def test_the_correction_is_numpy_only_until_s4(jax_be):
-    corr = E.BandCorrection.load(C.config("manuscript_mid"))
-    with pytest.raises(NotImplementedError, match="S4"):
-        corr(jax_be.asarray(np.array(NU)), jax_be)
-
-
 def test_the_artifact_checks_port_wt_load():
     """WT ``BandCovariance._load``: identity, validated flag, solver tolerance, finite c_N,
     validation tolerance, coefficient shape, independent validation points, re-validation."""

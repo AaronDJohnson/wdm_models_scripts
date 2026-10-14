@@ -305,6 +305,11 @@ class ProjectedOperatorMarginal(Covariance):
     validated log-det correction of the discarded block (the model layer's bandcov
     ``Artifact`` interpolant; identity ``log|Q C Q^T| = log|C| + log|B C^-1 B^T|``).
     ``n_u = n_drop`` (the data are the ``N`` samples; ``n_eff = n_keep``).
+
+    A ``correction`` with ``host_constants()`` (S4) has its arrays carried in this
+    covariance's constants (``C["correction"]``) and passed back as
+    ``correction(nu, be, C=C["correction"])``: on JAX a jit argument, never a literal of
+    the compiled noise state (spec section 3.3).  A plain callable is called as before.
     """
 
     def __init__(self, op_cov: Any, nuisance: FourierBandNuisance,
@@ -319,7 +324,11 @@ class ProjectedOperatorMarginal(Covariance):
         self.jittable = op_cov.jittable
 
     def host_constants(self) -> dict[str, Any]:
-        return {"keep": self.nuisance.keep_rfft}
+        out: dict[str, Any] = {"keep": self.nuisance.keep_rfft}
+        tables = getattr(self.correction, "host_constants", None)
+        if tables is not None:
+            out["correction"] = tables()
+        return out
 
     def children(self) -> dict[str, Covariance]:
         return {"op": self.op}
@@ -332,6 +341,8 @@ class ProjectedOperatorMarginal(Covariance):
         op = self.op
         A = op.operator(C["op"], nu[0], nu[1], be)
         M = op.operator(C["op"], -nu[0], -nu[1], be, scale=4.0 * op.dt ** 2)
-        logdet = op.logdet_model(nu) + self.correction(nu, be)
+        corr = (self.correction(nu, be, C=C["correction"]) if "correction" in C
+                else self.correction(nu, be))
+        logdet = op.logdet_model(nu) + corr
         return ProjectedFactor(without_basis(A), without_basis(M), logdet, be.xp.isfinite(logdet), op.N,
                                op.tol, op.maxit, op.on_fail, self.nuisance.n_drop)
