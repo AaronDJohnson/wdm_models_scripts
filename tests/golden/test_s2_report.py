@@ -29,12 +29,11 @@ def test_inventory_lists_every_g6_item():
 
 def test_deferred_items_are_inventory_items_with_owners():
     later, items = R.deferred(), set(R.inventory())
-    assert len(later) == 34 and set(later) <= items
+    assert later == {} and set(later) <= items                             # F-C7: nothing is deferred
     assert "galactic_binary/gb_12mo/arrays/V_exact_rows" not in later      # asserted in S2 (empty)
     assert not any(i.startswith("sinusoid/") for i in later)              # S3 covers them (E-B8)
-    assert later["galactic_binary/gb_6mo/quad_logdet/tri_raw/composition"].startswith("S6")
+    assert "galactic_binary/gb_6mo/quad_logdet/tri_raw/composition" not in later   # S6 covers it (F-C7)
     assert not any(i.endswith("/arrays/store_template") for i in later)       # S5 covers them (F-A9)
-    assert set(later.values()) == {"S6: the full GB registry (spec section 7.6)"}
     assert "galactic_binary/gb_3mo/quad_logdet/exact/composition" not in later   # an S2 preview
 
 
@@ -60,7 +59,7 @@ def test_summary_marks_covered_deferred_uncovered_and_failures(tmp_path):
     assert not rep["ok"]
     assert "sinusoid/manuscript_mid/variances/band_raw" in rep["inventory"]["uncovered"]
     assert "sinusoid/manuscript_mid/parts/tri_cut/composition" in rep["inventory"]["uncovered"]
-    assert "galactic_binary/gb_6mo/quad_logdet/tri_raw/composition" in rep["inventory"]["deferred"]
+    assert "galactic_binary/gb_6mo/quad_logdet/tri_raw/composition" in rep["inventory"]["uncovered"]
 
 
 def test_asserted_items_need_their_passing_tests(tmp_path):
