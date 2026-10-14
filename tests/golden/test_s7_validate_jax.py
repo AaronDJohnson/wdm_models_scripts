@@ -9,13 +9,17 @@ run directory / stress file, ``ms_per_eval`` and ``repeat_max_abs`` from a warm 
 never gated).  Before JAX starts the CLI adds ``--xla_cpu_multi_thread_eigen=false`` to
 ``XLA_FLAGS`` unless the flag is already set (CPU determinism, spec section 3.4; a no-op on a
 GPU).  It fails closed: an exception or a gate violation fails the target (exit 1).  The 38-target
-JAX fast tier is ``slow``.
+JAX fast tier is ``slow``.  P4P (I-1): on JAX too, a NaN or +inf stress reference, a NaN or inf G4
+gate (with a reference shifted by 1.0) and a golden whose sha256 is not golden/MANIFEST.json's
+fail closed.
 """
 
 from __future__ import annotations
 
+import hashlib
 import json
 import math
+import shutil
 import os
 import subprocess
 import sys
@@ -43,6 +47,21 @@ def _cli(*args: str, xla_flags: str | None = None) -> subprocess.CompletedProces
     return subprocess.run([sys.executable, "-P", "-m", "scripts.galactic_binary.validate", "--backend", "jax",
                            "--tier", "fast", "--golden", "g3", "g4", *args], cwd=str(tmp_root()), env=env,
                           capture_output=True, text=True)
+
+
+def _golden_copy(root, edits=None, *, resign=True):
+    """golden/galactic_binary + golden/MANIFEST.json copied under ``root``; ``edits`` (relpath ->
+    in-place edit of the parsed JSON) re-signed in the copy's MANIFEST unless ``resign`` is False."""
+    shutil.copytree(GOLDEN / "galactic_binary", root / "galactic_binary")
+    man = json.loads((GOLDEN / "MANIFEST.json").read_text())
+    for rel, edit in (edits or {}).items():
+        rec = json.loads((root / rel).read_text())
+        edit(rec)
+        (root / rel).write_text(json.dumps(rec, indent=1))
+        if resign:
+            man["files"][rel] = hashlib.sha256((root / rel).read_bytes()).hexdigest()
+    (root / "MANIFEST.json").write_text(json.dumps(man, indent=1))
+    return root
 
 
 def _check_target(tag: str, t: dict) -> None:
@@ -108,6 +127,45 @@ def test_a_wrong_likelihood_fails_the_jax_gates():
     assert rep["ok"] is False and rep["failed"] == ["gb_3mo/tri_raw"]
     t = rep["targets"]["gb_3mo/tri_raw"]
     assert t["g3"]["ok"] is False and t["g4"]["ok"] is False
+
+
+def test_the_review_probes_fail_closed_on_jax(tmp_path):
+    """I-1 on JAX (each probe PASSed at v0.10.0): a NaN / +inf stress reference, a NaN / inf G4
+    gate with the anchor's reference shifted by 1.0, a tampered golden; the shift alone fails."""
+    stress, tol = "galactic_binary/stress/gb_3mo/band_raw.fast.json", "galactic_binary/tolerances_measured.json"
+
+    def ref(value):
+        def edit(rec):
+            next(p for p in rec["points"] if p["name"] == "anchor")["lnl_ref"] = value
+        return edit
+
+    def shift(rec):
+        p = next(p for p in rec["points"] if p["name"] == "anchor")
+        p["lnl_ref"] = float(p["lnl_ref"]) + 1.0
+
+    def gate(value):
+        return lambda t: t["approved"]["G4"].update(jax_well_conditioned=value)
+
+    def per_target(t):
+        t["approved"]["G4"]["jax_well_conditioned_per_target"]["gb_3mo/band_raw"] = math.inf
+
+    probes = {"nan_ref": ({stress: ref(math.nan)}, "NaN or"), "inf_ref": ({stress: ref(math.inf)}, "NaN or"),
+              "nan_gate": ({stress: shift, tol: gate(math.nan)}, "G4"),
+              "inf_gate": ({stress: shift, tol: gate(math.inf)}, "G4"),
+              "inf_per_target": ({stress: shift, tol: per_target}, "per-target")}
+    for name, (edits, match) in probes.items():
+        bad = _golden_copy(tmp_path / name, edits)
+        with pytest.raises(V.ValidationError, match=match):
+            V.run(backend="jax", cases=["gb_3mo"], models=["band_raw"], goldens=("g4",), golden=bad)
+    bad = _golden_copy(tmp_path / "tampered", {stress: shift}, resign=False)
+    with pytest.raises(V.ValidationError, match="sha256"):
+        V.run(backend="jax", cases=["gb_3mo"], models=["band_raw"], goldens=("g3", "g4"), golden=bad)
+    p = _cli("--case", "gb_3mo", "--model", "band_raw", "--golden-root", str(bad))
+    assert p.returncode == 1 and "sha256" in p.stderr and "PASS" not in p.stdout, p.stderr[-2000:]
+    rep = V.run(backend="jax", cases=["gb_3mo"], models=["band_raw"], goldens=("g4",),
+                golden=_golden_copy(tmp_path / "shifted", {stress: shift}))
+    g4 = rep["targets"]["gb_3mo/band_raw"]["g4"]
+    assert rep["ok"] is False and g4["reference"]["over"] == 1 and g4["ok"] is False
 
 
 @pytest.mark.slow

@@ -15,13 +15,15 @@ For each selected target ``(case, model)`` (``wdm_models.registry.TARGETS["galac
   ``index.json``; fast tier: rows 0, n/2, n-1 of each of the 58 run directories), against the
   chain's ``lnlike`` column at the approved uniform gate (``approved.G3.<backend>``, 1e-8);
   also against lineage C's NumPy value (``lnlike_numpy``): **exactly** with the gbonfly
-  adapter on the build that recorded the goldens, else reported;
+  adapter on the build that recorded the goldens, else at the same G3 gate;
 * **G4** -- the 11 stress points of ``stress/<case>/<model>.<tier>.json`` (3 and 6 months):
   identical ``-inf`` masks against lineage C's reference at every point (marginal included)
   and the worker's expected mask (``source_out or margin < 0``) at every non-marginal point;
   ``|delta| <= 1e-10 + 1e-12 |lnL|`` at well-conditioned points (PD margin >= 1e-6) on NumPy
-  (8.32e-8 on JAX); ill-conditioned points reported condition-scaled, marginal points only
-  finite-or-``-inf``; the counters of the bare evaluation (one state per row; failed states =
+  (8.32e-8 on JAX; a NaN delta or gate is over it); ill-conditioned points reported
+  condition-scaled, marginal points only finite-or-``-inf``; the golden ``lnl_ref`` and
+  ``lnl_cache`` must be finite or exactly ``-inf`` (``check_reference``), and each target needs a
+  gated well-conditioned point; the counters of the bare evaluation (one state per row; failed states =
   the non-``source_out`` ``-inf`` points); for the cached models also the cache evaluator
   (``ModelOptions(evaluator="cache")``, all points in one call): ``lnl_cache`` at the same
   rules and the counters equal to ``counters_cache``;
@@ -42,8 +44,14 @@ refused for the golden checks: the chains were evaluated with gbonfly = ``fourie
 gbonfly's, computed by lineage C (``scripts/golden/workers/gbw_templates.py``) and streamed in,
 so the comparison measures the likelihood numerics alone.
 
+Every golden file read is checked against its sha256 in ``golden/MANIFEST.json`` (of
+``--golden-root``) at every run, as the sinusoid CLI checks ``references/INDEX.json``: a missing
+manifest, a file it does not pin, or other bytes stop the run.
+
 Exit status 0: every check passed.  1: a check failed, or the validation could not be carried
-out (empty selection, a missing or altered golden, an unapproved gate, a build error, a NaN).
+out: an empty selection; a missing golden or one whose sha256 is not the manifest's; a golden
+reference that is NaN or ``+inf``; approved gates that are not APPROVED, not finite and positive,
+or (G4 JAX) a per-target gate other than the pooled one; a build error or a NaN likelihood value.
 2: usage.  The CLI runs XLA-CPU with single-threaded Eigen: :func:`main` appends
 ``--xla_cpu_multi_thread_eigen=false`` to ``XLA_FLAGS`` before JAX starts unless an
 ``--xla_cpu_multi_thread_eigen`` setting is already there (spec section 3.4, the user's
@@ -73,6 +81,7 @@ import argparse
 import dataclasses
 import gc
 import hashlib
+import io
 import json
 import math
 import os
@@ -97,8 +106,8 @@ from wdm_models.galactic_binary import models as gb_models  # noqa: E402  (after
 from wdm_models.options import GB_CACHED, ModelOptions  # noqa: E402
 from wdm_models.registry import MODELS, TARGETS, describe  # noqa: E402
 from wdm_models.sampling.device import run_meta  # noqa: E402
-from wdm_models.sampling.validate import (Gate, ValidationError, build_fingerprint, compare, evaluate,  # noqa: E402
-                                          write_report)
+from wdm_models.sampling.validate import (Gate, ValidationError, build_fingerprint, check_reference,  # noqa: E402
+                                          compare, evaluate, write_report)
 
 GOLDEN = REL / "golden"
 TOY = "galactic_binary"
@@ -113,6 +122,9 @@ TEMPLATES = ("bg", "gbonfly")
 #: (``gbw_common.build_info``; no BLAS key was recorded).
 GB_RECORDING_KEYS = ("python", "machine", "numpy", "scipy", "jax", "jaxlib")
 COUNTER_KEYS = ("evaluations", "noise_states", "pd_failed_rows", "pd_failed_states")
+#: The G4 rules of ``tolerances_measured.json`` ``approved.G4``, each finite and positive.
+G4_RULES = {"well": "well_conditioned_margin", "numpy_abs": "numpy_cache_abs", "numpy_rel": "numpy_cache_rel",
+            "jax_well": "jax_well_conditioned"}
 #: XLA-CPU determinism for every validation run (spec section 3.4, the user's rule): :func:`main`
 #: appends it to ``XLA_FLAGS`` before JAX starts (:func:`cpu_determinism`).
 CPU_DETERMINISM = "--xla_cpu_multi_thread_eigen=false"
@@ -148,29 +160,73 @@ def _sha256(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
+def _golden_bytes(path: Path, golden: Path) -> bytes:
+    """The bytes of the golden file ``path`` (under ``golden``), refused unless their sha256 is the
+    one ``golden/MANIFEST.json`` pins: read at every run, since the root lane's MANIFEST test does
+    not run where the CLI does (Colab)."""
+    if not path.is_file():
+        raise ValidationError(f"missing golden file {path}")
+    manifest = golden / "MANIFEST.json"
+    if not manifest.is_file():
+        raise ValidationError(f"missing {manifest}: the goldens cannot be checked against their sha256")
+    rel = path.relative_to(golden).as_posix()
+    want = json.loads(manifest.read_text()).get("files", {}).get(rel)
+    if not isinstance(want, str):
+        raise ValidationError(f"golden {rel} is not pinned in {manifest}")
+    body = path.read_bytes()
+    if hashlib.sha256(body).hexdigest() != want:
+        raise ValidationError(f"golden {rel}: sha256 differs from {manifest} (an altered golden)")
+    return body
+
+
+def _golden_json(path: Path, golden: Path) -> Any:
+    return json.loads(_golden_bytes(path, golden))
+
+
 def _f(v: Any) -> float:
     return {"inf": math.inf, "-inf": -math.inf, "nan": math.nan}[v] if isinstance(v, str) else float(v)
 
 
+def _positive(v: Any, what: str) -> float:
+    """A gate value: finite and > 0 (``_f`` spellings accepted), else :class:`ValidationError`."""
+    try:
+        x = _f(v)
+    except (KeyError, TypeError, ValueError) as err:
+        raise ValidationError(f"approved GB gate {what} = {v!r} is not a number") from err
+    if not (math.isfinite(x) and x > 0):
+        raise ValidationError(f"approved GB gate {what} = {v!r} is not finite and positive")
+    return x
+
+
 def approved(golden: Path = GOLDEN) -> dict:
-    """The approved GB gates (``tolerances_measured.json``): refuses a file that is not APPROVED,
-    a G3 table missing a target, or G4 rules other than the approved ones."""
-    tol = _read_json(golden / TOY / "tolerances_measured.json")
+    """The approved GB gates (``tolerances_measured.json``, sha256-checked): refuses a file that
+    is not APPROVED, a G3 table missing a target, a G3 gate or G4 rule (the well-conditioned PD
+    margin, the NumPy abs/rel gates, the pooled JAX gate) that is not finite and positive, a
+    per-target JAX G4 table that does not cover the 30 three- and six-month targets with the
+    pooled gate, and a -inf rule other than the approved one."""
+    tol = _golden_json(golden / TOY / "tolerances_measured.json", golden)
     if not str(tol.get("status", "")).startswith("APPROVED"):
         raise ValidationError(f"GB tolerances are not approved (status {tol.get('status')!r})")
     a = tol.get("approved", {})
     try:
-        g3 = {b: {k: float(v) for k, v in a["G3"][b].items()} for b in BACKENDS}
+        g3 = {b: {k: _positive(v, f"G3.{b}.{k}") for k, v in a["G3"][b].items()} for b in BACKENDS}
         g4 = a["G4"]
-        rules = {"well": float(g4["well_conditioned_margin"]), "numpy_abs": float(g4["numpy_cache_abs"]),
-                 "numpy_rel": float(g4["numpy_cache_rel"]), "jax_well": float(g4["jax_well_conditioned"])}
-    except (KeyError, TypeError, ValueError) as err:
-        raise ValidationError(f"malformed approved GB gates: {err!r}") from err
+        rules = {k: _positive(g4[name], f"G4.{name}") for k, name in G4_RULES.items()}
+        per_target = dict(g4["jax_well_conditioned_per_target"])
+    except (KeyError, TypeError, ValueError, AttributeError) as err:
+        raise ValidationError(f"malformed approved GB gates (G3 or G4): {err!r}") from err
     want = {f"{c}/{m}" for c in CASES for m in TARGETS[TOY][c]}
     for b in BACKENDS:
         if set(g3[b]) != want:
             raise ValidationError(f"approved G3 {b} gates cover {len(g3[b])} targets, expected the 38")
-    if not g4.get("inf_mask", "").startswith("identical"):
+    stress = {f"{c}/{m}" for c in STRESS_CASES for m in TARGETS[TOY][c]}
+    if set(per_target) != stress:
+        raise ValidationError(f"approved G4 per-target JAX gates cover {len(per_target)} targets, expected "
+                              f"the {len(stress)} of {STRESS_CASES}")
+    odd = sorted(k for k, v in per_target.items() if _positive(v, f"G4.jax per-target {k}") != rules["jax_well"])
+    if odd:
+        raise ValidationError(f"approved G4 per-target JAX gates differ from the pooled {rules['jax_well']:g} at {odd}")
+    if not str(g4.get("inf_mask", "")).startswith("identical"):
         raise ValidationError(f"unexpected G4 -inf rule {g4.get('inf_mask')!r}")
     return {"G3": g3, "G4": rules}
 
@@ -190,7 +246,7 @@ def select(cases: Sequence[str] | None, models: Sequence[str] | None) -> list[tu
 
 def recording_build(golden: Path = GOLDEN) -> bool:
     """True on the build that recorded the GB goldens (``products.json`` ``build``)."""
-    rec = _read_json(golden / TOY / "products.json")["build"]
+    rec = _golden_json(golden / TOY / "products.json", golden)["build"]
     now = build_fingerprint("numpy")                   # python, machine, numpy, scipy, jax, jaxlib
     return all(rec.get(k) is not None and rec.get(k) == now.get(k) for k in GB_RECORDING_KEYS)
 
@@ -200,7 +256,7 @@ def chain_runs(case: str, model: str, tier: str, golden: Path = GOLDEN) -> list[
     ``reference`` (the chain's ``lnlike``), ``lineage_c`` (lineage C NumPy), ``rows``,
     ``prepared_sha256``."""
     root = golden / TOY / "chain_rows" / case
-    runs = _read_json(root / "index.json")["targets"].get(model)
+    runs = _golden_json(root / "index.json", golden)["targets"].get(model)
     if not runs:
         raise ValidationError(f"chain_rows/{case}/index.json lists no run for {model}")
     out = []
@@ -210,7 +266,7 @@ def chain_runs(case: str, model: str, tier: str, golden: Path = GOLDEN) -> list[
             raise ValidationError(f"missing G3 golden {path.relative_to(golden)}" + (
                 " (the full tier's 32 rows per run are not captured: capture needs the user's approval)"
                 if tier == "full" else ""))
-        rec = json.loads(path.read_text())
+        rec = _golden_json(path, golden)
         if (rec.get("case"), rec.get("model"), rec.get("tier")) != (case, model, tier):
             raise ValidationError(f"{path.name} holds {rec.get('case')}/{rec.get('model')}/{rec.get('tier')}")
         rows = rec["rows"]
@@ -226,9 +282,11 @@ def chain_runs(case: str, model: str, tier: str, golden: Path = GOLDEN) -> list[
 
 
 def stress_points(case: str, model: str, tier: str, golden: Path = GOLDEN) -> dict:
-    """G4 points of one target (3 and 6 months) with their tags and the cache counters."""
+    """G4 points of one target (3 and 6 months) with their tags and the cache counters; refuses
+    an ``lnl_ref`` or ``lnl_cache`` that is NaN or ``+inf`` (``check_reference``: finite or
+    exactly ``-inf``, at least one finite).  ``lnl_jax`` feeds a reported value only."""
     path = golden / TOY / "stress" / case / f"{model}.{tier}.json"
-    rec = _read_json(path)
+    rec = _golden_json(path, golden)
     if (rec.get("case"), rec.get("model"), rec.get("tier")) != (case, model, tier):
         raise ValidationError(f"{path.name} holds {rec.get('case')}/{rec.get('model')}/{rec.get('tier')}")
     pts = rec["points"]
@@ -239,9 +297,14 @@ def stress_points(case: str, model: str, tier: str, golden: Path = GOLDEN) -> di
     if not np.all(np.isfinite(margin)):
         raise ValidationError(f"{path.name}: a non-finite PD margin")
     cache = [p.get("lnl_cache") for p in pts]
-    return {"theta": np.array([p["theta"] for p in pts], dtype=np.float64),
-            "names": [p["name"] for p in pts], "lnl_ref": np.array([_f(p["lnl_ref"]) for p in pts]),
-            "lnl_cache": None if any(v is None for v in cache) else np.array([_f(v) for v in cache]),
+    theta = np.array([p["theta"] for p in pts], dtype=np.float64)
+    lnl_ref = np.array([_f(p["lnl_ref"]) for p in pts])
+    lnl_cache = None if any(v is None for v in cache) else np.array([_f(v) for v in cache])
+    ndim = theta.shape[1] if theta.ndim == 2 else -1
+    for what, values in (("lnl_ref", lnl_ref), ("lnl_cache", lnl_cache)):
+        if values is not None:
+            check_reference(theta, values, np.ones(len(pts), bool), ndim, what=f"stress/{case}/{model} {what}")
+    return {"theta": theta, "names": [p["name"] for p in pts], "lnl_ref": lnl_ref, "lnl_cache": lnl_cache,
             "margin": margin, "marginal": np.array([bool(p["marginal"]) for p in pts]),
             "source_out": np.array([bool(p["source_out"]) for p in pts]),
             "expected_neg_inf": np.array([bool(p["expected_neg_inf"]) for p in pts]),
@@ -280,10 +343,12 @@ def stream_gbonfly(rows: list[tuple[str, np.ndarray]]) -> dict:
 def stress_compare(values: np.ndarray, pts: dict, reference: np.ndarray, *, abs_gate: float,
                    rel_gate: float, well: float) -> dict:
     """G4 rules for one evaluator (module docstring): masks, gated well-conditioned deltas,
-    condition-scaled ill-conditioned deltas, marginal points finite-or-``-inf``."""
+    condition-scaled ill-conditioned deltas, marginal points finite-or-``-inf``.  Fail closed: a
+    NaN or ``+inf`` value or reference is invalid, and a NaN delta or gate is over the gate."""
     values = np.asarray(values, dtype=float)
+    reference = np.asarray(reference, dtype=float)
     v_inf, r_inf = values == -np.inf, reference == -np.inf
-    invalid = ~(np.isfinite(values) | v_inf)
+    invalid = ~(np.isfinite(values) | v_inf) | ~(np.isfinite(reference) | r_inf)
     mismatch = (v_inf != r_inf) & ~invalid
     expected = (v_inf != pts["expected_neg_inf"]) & ~pts["marginal"] & ~invalid
     both = ~v_inf & ~r_inf & ~invalid
@@ -296,7 +361,7 @@ def stress_compare(values: np.ndarray, pts: dict, reference: np.ndarray, *, abs_
     allowed[well_pts] = abs_gate + rel_gate * np.abs(reference[well_pts])
     scaled = np.zeros(values.size)
     scaled[ill_pts] = delta[ill_pts] / (EPS * np.abs(reference[ill_pts]) / pts["margin"][ill_pts])
-    over = well_pts & (delta > allowed)
+    over = well_pts & ~(delta <= allowed)
     return {"abs_delta": delta, "allowed": allowed, "well": well_pts, "ill": ill_pts,
             "mask_bad": mismatch | expected | invalid,
             "condition_scaled": scaled, "inf_mismatch": int(mismatch.sum()), "expected_mismatch": int(expected.sum()),
@@ -442,6 +507,8 @@ def validate_g4(case: str, model: str, tier: str, *, builder: Builder, backend: 
     if not cmp["ok"]:
         probs.append(f"reference: {cmp['inf_mismatch']} mask / {cmp['expected_mismatch']} expected-mask / "
                      f"{cmp['invalid']} NaN / {cmp['over']} over the gate")
+    if not cmp["well"].any():
+        probs.append(f"reference: no well-conditioned point (PD margin >= {rules['well']:g}) was gated")
     out["problems"] = probs
     out["gate"] = {"abs": abs_gate, "rel": rel_gate, "well_conditioned_margin": rules["well"]}
     out["prepared_sha256"] = pts["prepared_sha256"]
@@ -453,8 +520,9 @@ def validate_g6(case: str, model: str, gate: float, *, golden: Path, data_root: 
     """The anchor composition with the golden gbonfly store template (G6 ``quad_logdet``, lnL)."""
     from wdm_models.galactic_binary.prepared import PreparedCase
 
-    g = _read_json(golden / TOY / f"intermediates_{case}.json")
-    with np.load(golden / TOY / f"intermediates_{case}.npz", allow_pickle=False) as z:
+    g = _golden_json(golden / TOY / f"intermediates_{case}.json", golden)
+    with np.load(io.BytesIO(_golden_bytes(golden / TOY / f"intermediates_{case}.npz", golden)),
+                 allow_pickle=False) as z:
         h, qls = np.array(z["store_template"]), np.array(z["quad_logdet"])
     a = PreparedCase.load(case, data_root=data_root).arrays
     p8 = np.asarray(a["inject_glass"], dtype=np.float64)
@@ -486,7 +554,7 @@ def golden_prepared_sha256(case: str, golden: Path = GOLDEN) -> set[str]:
     files = sorted((root / "chain_rows" / case).glob("*.fast.json")) + sorted((root / "stress" / case).glob("*.json"))
     if not files:
         raise ValidationError(f"no G3/G4 golden of {case} records a prepared sha256")
-    return {json.loads(f.read_text())["prepared_sha256"] for f in files}
+    return {_golden_json(f, golden)["prepared_sha256"] for f in files}
 
 
 def validate_g5(case: str, models: Sequence[str], *, golden: Path, data_root: Path | None,
@@ -495,7 +563,7 @@ def validate_g5(case: str, models: Sequence[str], *, golden: Path, data_root: Pa
     from wdm_models.galactic_binary.prepared import PreparedCase
     from wdm_models.galactic_binary.waveform import GBTemplate
 
-    prod = _read_json(golden / TOY / "products.json")["cases"][case]
+    prod = _golden_json(golden / TOY / "products.json", golden)["cases"][case]
     prep = PreparedCase.load(case, data_root=data_root)
     a = prep.arrays
     manifest = _read_json((data_root or REL / "data") / "MANIFEST.json")["files"][f"galactic_binary/prepared/{case}.npz"]
