@@ -29,11 +29,12 @@ def test_inventory_lists_every_g6_item():
 
 def test_deferred_items_are_inventory_items_with_owners():
     later, items = R.deferred(), set(R.inventory())
-    assert len(later) == 37 and set(later) <= items
+    assert len(later) == 34 and set(later) <= items
     assert "galactic_binary/gb_12mo/arrays/V_exact_rows" not in later      # asserted in S2 (empty)
     assert not any(i.startswith("sinusoid/") for i in later)              # S3 covers them (E-B8)
     assert later["galactic_binary/gb_6mo/quad_logdet/tri_raw/composition"].startswith("S6")
-    assert later["galactic_binary/gb_3mo/arrays/store_template"].startswith("S5")
+    assert not any(i.endswith("/arrays/store_template") for i in later)       # S5 covers them (F-A9)
+    assert set(later.values()) == {"S6: the full GB registry (spec section 7.6)"}
     assert "galactic_binary/gb_3mo/quad_logdet/exact/composition" not in later   # an S2 preview
 
 

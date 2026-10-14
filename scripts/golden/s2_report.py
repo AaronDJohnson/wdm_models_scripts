@@ -122,11 +122,10 @@ def deferred() -> dict[str, str]:
         parts = item.split("/")
         # S3 (E-B8, tests/golden/test_s2_g6_sinusoid_registry.py) covers the sinusoid
         # compositions outside the S2 preview (s2_cases.SIN_DEFAULT + SIN_SLOW): none is deferred.
+        # S5 (F-A9, tests/golden/test_s2_g6_gb_waveform.py) covers the three store templates.
         if item.endswith("/composition") and item.startswith("galactic_binary/") \
                 and parts[3] not in GB_PREVIEW.get(parts[1], ()):
             out[item] = "S6: the full GB registry (spec section 7.6)"
-        elif item.endswith("/arrays/store_template"):
-            out[item] = "S5: the waveform (binary_galactica) and its template goldens (G5)"
     return out
 
 
