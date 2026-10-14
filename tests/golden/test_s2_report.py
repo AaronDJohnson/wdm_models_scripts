@@ -197,6 +197,6 @@ def test_the_report_runs_the_s2_gate_tests(tmp_path):
     assert proc.returncode == 0, proc.stderr[-2000:]
     rep = json.loads(out.read_text())
     assert rep["ok"] and rep["tests"]["failures"] == 0
-    assert len(rep["records"]) >= 132 and rep["inventory"]["covered"] == 86   # + E-B8's 8 x 3
+    assert len(rep["records"]) >= 305 and rep["inventory"]["covered"] == 123   # + F-A9's 3 + F-C7's 34
     # only the gate tests ran: the one ASSERTED node among them is D-D6's band_pad map check
     assert set(rep["inventory"]["asserted"]) == {f"sinusoid/manuscript_mid/maps/{b}_pad/y_data" for b in ("mid", "tri")}
