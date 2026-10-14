@@ -2,11 +2,14 @@
 sinusoid chain evaluated (spec §7.1; Task A7).
 
     $PY -P sinusoid_wg.py <out_dir> evaluate --jobs <jobs.json> --data-root <dir> --cache-src <dir>
+    $PY -P sinusoid_wg.py <out_dir> counters --case C --model M --batches <b.npz> --data-root <dir> --cache-src <dir>
 
 Construction is toy_models/sinusoid/gpu/run.py::build_backend for the matrix models:
 ``import wdmtoysgpu`` (enables x64) then build_matrix(model, cfg, d, analysis_fmin=4.0,
-**({P: 24, tol: 1e-7, cache_dir} if exact)). Each point is one batch of one row;
-``last_failed`` is recorded per row. PYTHONPATH = lineage B only.
+**({P: 24, tol: 1e-7, cache_dir} if exact)). ``evaluate``: each point is one batch of one
+row; ``last_failed`` is recorded per row. ``counters`` (E-D6): the batches ``b0, b1, ...``
+of an .npz go through ONE likelihood object in order (its LRU carries over); the counters,
+the values and ``last_failed`` are recorded after every call. PYTHONPATH = lineage B only.
 """
 from __future__ import annotations
 
