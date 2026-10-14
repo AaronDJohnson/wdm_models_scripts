@@ -9,7 +9,7 @@ The release has four parts:
 | `wdm_models` | the sinusoid and galactic-binary toy models, model registry, sampling glue | `packages/wdm_models` |
 | `wdm_models_scripts` | this repository: runners, golden harness, shipped data, goldens, tests | `scripts/`, `data/`, `golden/`, `tests/` |
 
-Status (v0.10.0): `wdm`, `domainia`, the golden harness and both toy models are complete. The sinusoid
+Status (v0.10.1): `wdm`, `domainia`, the golden harness and both toy models are complete. The sinusoid
 (15 models x 3 injections) and the galactic binary (15 models at 3/6/12 months, binary-galactica 0.5.0)
 reproduce the papers' stored likelihood values on NumPy (bitwise where the frozen code is bitwise) and on
 CPU-JAX at the approved gates. GPU sampling runners, the statistical comparison with the papers' chains,
