@@ -1,0 +1,7 @@
+# binary_galactica for the release (spec section 1; section 5.2 waveform): the user's PyPI release
+# binary-galactica 0.5.0 (restores the physical amplitude; controller override of 2026-10-13).
+# JAX-only; install it on top of the pinned env without touching its numerical wheels
+# (--force-reinstall replaces a local or git build that also calls itself 0.5.0):
+#     $PY -m pip install --no-deps --force-reinstall -r env/requirements-bg.txt
+# tests/identity/test_imports.py checks the installed version and that pip installed it from the index.
+binary-galactica==0.5.0

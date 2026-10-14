@@ -16,7 +16,9 @@ galactic-binary model layer, sampling runners and documentation follow in v1.0.0
 License: MIT (see `LICENSE`). Citation: see `CITATION.cff`.
 
 Environment: `conda env create -f env/environment-cpu.yml -n wdmrel`, then `source env/activate.sh`
-from this directory. Tests: `$PY -m pytest` (fast tier; `-m golden_full` / `-m slow` are opt-in).
+from this directory; the galactic binary's waveform package, binary-galactica (JAX-only, PyPI release 0.5.0),
+goes on top at its pinned release: `$PY -m pip install --no-deps --force-reinstall -r env/requirements-bg.txt`.
+Tests: `$PY -m pytest` (fast tier; `-m golden_full` / `-m slow` are opt-in).
 
 ## GPU validation of the sinusoid (user-run; sub-project S4)
 

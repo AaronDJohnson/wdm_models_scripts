@@ -11,6 +11,7 @@ from __future__ import annotations
 import configparser
 import json
 import os
+import re
 import subprocess
 import sys
 import tomllib
@@ -213,3 +214,40 @@ def test_binary_galactica_normalisation_probe(record_property):
                                           "observed": max(abs(s2 / r2 - 1.0), abs(zh / rz - 1.0))}))
         assert not 0.2 < s2 / r2 < 0.3, f"{backend}: binary_galactica < 0.5.0 (half amplitude)"
         assert abs(s2 / r2 - 1.0) <= rtol and abs(zh / rz - 1.0) <= rtol, (backend, s2, zh)
+
+
+# --- binary_galactica release pin (S5, task F-A11) ------------------------------------------------
+# Controller override of 2026-10-13: the user's PyPI release binary-galactica 0.5.0 replaces the
+# plan's git-commit pin, so the check is the version plus pip's provenance (an index install
+# writes no direct_url.json; a git or local-directory build does).
+BG_PIN = REL / "env" / "requirements-bg.txt"
+BG_RELEASE = "0.5.0"
+_BG_PIN = re.compile(r"binary-galactica==(\d+(?:\.\d+)*)")
+
+
+def _bg_pin() -> str:
+    lines = [ln.strip() for ln in BG_PIN.read_text().splitlines()
+             if ln.strip() and not ln.lstrip().startswith("#")]
+    assert len(lines) == 1 and _BG_PIN.fullmatch(lines[0]), lines
+    return _BG_PIN.fullmatch(lines[0]).group(1)
+
+
+def test_binary_galactica_is_installed_from_the_pinned_pypi_release():
+    """The env's binary_galactica is the pinned PyPI release: env/requirements-bg.txt and
+    env/constraints.txt pin the same version, the installed distribution is that version, and
+    pip recorded no VCS or local-file origin (``direct_url.json``)."""
+    import importlib.metadata as md
+
+    pytest.importorskip("binary_galactica", reason="binary_galactica not installed (spec: wdm_models[gb])")
+    version = _bg_pin()
+    assert version == BG_RELEASE, version
+    constraints = [ln.strip() for ln in CONSTRAINTS.read_text().splitlines()
+                   if ln.strip() and not ln.lstrip().startswith("#")]
+    assert f"binary-galactica=={version}" in constraints, constraints
+    fix = "$PY -m pip install --no-deps --force-reinstall -r env/requirements-bg.txt"
+    assert md.version("binary-galactica") == version, (md.version("binary-galactica"), fix)
+    raw = md.distribution("binary-galactica").read_text("direct_url.json")
+    direct = {} if raw is None else json.loads(raw)
+    assert "vcs_info" not in direct and not str(direct.get("url", "")).startswith("file://"), (
+        f"binary_galactica in this env comes from {direct.get('url')} ({direct}), "
+        f"not the PyPI release {version}: {fix}")

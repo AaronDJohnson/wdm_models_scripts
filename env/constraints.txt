@@ -3,3 +3,4 @@
 # vector is gbonfly's (0.4.0 templates were exactly half).  wdm_models refuses anything older than
 # 0.5.0 at import of its waveform (wdm_models.galactic_binary.waveform.check_binary_galactica).
 binary-galactica==0.5.0
+# env/requirements-bg.txt installs this PyPI release on top of the env (pip --no-deps --force-reinstall).
