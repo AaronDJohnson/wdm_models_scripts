@@ -6,7 +6,7 @@ module only decides the host-side evaluator, from the same :class:`~wdm_models.o
 
 * NumPy (WT, the golden references): the bare likelihood -- every row factorises its own
   noise state, as ``wdm_toys`` did (and as ``scripts/sinusoid/validate.py`` counts it);
-* JAX (WG ``MatrixGPU``, ``gpu_sinusoid/wdmtoysgpu/matrix.py:269-279, 726-789``): an LRU of
+* JAX (WG ``MatrixGPU``, ``gpu_sinusoid/wdmtoysgpu/matrix.py:268-279, 726-789``): an LRU of
   noise states (``domainia.sampling.NoiseStateCache``, ``Resolved.cache_size`` = 16 GPU /
   32 CPU, the rows of one call batched when ``Resolved.batch_rows``: on a GPU, never for
   edge-exact) for the eight models WG cached; one batched call
@@ -26,7 +26,7 @@ from ..options import Resolved
 
 __all__ = ["CACHED", "EDGE_EXACT_MODELS", "UNCACHED_DIAGONAL", "Wrapper", "wrap", "wrapper_for"]
 
-#: Models whose noise state WG cached per noise value (``matrix.py:269``: tri, pad, exact edges).
+#: Models whose noise state WG cached per noise value (``matrix.py:268``: tri, pad, exact edges).
 CACHED = ("tri_raw", "tri_cut", "band_pad", "mid_pad", "tri_pad", "band_exact", "mid_exact", "tri_exact")
 EDGE_EXACT_MODELS = ("band_exact", "mid_exact", "tri_exact")
 #: Diagonal models WG evaluated without a cache: no noise state is counted (``matrix.py:780``).
