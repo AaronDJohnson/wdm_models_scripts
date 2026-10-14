@@ -633,7 +633,9 @@ class FourierWhittle(_CountersMixin):
                     or crop is not None:
                 raise ValueError("form='complex' takes map, sI and sG, not psd/fmin/crop")
             _check_composition(data, map, user="FourierWhittle")
-            d = np.asarray(map.apply(values, be=NUMPY))
+            # the oracle's data call site where the map has one (FourierCrop.apply_data,
+            # GB matrix.py:892): bitwise with lineage C (apply differs by <= 2e-15)
+            d = np.asarray(getattr(map, "apply_data", map.apply)(values, be=NUMPY))
             sI, sG = np.asarray(sI, dtype=np.float64), np.asarray(sG, dtype=np.float64)
             if d.ndim != 2 or sI.shape != d.shape or sG.shape != d.shape:
                 raise ValueError(f"data bins {d.shape}, sI {sI.shape} and sG {sG.shape} must agree "
