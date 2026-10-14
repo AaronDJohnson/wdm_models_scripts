@@ -36,7 +36,7 @@ def _small_resolve(syn, F):
     return run
 
 
-def test_the_pipeline_clis_refuse_bad_arguments(tmp_path, monkeypatch):
+def test_the_pipeline_clis_refuse_bad_arguments(tmp_path, monkeypatch, capsys):
     for main, extra in ((BS.main, []), (FF.main, [])):
         with pytest.raises(SystemExit) as e:
             main(["--out", str(tmp_path)] + extra)          # --sangria-h5 is required
@@ -47,6 +47,21 @@ def test_the_pipeline_clis_refuse_bad_arguments(tmp_path, monkeypatch):
         with pytest.raises(SystemExit) as e:
             main(["--sangria-h5", __file__, "--out", str(REL / "tmp_out")])
         assert e.value.code == 2
+    # a store around the shipped (gbonfly = fourier) segments needs --backend fourier: refused
+    # before the HDF5 is read (here __file__, which no build could open), default backend included
+    for backend in ([], ["--backend", "onfly"]):
+        with pytest.raises(SystemExit) as e:
+            BS.main(["--sangria-h5", __file__, "--out", str(tmp_path), "--store"] + backend)
+        assert e.value.code == 2
+    # ... and with --backend fourier all three shipped tags pass, so the build reaches the read
+    def reached(*a, **k):
+        raise RuntimeError("reached the Sangria read")
+    with monkeypatch.context() as m:
+        m.setattr(BS.S, "read_gb_ae", reached)
+        assert BS.main(["--sangria-h5", __file__, "--out", str(tmp_path / "s"), "--store",
+                        "--backend", "fourier"]) == 1
+    err = capsys.readouterr().err
+    assert "reached the Sangria read" in err and "built with" not in err
     monkeypatch.setattr(FF, "_impulse_available", lambda: False)
     with pytest.raises(SystemExit) as e:
         FF.main(["--sangria-h5", __file__, "--out", str(tmp_path)])
@@ -86,7 +101,14 @@ def test_build_segments_cli_on_the_synthetic_record(synthetic, tmp_path, monkeyp
     assert (out / "store_snr7_3mo_3bands_pm3.npz").is_file()
     assert BS.main(common + ["--out", str(out)]) == 1                     # refuses to overwrite
     assert "FileExistsError" in capsys.readouterr().err
+    # a store needs its segments' backend: these were built with fourier, so onfly fails closed
+    # on the segment's waveform tag, before the Sangria read
+    onfly = ["--sangria-h5", str(h5), "--months", "3", "--backend", "onfly", "--foreground-dir", str(fg)]
+    with monkeypatch.context() as m:
+        m.setattr(BS.S, "read_gb_ae", lambda *a, **k: pytest.fail("read the Sangria record"))
+        assert BS.main(onfly + ["--out", str(tmp_path / "o4"), "--store", "--segments-dir", str(out)]) == 1
+    assert "built with binary_galactica:fourier" in capsys.readouterr().err
+    assert not (tmp_path / "o4").exists()
     # against the shipped (real) segment: gated (and failing) with fourier, an audit with onfly
     assert BS.main(common + ["--out", str(tmp_path / "o2"), "--compare-shipped"]) == 1
-    onfly = ["--sangria-h5", str(h5), "--months", "3", "--backend", "onfly", "--foreground-dir", str(fg)]
     assert BS.main(onfly + ["--out", str(tmp_path / "o3"), "--compare-shipped"]) == 0

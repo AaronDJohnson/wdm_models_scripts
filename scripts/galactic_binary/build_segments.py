@@ -14,7 +14,12 @@ every resolved binary that reaches the window twice (``BW`` and ``2 BW``: 32768 
 Each duration's resolved binaries and foreground come from
 ``<foreground-dir>/foreground_<m>mo_snr7.npz`` (default: the shipped fits, sha256-checked).
 ``--store`` builds the stores around the segments in ``--segments-dir`` (default: the shipped
-segments).  ``--catalog-npz`` (``sangria_minimal.npz``) adds the legacy raw-convention check.
+segments).  A store recomputes its segment's inner bins (to 1e-12) before splicing them in, so
+it must use the backend the segment was built with (its ``waveform`` tag: ``gbonfly`` is
+``fourier``): ``--store`` without ``--segments-dir`` requires ``--backend fourier`` (exit 2
+otherwise), a ``--segments-dir`` segment of another backend fails (exit 1) before the HDF5 is
+read, and an ``onfly`` store is built around ``onfly`` segments.  ``--catalog-npz``
+(``sangria_minimal.npz``) adds the legacy raw-convention check.
 
 The release default waveform backend is ``onfly``; ``--backend fourier`` (gbonfly's algorithm)
 reproduces the shipped files, and ``--compare-shipped`` then gates each rebuilt file against
@@ -69,6 +74,17 @@ def _input(directory: Path | None, data_root: Path, sub: str, name: str) -> Path
     return _checked(data_root, f"galactic_binary/{sub}/{name}")
 
 
+def _require_backend(segment: Path, backend: str) -> None:
+    """Raise unless ``segment``'s ``waveform`` tag names ``backend`` (``gbonfly`` = fourier)."""
+    with np.load(segment, allow_pickle=False) as s:
+        tag = str(s["waveform"]) if "waveform" in s.files else "no waveform tag"
+    made = {"gbonfly": SHIPPED_BACKEND}.get(tag, tag.removeprefix("binary_galactica:"))
+    if made != backend:
+        need = f"--backend {made}" if made in ("onfly", "fourier") else "a known backend"
+        raise ValueError(f"{segment} was built with {tag}; its store needs {need}, not {backend} "
+                         f"(the inner bins must reproduce the segment to 1e-12)")
+
+
 def main(argv: list[str] | None = None) -> int:
     if not sys.flags.safe_path:                      # spec section 1, guard 5
         raise SystemExit("run with python -P or PYTHONSAFEPATH=1 (source env/activate.sh)")
@@ -78,7 +94,8 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--out", type=Path, required=True, help="output directory (outside the release tree)")
     ap.add_argument("--months", nargs="+", type=int, choices=[3, 6, 12], default=[3, 6, 12])
     ap.add_argument("--backend", choices=["onfly", "fourier"], default="onfly")
-    ap.add_argument("--store", action="store_true", help="build the stores around --segments-dir")
+    ap.add_argument("--store", action="store_true",
+                    help="build the stores around --segments-dir (with the backend that built them)")
     ap.add_argument("--segments-dir", type=Path, default=None)
     ap.add_argument("--foreground-dir", type=Path, default=None)
     ap.add_argument("--catalog-npz", type=Path, default=None)
@@ -92,12 +109,20 @@ def main(argv: list[str] | None = None) -> int:
             ap.error(f"--{name} must lie outside the release tree")
     if not a.sangria_h5.is_file():
         ap.error(f"--sangria-h5 {a.sangria_h5} is not a file")
+    if a.store and a.segments_dir is None and a.backend != SHIPPED_BACKEND:
+        ap.error(f"--store around the shipped segments (gbonfly = {SHIPPED_BACKEND}) needs --backend "
+                 f"{SHIPPED_BACKEND}, not {a.backend}: the inner bins must reproduce the segment to "
+                 f"1e-12; for an {a.backend} store pass --segments-dir with {a.backend} segments")
     from wdm.backend import enable_x64
 
     enable_x64()                                     # before the first binary_galactica call
     data_root = resolve_data_root(a.data_root).resolve()
     rep: dict = {"backend": a.backend, "store": a.store, "files": {}, "problems": []}
     try:
+        if a.store:                                  # every segment's backend, before the HDF5 read
+            for months in a.months:
+                _require_backend(_input(a.segments_dir, data_root, "segments",
+                                        f"segment_snr7_{months}mo_3bands.npz"), a.backend)
         verification = (None if a.catalog_npz is None
                         else S.verify_raw_convention(a.sangria_h5, a.catalog_npz))
         for months in a.months:
