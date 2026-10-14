@@ -4,7 +4,9 @@ r"""The model registry (spec §5.3): the 15 paper models, the targets, ``build``
 (3 cases x 15 models = 45); the galactic binary's 38 targets are added with S5.
 
 ``build(toy, case, model, *, backend, options, data_root)`` loads the shipped, sha256-checked
-inputs and returns the ``domainia`` likelihood (rows in ``priors.names(model)`` order);
+inputs and returns the ``domainia`` likelihood (rows in ``priors.names(model)`` order): bare on
+NumPy (WT), inside WG's evaluator on JAX (``sinusoid.evaluation``: a ``NoiseStateCache`` for the
+eight cached models, a ``BatchedLikelihood`` otherwise; the domainia likelihood is ``.lik``);
 ``describe(toy, case, model)`` reports what a run analyses (cells or Fourier coordinates, grids,
 exact rows, padded cells) without building anything heavy.
 """
@@ -26,6 +28,7 @@ from .sinusoid import config as sin_config
 from .sinusoid import data as sin_data
 from .sinusoid import models as sin_models
 from .sinusoid import priors as sin_priors
+from .sinusoid.evaluation import wrap
 from .sinusoid.exact import ProjectedExact
 
 __all__ = ["MODELS", "TARGETS", "TOYS", "build", "describe", "targets"]
@@ -63,12 +66,11 @@ def build(toy: str, case: str, model: str, *, backend: str = "numpy",
     _check(toy, case, model)
     if backend not in ("numpy", "jax"):
         raise ValueError(f"backend must be 'numpy' or 'jax'; got {backend!r}")
-    if backend != "numpy":
-        raise NotImplementedError("S3 builds the sinusoid on NumPy; backend='jax' is sub-project S4's")
     resolved = resolve(toy, model, backend, options)
     s = sin_data.load(case, data_root=data_root)
-    exact = ProjectedExact.load(s.cfg, data_root=data_root) if model == "exact" else None
-    return sin_models.likelihood(model, s.cfg, s.d, resolved=resolved, exact=exact)
+    exact = (ProjectedExact.load(s.cfg, data_root=data_root, algorithm=resolved.correction)
+             if model == "exact" else None)
+    return wrap(sin_models.likelihood(model, s.cfg, s.d, resolved=resolved, exact=exact), model, resolved)
 
 
 def describe(toy: str, case: str, model: str) -> dict[str, Any]:

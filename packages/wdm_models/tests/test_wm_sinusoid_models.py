@@ -174,10 +174,7 @@ def test_the_options_reach_the_domainia_pieces():
     assert M.likelihood("tri_raw", CFG, DATA, geometry=geo).covs[0].form == "solve"
 
 
-def test_the_builder_refuses_what_s3_does_not_build():
-    with pytest.raises(NotImplementedError, match="S4"):
-        M.likelihood("band_raw", CFG, DATA, geometry=geometry(CUT),
-                     resolved=resolve("sinusoid", "band_raw", "jax", device="cpu"))
+def test_the_builder_refuses_bad_input():
     with pytest.raises(ValueError, match="unknown model"):
         M.likelihood("band_win", CFG, DATA, geometry=geometry(CUT))
     with pytest.raises(ValueError, match="exact"):

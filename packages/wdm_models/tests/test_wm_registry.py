@@ -74,9 +74,7 @@ def test_build_returns_the_models_on_the_shipped_data():
     assert np.isfinite(lik(truth[None, :])[0])
 
 
-def test_what_s3_does_not_build_is_refused():
-    with pytest.raises(NotImplementedError, match="S4"):
-        R.build("sinusoid", "manuscript_mid", "band_raw", backend="jax")
+def test_what_the_registry_does_not_build_is_refused():
     with pytest.raises(ValueError, match="backend"):
         R.build("sinusoid", "manuscript_mid", "band_raw", backend="torch")
     with pytest.raises(KeyError, match="S5"):
