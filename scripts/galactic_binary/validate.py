@@ -416,13 +416,13 @@ def validate_g6(case: str, model: str, gate: float, *, golden: Path, data_root: 
 # --- G5 and the onfly audit (per case) --------------------------------------------------------
 
 def golden_prepared_sha256(case: str, golden: Path = GOLDEN) -> set[str]:
-    """The prepared file's sha256 as every G3/G4/G6 golden of ``case`` recorded it."""
+    """The prepared file's sha256 as every G3/G4 golden of ``case`` recorded it (the G6
+    intermediates record none)."""
     root = golden / TOY
     files = sorted((root / "chain_rows" / case).glob("*.fast.json")) + sorted((root / "stress" / case).glob("*.json"))
-    shas = {json.loads(f.read_text())["prepared_sha256"] for f in files}
     if not files:
         raise ValidationError(f"no G3/G4 golden of {case} records a prepared sha256")
-    return shas
+    return {json.loads(f.read_text())["prepared_sha256"] for f in files}
 
 
 def validate_g5(case: str, models: Sequence[str], *, golden: Path, data_root: Path | None,
