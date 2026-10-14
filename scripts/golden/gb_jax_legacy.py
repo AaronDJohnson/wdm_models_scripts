@@ -8,6 +8,9 @@ against this table; ``legacy_states(case)`` re-measures it (a ``legacy`` test pi
 
     from scripts.golden.gb_jax_legacy import LEGACY_JAX, legacy_states
     legacy_states("gb_3mo")          # one lineage-C subprocess, ~7 s
+
+``scripted_batches`` / ``legacy_counters`` (F-D6) run a fixed call sequence through lineage C's
+cache class (``workers/gbw_counters.py``) so the release's counters can be compared call by call.
 """
 
 from __future__ import annotations
@@ -16,7 +19,7 @@ from scripts.golden.goldens_io import read_json
 from scripts.golden.lineage import run_worker
 from scripts.golden.paths import DATA, ROOT
 
-__all__ = ["CACHE_CLASSES", "LEGACY_JAX", "legacy_states"]
+__all__ = ["CACHE_CLASSES", "COUNTER_KEYS", "LEGACY_JAX", "legacy_counters", "legacy_states", "scripted_batches"]
 
 #: The legacy cache classes (``matrix.MatrixCache``, ``matrix.EdgeSchurCache``, ``fullcache.FullCache``).
 CACHE_CLASSES = ("MatrixCache", "EdgeSchurCache", "FullCache")
@@ -56,3 +59,74 @@ def legacy_states(case: str, models: tuple[str, ...] = ()) -> dict[str, dict]:
         args += ["--models", ",".join(models)]
     out = run_worker("C", "gb_legacy", "states", *args, timeout=1800.0)
     return read_json(out / "states.json")["models"]
+
+
+# --- a scripted call sequence (F-D6) --------------------------------------------------------------
+
+#: Counters both the legacy caches and the release keep (``fullcache.COUNTERS``).
+COUNTER_KEYS = ("noise_states", "pd_failed_states", "pd_failed_rows", "evaluations")
+
+
+def scripted_batches(case: str, model: str) -> dict[str, "np.ndarray"]:
+    """Three batches exercising every counter path of the legacy LRU (``fullcache.NoiseStateCache``):
+
+    * ``b0`` (8 rows): the anchor, a source move (same noise state: a hit), a new noise state, the
+      anchor again, the first stress point whose covariance failed in lineage C (``lnl_ref = -inf``
+      with the source inside the box; when the target has none at this case -- ``exact`` at 3
+      months -- another new state) and its repeat (a cached failure), the anchor's
+      noise with ``lnA`` above the box (``source_ok``: -inf, no PD failure), a second source move;
+    * ``b1`` (26 rows): 26 fresh noise states -- past the capacity of 24, so the first states are
+      evicted;
+    * ``b2`` (6 rows): the anchor and the failing point again (evicted: factorised and counted
+      again), the newest fresh state (a hit), the oldest fresh state (evicted), the anchor.
+
+    Built from the anchor (``inject_glass`` + ``mu_fit``) and ``golden/galactic_binary/stress``."""
+    import numpy as np
+
+    from scripts.golden.paths import GOLDEN
+
+    stress = read_json(GOLDEN / "galactic_binary" / "stress" / case / f"{model}.fast.json")
+    pts = {p["name"]: p for p in stress["points"]}
+    x = np.asarray(pts["anchor"]["theta"], dtype=float)
+    src1, src2 = x.copy(), x.copy()
+    src1[0] += 0.05
+    src2[3] += 0.01
+    new = x.copy()
+    new[8] += 0.01
+    fails = [p for p in stress["points"] if p["lnl_ref"] == -np.inf and not p["source_out"]]   # PD failures
+    if fails:
+        bad = np.asarray(fails[0]["theta"], dtype=float)
+    else:
+        bad = x.copy()
+        bad[13] -= 0.02
+    out_lnA = np.asarray(pts["source_out_lnA"]["theta"], dtype=float)
+    fresh = []
+    for k in range(26):
+        f = x.copy()
+        f[9] += 0.002 * (k + 1)
+        fresh.append(f)
+    return {"b0": np.stack([x, src1, new, x, bad, bad, out_lnA, src2]),
+            "b1": np.stack(fresh),
+            "b2": np.stack([x, bad, fresh[25], fresh[0], src1, x])}
+
+
+def legacy_counters(case: str, model: str, batches: dict) -> dict:
+    """Lineage C's cache class on ``batches`` (in name order, one object): ``{"class", "capacity",
+    "calls": [{"name", "values", "counters"}]}`` with the values as floats (one subprocess)."""
+    import uuid
+
+    import numpy as np
+
+    from scripts.golden.goldens_io import to_float
+    from scripts.golden.paths import tmp_root
+
+    stage = tmp_root() / "jobs" / uuid.uuid4().hex[:12]
+    stage.mkdir(parents=True)
+    path = stage / "batches.npz"
+    np.savez(path, **batches)
+    out = run_worker("C", "gb_legacy", "counters", "--workspace", str(ROOT), "--data-dir", str(DATA),
+                     "--case", case, "--model", model, "--batches", str(path), timeout=1800.0)
+    rep = read_json(out / "counters.json")
+    for call in rep["calls"]:
+        call["values"] = [to_float(v) for v in call["values"]]
+    return rep
