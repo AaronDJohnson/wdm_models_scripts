@@ -17,11 +17,11 @@ def test_models_and_targets():
     assert R.MODELS == ("whittle_raw", "whittle_cut", "band_raw", "band_cut", "band_pad", "band_exact",
                         "mid_raw", "mid_cut", "mid_pad", "mid_exact", "tri_raw", "tri_cut", "tri_pad",
                         "tri_exact", "exact")
-    assert R.TOYS == ("sinusoid",)
-    assert R.TARGETS == {"sinusoid": {case: R.MODELS for case in CASES}}
-    t = R.targets()
+    assert R.TOYS == ("sinusoid", "galactic_binary")                        # F-C4: + the GB's 38
+    assert R.TARGETS["sinusoid"] == {case: R.MODELS for case in CASES}
+    t = R.targets("sinusoid")
     assert len(t) == 45 and len(set(t)) == 45 and t[0] == ("sinusoid", "manuscript_low", "whittle_raw")
-    assert R.targets("sinusoid") == t
+    assert R.targets()[:45] == t and len(R.targets()) == 83
 
 
 @pytest.mark.golden
@@ -77,10 +77,10 @@ def test_build_returns_the_models_on_the_shipped_data():
 def test_what_the_registry_does_not_build_is_refused():
     with pytest.raises(ValueError, match="backend"):
         R.build("sinusoid", "manuscript_mid", "band_raw", backend="torch")
-    with pytest.raises(KeyError, match="S5"):
-        R.build("galactic_binary", "gb_3mo", "band_raw")
-    with pytest.raises(KeyError, match="S5"):
-        R.describe("galactic_binary", "gb_3mo", "band_raw")
+    with pytest.raises(KeyError, match="chirp"):                             # F-C4: the GB is registered
+        R.build("chirp", "gb_3mo", "band_raw")
+    with pytest.raises(ValueError, match="not a target"):
+        R.describe("galactic_binary", "gb_12mo", "band_cut")
     with pytest.raises(KeyError, match="manuscript_chirp"):
         R.build("sinusoid", "manuscript_chirp", "band_raw")
     with pytest.raises(ValueError, match="unknown model"):

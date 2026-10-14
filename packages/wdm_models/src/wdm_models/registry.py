@@ -1,7 +1,8 @@
 r"""The model registry (spec §5.3): the 15 paper models, the targets, ``build`` and ``describe``.
 
-``TARGETS`` lists every (toy, case, model) the release reproduces.  S3 registers the sinusoid
-(3 cases x 15 models = 45); the galactic binary's 38 targets are added with S5.
+``TARGETS`` lists every (toy, case, model) the release reproduces: the sinusoid (3 cases x 15
+models = 45) and the galactic binary (15 + 15 + 8 = 38: at 12 months the periodic envelope
+makes the cut and the exact edges identical to raw).
 
 ``build(toy, case, model, *, backend, options, data_root)`` loads the shipped, sha256-checked
 inputs and returns the ``domainia`` likelihood (rows in ``priors.names(model)`` order): bare on
@@ -9,6 +10,11 @@ NumPy (WT), inside WG's evaluator on JAX (``sinusoid.evaluation``: a ``NoiseStat
 eight cached models, a ``BatchedLikelihood`` otherwise; the domainia likelihood is ``.lik``);
 ``describe(toy, case, model)`` reports what a run analyses (cells or Fourier coordinates, grids,
 exact rows, padded cells) without building anything heavy.
+
+The galactic binary (S6) builds through :func:`wdm_models.galactic_binary.models.build` (NumPy:
+lineage C's reference, or its cache classes with ``ModelOptions(evaluator="cache")``; the
+template is ``waveform.GBTemplate`` with ``options.waveform_backend``, ``"onfly"`` by default --
+golden checks pass ``"fourier"``); its ``describe`` is lineage C's ``matrix.describe`` key for key.
 """
 
 from __future__ import annotations
@@ -23,6 +29,9 @@ from domainia.domains import CellSet
 from domainia.nuisance import FourierBandNuisance
 
 from .common.params import MODELS, check_model, split_model
+from .galactic_binary import config as gb_config
+from .galactic_binary import models as gb_models
+from .galactic_binary.prepared import PreparedCase
 from .options import ModelOptions, resolve
 from .sinusoid import config as sin_config
 from .sinusoid import data as sin_data
@@ -33,9 +42,10 @@ from .sinusoid.exact import ProjectedExact
 
 __all__ = ["MODELS", "TARGETS", "TOYS", "build", "describe", "targets"]
 
-TOYS: tuple[str, ...] = ("sinusoid",)
+TOYS: tuple[str, ...] = ("sinusoid", "galactic_binary")
 TARGETS: dict[str, dict[str, tuple[str, ...]]] = {
     "sinusoid": {case: MODELS for case in sin_config.CASE_NAMES},
+    "galactic_binary": {case: gb_models.TARGET_MODELS[case] for case in gb_config.CASES},
 }
 
 
@@ -47,7 +57,7 @@ def targets(toy: str | None = None) -> tuple[tuple[str, str, str], ...]:
 
 def _toy(toy: str) -> dict[str, tuple[str, ...]]:
     if toy not in TARGETS:
-        raise KeyError(f"unknown toy {toy!r}; registered: {TOYS} (the galactic binary arrives with S5)")
+        raise KeyError(f"unknown toy {toy!r}; registered: {TOYS}")
     return TARGETS[toy]
 
 
@@ -66,6 +76,8 @@ def build(toy: str, case: str, model: str, *, backend: str = "numpy",
     _check(toy, case, model)
     if backend not in ("numpy", "jax"):
         raise ValueError(f"backend must be 'numpy' or 'jax'; got {backend!r}")
+    if toy == "galactic_binary":
+        return gb_models.build(case, model, backend=backend, options=options, data_root=data_root)
     resolved = resolve(toy, model, backend, options)
     s = sin_data.load(case, data_root=data_root)
     exact = (ProjectedExact.load(s.cfg, data_root=data_root, algorithm=resolved.correction)
@@ -74,8 +86,11 @@ def build(toy: str, case: str, model: str, *, backend: str = "numpy",
 
 
 def describe(toy: str, case: str, model: str) -> dict[str, Any]:
-    """What a run of ``model`` analyses (spec §5.3; the WT oracle's counts, pinned by tests)."""
+    """What a run of ``model`` analyses (spec §5.3; the WT oracle's counts / lineage C's
+    ``matrix.describe``, pinned by tests)."""
     _check(toy, case, model)
+    if toy == "galactic_binary":
+        return _describe_gb(case, model)
     cfg, geo = sin_config.config(case), sin_models.MANUSCRIPT_GEOMETRY
     base, edge = split_model(model)
     out: dict[str, Any] = {"toy": toy, "case": case, "model": model, "params": sin_priors.names(model),
@@ -112,6 +127,41 @@ def describe(toy: str, case: str, model: str) -> dict[str, Any]:
         if edge == "exact":
             e = cells.columns(*geo.edge_exact)
             out.update(exact_rows=e.size, interior=cells.size - e.size, exact_columns=geo.edge_exact)
+    if base == "tri":
+        out["lags"] = "all"
+    return out
+
+
+def _describe_gb(case: str, model: str) -> dict[str, Any]:
+    """Lineage C ``matrix.describe`` (``toy_models/galactic_binary/matrix.py:1082-1104``) key
+    for key, plus ``toy``/``case``/``model``/``params``; from the shipped prepared file only
+    (the pad's mask rows are counted from ``rho_pad``, not built)."""
+    a = PreparedCase.load(case).arrays
+    NT = int(a["NT"])
+    out: dict[str, Any] = {"toy": "galactic_binary", "case": case, "model": model,
+                           "params": gb_config.parameter_names(model), "NT": NT}
+    base, edge = split_model(model)
+    if model in ("whittle_raw", "exact"):
+        out.update(P=int(a["freq_n"]), grid="Fourier bins")
+        return out
+    if model == "whittle_cut":
+        out.update(P=int(a["crop_n"]), grid="Fourier bins of the cropped record")
+        return out
+    nb = int(a["n_bands"])
+    lead, trail = gb_config.CUT[case]
+    if edge == "pad":
+        NTp = NT + gb_config.PAD_COLUMNS
+        h, k0, n = NT // 2, int(a["store_offset"]), int(a["store_n"])
+        n_R = len(range(k0 // h, -(-(k0 + n) // h) + 1))
+        rho = np.asarray(a["rho_pad"], float)
+        out.update(P=nb * NT, NT=NTp, grid=f"{nb} bands x {NTp} columns", covariance="M Lambda M",
+                   mask_rows=int(np.sum(1.0 - rho > gb_config.PAD_EDGE_TOL)),
+                   lambda_cells=f"{n_R} bands (store) x {NTp} columns (padded grid)")
+    else:
+        P = nb * (NT - lead - trail) if edge == "cut" else nb * NT
+        out.update(P=P, grid=f"{nb} bands x {NT} columns")
+        if edge == "exact":
+            out.update(exact_rows=nb * (lead + trail), exact_columns="all")
     if base == "tri":
         out["lags"] = "all"
     return out
