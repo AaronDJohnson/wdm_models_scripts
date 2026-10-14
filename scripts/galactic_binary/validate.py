@@ -117,6 +117,21 @@ COUNTER_KEYS = ("evaluations", "noise_states", "pd_failed_rows", "pd_failed_stat
 #: appends it to ``XLA_FLAGS`` before JAX starts (:func:`cpu_determinism`).
 CPU_DETERMINISM = "--xla_cpu_multi_thread_eigen=false"
 EPS = float(np.finfo(float).eps)
+#: The user-run Colab GPU validation (S7; README "GPU validation of the galactic binary").
+COLAB = """\
+On a Colab GPU runtime (T4/L4/A100), the release tree unzipped at /content/wdm_models_scripts
+(README.md, "GPU validation of the galactic binary"):
+  pip uninstall -y jax-cuda13-plugin jax-cuda13-pjrt
+  pip install -q -r /content/wdm_models_scripts/env/requirements-colab-cuda12.txt
+  pip install -q --no-deps -r /content/wdm_models_scripts/env/requirements-bg.txt
+  cd /content/wdm_models_scripts
+  export PYTHONPATH=$PWD:$PWD/packages/wdm/src:$PWD/packages/domainia/src:$PWD/packages/wdm_models/src
+  export PYTHONSAFEPATH=1 PYTHONDONTWRITEBYTECODE=1 JAX_ENABLE_X64=true XLA_PYTHON_CLIENT_PREALLOCATE=false
+  export XLA_FLAGS=--xla_gpu_deterministic_ops=true
+  export JAX_PLATFORMS=cuda
+  python -P -m scripts.galactic_binary.validate --backend jax --tier fast --golden g3 g4 \\
+      --report /content/drive/MyDrive/wdm_release/validate_gb_jax_gpu_fast.json
+"""
 
 Builder = Callable[..., Any]
 

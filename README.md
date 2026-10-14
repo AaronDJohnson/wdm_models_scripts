@@ -75,3 +75,44 @@ against the frozen lineage-C goldens; nothing here samples. From this directory,
   (every G3/G4/G5/G6 item, the onfly audit, and the S2 gate; about 9 min).
 * The full tier (32 rows per run directory, 12 stress points) needs the user's approval: its
   goldens are not captured yet (`tests/golden/test_s6_full_tier.py` lists the commands).
+
+## GPU validation of the galactic binary (user-run; sub-project S7)
+
+The GB JAX likelihoods are gated locally on CPU-JAX (`$PY -m scripts.golden.s7_report --full`).
+Their strategies are the same on every device (lineage C's `gpu/jax_models.build`: the cache
+classes batch the rows of one call everywhere, `exact` loops), so the GPU run checks XLA's GPU
+arithmetic against the same approved gates (G3 1e-8; G4 8.32e-8 at well-conditioned points,
+identical -inf masks). Nothing here samples; the run evaluates the G3 rows and G4 stress points
+only (38 targets, about a minute after compilation).
+
+1. Locally, from this directory: `git archive --format=zip -o "$TMPDIR/wdm_models_scripts_s7.zip" HEAD`,
+   then upload the zip to `MyDrive/wdm_release/` on Google Drive.
+2. In a Colab notebook with a GPU runtime, one cell each:
+
+   ```
+   from google.colab import drive
+   drive.mount('/content/drive')
+   ```
+   ```
+   !rm -rf /content/wdm_models_scripts && mkdir -p /content/wdm_models_scripts && cd /content/wdm_models_scripts && unzip -q /content/drive/MyDrive/wdm_release/wdm_models_scripts_s7.zip
+   !pip uninstall -y jax-cuda13-plugin jax-cuda13-pjrt
+   !pip install -q -r /content/wdm_models_scripts/env/requirements-colab-cuda12.txt
+   !pip install -q --no-deps -r /content/wdm_models_scripts/env/requirements-bg.txt
+   ```
+   ```
+   %%bash
+   cd /content/wdm_models_scripts
+   export PYTHONPATH=$PWD:$PWD/packages/wdm/src:$PWD/packages/domainia/src:$PWD/packages/wdm_models/src
+   export PYTHONSAFEPATH=1 PYTHONDONTWRITEBYTECODE=1 JAX_ENABLE_X64=true XLA_PYTHON_CLIENT_PREALLOCATE=false
+   export XLA_FLAGS=--xla_gpu_deterministic_ops=true
+   export JAX_PLATFORMS=cuda
+   python -P -m scripts.galactic_binary.validate --backend jax --tier fast --golden g3 g4 --report /content/drive/MyDrive/wdm_release/validate_gb_jax_gpu_fast.json
+   ```
+   Exit status 0 and `"ok": true` in the report mean every target passed its approved JAX gate
+   (binary-galactica, the PyPI release 0.5.0, is installed with `--no-deps` on top of the CUDA-12
+   JAX pin: it is JAX-only, and its `jax` requirement must not pull another JAX).
+3. Download the report and summarise it locally next to the CPU gates:
+   `$PY -m scripts.golden.s7_report --validate ~/Downloads/validate_gb_jax_gpu_fast.json --out "$TMPDIR/s7_gpu.json"`
+   (its `run_meta` must read `"device_kind": "gpu"` and `"deterministic_ops": true`; `--validate`
+   refuses a report from any other device, a CPU fallback included -- the cell's
+   `JAX_PLATFORMS=cuda` makes a runtime without a usable GPU fail instead of falling back).
