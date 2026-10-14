@@ -16,9 +16,12 @@ reproducible bit for bit -- across fresh builds in one process and across proces
   which the last test pins as <= 1e-15, and the WDM diagonals drift at the same ulp level
   under load (the part-3 final review measured ``repeat_max_abs`` 1.22e-4 for band_raw,
   about 2.6e-16 relative at its stress points, 7.3e-12 for mid_raw and 5.8e-11 for mid_cut,
-  with 21-39 of 60 repeated calls differing; 0 of 60 with the flag).  This module's
-  pytest process runs with the default threading on purpose (``s4_report`` does not set
-  the flag for it), so the last test measures the threaded case.
+  with 21-39 of 60 repeated calls differing; 0 of 60 with the flag).  In the JAX fast tier
+  of ``s4_report --full`` (45 targets x G1/G2 = 90 warm repeats) the four runs without the
+  flag had 1-4 repeats differing (whittle_raw/cut, band_raw, mid_raw, mid_cut; at most
+  1.22e-4 absolute); the first run with it (P3C) had 0 of 90.  This module's pytest
+  process runs with the default threading on purpose (``s4_report`` does not set the flag
+  for it), so the last test measures the threaded case.
 """
 
 from __future__ import annotations

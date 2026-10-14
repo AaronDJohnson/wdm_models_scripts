@@ -45,7 +45,8 @@ def _check_target(tag: str, t: dict) -> None:
         e = t[kind]
         assert math.isfinite(e["ms_per_eval"]) and e["ms_per_eval"] > 0, (tag, kind)
         scale = max(abs(float(v)) for v in e["value"] if math.isfinite(float(v)))
-        assert e["repeat_max_abs"] <= 1e-15 * scale, (tag, kind)     # an ulp (threaded Eigen, E-D7)
+        # an ulp: E-D7's threaded-Eigen allowance (the CLI sets the CPU flag; 0 of 90 differed in P3C's gate)
+        assert e["repeat_max_abs"] <= 1e-15 * scale, (tag, kind)
         assert e["inf_mismatch"] == 0 and "lineage_A" not in e, (tag, kind)
 
 
