@@ -30,6 +30,11 @@ setting                NumPy           JAX
 ``cache_size``         32              16 on GPU, 32 on CPU
 ``batch_rows``         off             on GPU except edge-exact (WG ``batch_rungs``)
 ``density_order``      ``folded`` for ``exact`` (WT ``FastFullCovariance``), else ``default``
+``correction``         ``chebval2d``   ``table`` (the exact model's bandcov correction: WT
+                                       ``chebval2d`` vs WG ``_cheb_values`` tables, traceable)
+``pad_form``           ``solve``       ``reduce`` for the pads (WG ``cQ, Gu`` state, E-C3)
+``schur_form``         ``solve``       ``scaled`` for band/mid_exact (diagonal interior: WG
+                                       ``B/v`` on the fly, E-C4), ``solve`` for tri_exact
 =====================  ==============  ======================================================
 """
 
@@ -117,6 +122,12 @@ class Resolved:
     cache_size: int
     batch_rows: bool
     density_order: str
+    #: S4 (E-D2): the ``exact`` model's bandcov correction order (``BandCorrection.algorithm``)
+    #: and the domainia forms of the pad marginal (``ZeroPadded``/``FlatMarginal``) and of the
+    #: exact-edge Schur complement (``SchurEdge``) -- NumPy keeps WT's ``solve`` everywhere.
+    correction: str
+    pad_form: str
+    schur_form: str
 
 
 def _device(backend: str, device: str | None) -> str:
@@ -138,11 +149,13 @@ def _sinusoid(model: str, backend: str, device: str, strategy: str) -> Resolved:
     cache = 32 if device == "cpu" else 16
     if numpy_column:
         return Resolved(backend, device, "bessel", "ragged", "fixed", False, False, None, "raise", "solve",
-                        None, cache, False, density)
+                        None, cache, False, density, "chebval2d", "solve", "solve")
     return Resolved(backend, device, "gram", "padded", "adaptive", True, device == "cpu",
                     64 if device == "cpu" else 192, "nan",
                     "whiten" if base == "tri" and edge in ("raw", "cut") else "solve",
-                    (("alpha_d", 4.0),), cache, device != "cpu" and edge != "exact", density)
+                    (("alpha_d", 4.0),), cache, device != "cpu" and edge != "exact", density, "table",
+                    "reduce" if edge == "pad" else "solve",
+                    "scaled" if edge == "exact" and base in ("band", "mid") else "solve")
 
 
 def resolve(toy: str, model: str, backend: str, options: ModelOptions = ModelOptions(), *,
