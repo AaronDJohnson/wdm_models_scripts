@@ -1,0 +1,5 @@
+# Release constraints (spec section 1 "Packaging"); use with pip's -c.
+# binary-galactica 0.5.0 (the PyPI release) restores the physical amplitude: its native GLASS
+# vector is gbonfly's (0.4.0 templates were exactly half).  wdm_models refuses anything older than
+# 0.5.0 at import of its waveform (wdm_models.galactic_binary.waveform.check_binary_galactica).
+binary-galactica==0.5.0

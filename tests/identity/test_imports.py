@@ -148,3 +148,68 @@ def test_root_pytest_ini_collects_the_wdm_models_package_tests():
     assert "packages/wdm_models/tests" in cfg["pytest"]["testpaths"].split()
     assert "packages/wdm_models/src" in cfg["pytest"]["pythonpath"].split()
     assert not (REL / "packages" / "wdm_models" / "tests" / "__init__.py").exists()
+
+
+# --- binary_galactica (S5, task F-A1; spec section 1 guard 6 and section 5.2) -----------------
+CONSTRAINTS = REL / "env" / "constraints.txt"
+_BG = ("import json, sys\n"
+       "import jax\n"
+       "x64_before = bool(jax.config.read('jax_enable_x64'))\n"
+       "import binary_galactica as bg\n"
+       "from packaging.version import Version\n"
+       "print(json.dumps({'file': bg.__file__, 'version': bg.__version__,"
+       " 'at_least': Version(bg.__version__) >= Version('0.5.0'),"
+       " 'x64_untouched': bool(jax.config.read('jax_enable_x64')) == x64_before}))")
+#: The normalisation probe: the 3-month injection's template on the store, binary_galactica
+#: alone (no release code), against the spec's gbonfly literals (prepared units, BW 4096).
+_PROBE = ("import json, numpy as np, jax\n"
+          "jax.config.update('jax_enable_x64', True)\n"
+          "import binary_galactica as bg\n"
+          "a = np.load({path!r})\n"
+          "T = float(a['T'])\n"
+          "with jax.ensure_compile_time_eval():\n"
+          "    orbit = bg.orbit_cache(T, 0.0, 4096)\n"
+          "out = {{}}\n"
+          "for be in ('fourier', 'onfly'):\n"
+          "    h = np.asarray(bg.template_on_window(a['inject_glass'], T=T, bin_lo=int(a['store_offset']),"
+          " n_bins=int(a['store_n']), BW=4096, positions=orbit, backend=be))"
+          " / (float(a['DT']) * a['sigma0'][:, None])\n"
+          "    out[be] = [float(np.sum(np.abs(h) ** 2)), float(np.real(np.vdot(a['store_z'], h)))]\n"
+          "print(json.dumps(out))")
+STORE_SUMS_3MO = (47.0992463067, 44.6206986397)       # spec section 5.2 (gbonfly)
+
+
+def test_constraints_pin_binary_galactica():
+    """The release pins the PyPI release binary-galactica 0.5.0 (controller override of
+    2026-10-13: the user's PyPI upload replaces the plan's floor + git-commit pins)."""
+    lines = [ln.strip() for ln in CONSTRAINTS.read_text().splitlines()
+             if ln.strip() and not ln.lstrip().startswith("#")]
+    assert "binary-galactica==0.5.0" in lines
+
+
+def test_binary_galactica_is_the_physical_amplitude_release():
+    pytest.importorskip("binary_galactica", reason="binary_galactica not installed (spec: wdm_models[gb])")
+    env = {k: v for k, v in os.environ.items() if not k.startswith(("PYTHON", "JAX_"))}
+    env.update(PYTHONDONTWRITEBYTECODE="1", PYTHONNOUSERSITE="1", JAX_ENABLE_X64="false", JAX_PLATFORMS="cpu")
+    out = subprocess.run([sys.executable, "-P", "-c", _BG], env=env, cwd=str(REL), capture_output=True,
+                         text=True, check=True)
+    info = json.loads(out.stdout.strip().splitlines()[-1])
+    assert info["at_least"] is True, info              # 0.4.0 templates are exactly half
+    assert info["x64_untouched"] is True               # bg never flips x64 on import (gbonfly did)
+    assert not Path(info["file"]).resolve().is_relative_to(REL.resolve())
+
+
+@pytest.mark.golden
+def test_binary_galactica_normalisation_probe(record_property):
+    """Spec section 1 guard 6: Sum|h|^2 and Re<z,h> at the 3-month injection on the store
+    match gbonfly's at 1e-6 (``fourier``) and 1e-3 (``onfly``); a power ratio of 1/4 is
+    binary_galactica < 0.5.0.  Each backend is one ``s5`` record (the S5 report)."""
+    pytest.importorskip("binary_galactica", reason="binary_galactica not installed (spec: wdm_models[gb])")
+    path = REL / "data" / "galactic_binary" / "prepared" / "gb_3mo.npz"
+    sums = _probe(_PROBE.format(path=str(path)), pythonpath=None)
+    for backend, rtol in (("fourier", 1e-6), ("onfly", 1e-3)):
+        (s2, zh), (r2, rz) = sums[backend], STORE_SUMS_3MO
+        record_property("s5", json.dumps({"item": f"G5/probe/gb_3mo/{backend}", "gate": rtol,
+                                          "observed": max(abs(s2 / r2 - 1.0), abs(zh / rz - 1.0))}))
+        assert not 0.2 < s2 / r2 < 0.3, f"{backend}: binary_galactica < 0.5.0 (half amplitude)"
+        assert abs(s2 / r2 - 1.0) <= rtol and abs(zh / rz - 1.0) <= rtol, (backend, s2, zh)
