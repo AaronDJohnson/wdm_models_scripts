@@ -41,7 +41,7 @@ def test_jax_historical_is_gpu_jax_models_build(device):
         assert r.evaluator == ("cache" if cached else "batched"), model
         assert r.strategy == ("expanded" if cached else "residual"), model
         assert r.schur == ("schur" if model in GB_SCHUR else "dense"), model
-        assert r.batch_rows is cached, model
+        assert r.batch_rows is (cached and model != "exact"), model      # FullCache loops (F-D1)
         ref = resolve("galactic_binary", model, "jax", ModelOptions(strategy="reference"), device=device)
         assert (ref.evaluator, ref.schur, ref.batch_rows) == ("reference", "dense", False), model
 

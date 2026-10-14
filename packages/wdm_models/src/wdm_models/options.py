@@ -52,7 +52,8 @@ setting                NumPy               JAX
 ``pad_factor``         ``dense``           ``dense``
 ``schur``              ``dense``           ``schur`` for band/mid_exact (``EdgeSchurCache``)
 ``cache_size``         24                  24
-``batch_rows``         off                 on for ``cache`` (GB ``batch_signal``)
+``batch_rows``         off                 on for ``cache`` (GB ``batch_signal``) except ``exact``
+                                           (``FullCache`` looped over the rows)
 =====================  ==================  ==================================================
 """
 
@@ -212,8 +213,8 @@ class GBResolved:
 def _galactic_binary(model: str, backend: str, device: str, strategy: str, options: ModelOptions) -> GBResolved:
     """GB table: NumPy (``historical``/``reference``) = lineage C's NumPy reference; JAX
     ``historical`` = ``gpu/jax_models.build`` (the cache classes, batched rows on every device:
-    GB ``batch_signal``).  ``evaluator`` overrides; ``"cache"`` is refused outside
-    :data:`GB_CACHED`."""
+    GB ``batch_signal``; ``exact`` loops, as ``FullCache`` did).  ``evaluator`` overrides;
+    ``"cache"`` is refused outside :data:`GB_CACHED`."""
     numpy_column = backend == "numpy" or strategy == "reference"
     if options.evaluator is not None:
         evaluator = options.evaluator
@@ -230,7 +231,8 @@ def _galactic_binary(model: str, backend: str, device: str, strategy: str, optio
                       "schur" if cached and model in ("band_exact", "mid_exact") else "dense",
                       "expanded" if cached or model == "exact" else "residual", evaluator,
                       options.cache_size or 24, bool(options.batch_rows) if options.batch_rows is not None
-                      else backend == "jax" and cached, options.waveform_backend)
+                      else backend == "jax" and cached and model != "exact",   # FullCache: a row loop
+                      options.waveform_backend)
 
 
 def resolve(toy: str, model: str, backend: str, options: ModelOptions = ModelOptions(), *,
