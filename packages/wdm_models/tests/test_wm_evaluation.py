@@ -8,7 +8,7 @@ import pytest
 
 from wdm_models.common.params import MODELS, split_model
 from wdm_models.options import ModelOptions, resolve
-from wdm_models.sampling.device import DETERMINISTIC_FLAG, device_kind, run_meta
+from wdm_models.sampling.device import CPU_DETERMINISM, DETERMINISTIC_FLAG, device_kind, run_meta
 from wdm_models.sinusoid.evaluation import CACHED, EDGE_EXACT_MODELS, UNCACHED_DIAGONAL, Wrapper, wrap, wrapper_for
 
 
@@ -68,5 +68,10 @@ def test_device_kind_and_run_meta(monkeypatch):
     meta = run_meta("jax")
     assert meta["device_kind"] == device_kind("jax") and isinstance(meta["x64"], bool)
     assert meta["deterministic_ops"] is True and meta["jax"] == meta["jaxlib"] == "0.9.0.1"
+    assert meta["cpu_single_thread_eigen"] is False
     monkeypatch.delenv("XLA_FLAGS")
     assert run_meta("jax")["deterministic_ops"] is False
+    assert CPU_DETERMINISM == "--xla_cpu_multi_thread_eigen=false"
+    monkeypatch.setenv("XLA_FLAGS", f"--xla_force_host_platform_device_count=1 {CPU_DETERMINISM}")
+    meta = run_meta("jax")
+    assert meta["cpu_single_thread_eigen"] is True and meta["deterministic_ops"] is False

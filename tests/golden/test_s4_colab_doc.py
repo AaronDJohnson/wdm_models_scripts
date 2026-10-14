@@ -27,5 +27,6 @@ def test_readme_and_validate_name_the_same_gpu_command():
         assert "pip uninstall -y jax-cuda13-plugin jax-cuda13-pjrt" in text
         assert "XLA_FLAGS=--xla_gpu_deterministic_ops=true" in text
         assert "JAX_ENABLE_X64=true" in text
+        assert "export JAX_PLATFORMS=cuda" in text and text.index("export JAX_PLATFORMS=cuda") < text.index(VALIDATE)
         assert "PYTHONPATH=$PWD:$PWD/packages/wdm/src:$PWD/packages/domainia/src:$PWD/packages/wdm_models/src" in text
     assert "scripts.golden.s4_report --validate" in readme

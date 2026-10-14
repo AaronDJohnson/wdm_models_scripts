@@ -49,7 +49,14 @@ def _check_target(tag: str, t: dict) -> None:
         assert e["inf_mismatch"] == 0 and "lineage_A" not in e, (tag, kind)
 
 
-def test_cli_subset_on_cpu_jax(tmp_path):
+def test_cli_subset_on_cpu_jax(tmp_path, monkeypatch):
+    # spec section 3.4: main() appends the CPU flag before JAX starts unless a setting is there
+    monkeypatch.setenv("XLA_FLAGS", "--xla_force_host_platform_device_count=1")     # restored afterwards
+    assert V.cpu_determinism() == "--xla_force_host_platform_device_count=1 --xla_cpu_multi_thread_eigen=false"
+    monkeypatch.setenv("XLA_FLAGS", "--xla_cpu_multi_thread_eigen=true")
+    assert V.cpu_determinism() == "--xla_cpu_multi_thread_eigen=true"               # an explicit choice wins
+    monkeypatch.delenv("XLA_FLAGS")
+    assert V.cpu_determinism() == V.CPU_DETERMINISM == "--xla_cpu_multi_thread_eigen=false"
     out = tmp_path / "report.json"
     p = _cli("--case", "manuscript_mid", *(a for m in SUBSET for a in ("--model", m)), "--report", str(out))
     assert p.returncode == 0, p.stdout[-2000:] + p.stderr[-2000:]
@@ -59,6 +66,7 @@ def test_cli_subset_on_cpu_jax(tmp_path):
     meta = rep["run_meta"]
     assert meta["device_kind"] == "cpu" and meta["platform"] == "cpu" and meta["x64"] is True
     assert meta["jax"] == "0.9.0.1" and meta["deterministic_ops"] is False
+    assert meta["XLA_FLAGS"] == V.CPU_DETERMINISM and meta["cpu_single_thread_eigen"] is True   # _cli drops XLA_FLAGS
     assert rep["gates"]["g1"]["exact"] == {"atol": 1e-4, "rtol": 1e-8}
     assert rep["gates"]["g2"]["band_raw"] == {"atol": 1e-5, "rtol": 0.0}
     assert sorted(rep["targets"]) == sorted(f"manuscript_mid/{m}" for m in SUBSET)
@@ -112,6 +120,7 @@ def test_cli_the_whole_jax_fast_tier(tmp_path):
     rep = json.loads(out.read_text())
     assert rep["ok"] is True and rep["failed_targets"] == [] and rep["n_targets"] == 45
     assert rep["n_points"] == 45 * 4 + 45 * 3
+    assert rep["run_meta"]["XLA_FLAGS"] == V.CPU_DETERMINISM and rep["run_meta"]["cpu_single_thread_eigen"] is True
     for tag, t in rep["targets"].items():
         _check_target(tag, t)
         n_inf = sum(1 for v in t["g1"]["value"] if v == "-inf")

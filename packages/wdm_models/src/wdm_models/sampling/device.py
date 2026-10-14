@@ -7,9 +7,10 @@ exactly where WG did (``gpu_sinusoid/wdmtoysgpu/matrix.py:262-263, 279``: exact-
 64 vs 192, rows of one call batched only on a GPU) plus the spec's capacity rule (16 on
 GPU, 32 on CPU) and the staged exact rows (CPU only, the XLA-CPU irfft trap).
 ``run_meta()`` is the ``run_meta`` block of a validation report: the device kind, the JAX
-build, x64 and ``XLA_FLAGS`` (validation on a GPU sets ``--xla_gpu_deterministic_ops=true``,
-spec section 3.4).  Nothing here imports JAX at module import; S9 adds
-``require_accelerator()`` for the runners.
+build, x64 and ``XLA_FLAGS`` (spec section 3.4: validation on a GPU sets
+``--xla_gpu_deterministic_ops=true``, on CPU-JAX ``--xla_cpu_multi_thread_eigen=false``; the
+validate CLIs append the CPU flag before JAX starts).  Nothing here imports JAX at module
+import; S9 adds ``require_accelerator()`` for the runners.
 """
 
 from __future__ import annotations
@@ -18,11 +19,14 @@ import os
 import sys
 from typing import Any, Literal
 
-__all__ = ["DETERMINISTIC_FLAG", "DeviceKind", "device_kind", "run_meta"]
+__all__ = ["CPU_DETERMINISM", "DETERMINISTIC_FLAG", "DeviceKind", "device_kind", "run_meta"]
 
 DeviceKind = Literal["cpu", "gpu"]
 #: The XLA flag validation runs set on a GPU (spec section 3.4).
 DETERMINISTIC_FLAG = "--xla_gpu_deterministic_ops=true"
+#: The XLA flag validation runs set on CPU-JAX (spec section 3.4): single-threaded Eigen, so
+#: repeated evaluations are bitwise (XLA's default threading moves the last bit).
+CPU_DETERMINISM = "--xla_cpu_multi_thread_eigen=false"
 _GPU_PLATFORMS = ("gpu", "cuda", "rocm")
 
 
@@ -47,7 +51,8 @@ def device_kind(backend: str = "jax") -> DeviceKind:
 def run_meta(backend: str) -> dict[str, Any]:
     """The report's ``run_meta``: python, numpy, scipy, ``XLA_FLAGS``, and on JAX the
     jax/jaxlib versions, the platform, the devices, ``jax_enable_x64`` and whether the
-    deterministic-ops flag is set."""
+    deterministic-ops flag (GPU, ``deterministic_ops``) and the single-threaded-Eigen flag
+    (CPU, ``cpu_single_thread_eigen``) are in ``XLA_FLAGS``."""
     import numpy as np
     import scipy
 
@@ -58,7 +63,8 @@ def run_meta(backend: str) -> dict[str, Any]:
         import jax
         import jaxlib
 
+        flags = os.environ.get("XLA_FLAGS") or ""
         out.update(jax=jax.__version__, jaxlib=jaxlib.__version__, platform=jax.default_backend(),
                    devices=[str(d) for d in jax.devices()], x64=bool(jax.config.read("jax_enable_x64")),
-                   deterministic_ops=DETERMINISTIC_FLAG in (os.environ.get("XLA_FLAGS") or ""))
+                   deterministic_ops=DETERMINISTIC_FLAG in flags, cpu_single_thread_eigen=CPU_DETERMINISM in flags)
     return out

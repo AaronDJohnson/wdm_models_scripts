@@ -37,7 +37,8 @@ def _report_from(lineage: str, backend: str) -> dict:
                                       "g1": {**g1, "ms_per_eval": 1.0}, "g2": {**g2, "ms_per_eval": 1.0}}
     return {"schema": 1, "family": "sinusoid", "backend": backend, "tier": "fast", "ok": True,
             "failed_targets": [], "problems": [], "n_targets": len(targets), "targets": targets,
-            "run_meta": {"backend": backend, "device_kind": "cpu", "x64": True, "deterministic_ops": False}}
+            "run_meta": {"backend": backend, "device_kind": "cpu", "x64": True, "deterministic_ops": False,
+                         "XLA_FLAGS": "--xla_cpu_multi_thread_eigen=false", "cpu_single_thread_eigen": True}}
 
 
 def test_tests_cover_every_s4_file_and_not_the_report_itself():
@@ -68,6 +69,15 @@ def test_required_problems_name_every_short_pattern():
 def test_a_report_of_the_wg_values_is_clean():
     models, problems = summarise_validate(_report_from("B", "jax"))
     assert problems == [] and sorted(models) == sorted(MODELS)
+    assert summarise_validate(_report_from("B", "jax"), expect_device="cpu")[1] == []
+    # spec section 3.4: a CPU-JAX run needs single-threaded Eigen (validate.main sets it)
+    for flags, single in ((None, None), ("", False), ("--xla_cpu_multi_thread_eigen=true", False),
+                          ("--xla_cpu_multi_thread_eigen=false", False), (None, True)):
+        rep = _report_from("B", "jax")
+        rep["run_meta"].update(XLA_FLAGS=flags, cpu_single_thread_eigen=single)
+        for expect in (None, "cpu"):
+            assert any("a CPU run without XLA_FLAGS=--xla_cpu_multi_thread_eigen=false" in p
+                       for p in summarise_validate(rep, expect_device=expect)[1]), (flags, single, expect)
     for m, s in models.items():
         assert s["oracle_max_abs_near"] == 0.0 and s["oracle_max_rel_stress"] == 0.0, m
         assert s["inf_points"] == (3 if m in ("band_exact", "mid_exact", "tri_exact") else 0), m
@@ -110,10 +120,36 @@ def test_a_validate_summary_fails_closed(break_it, expect):
     assert any(expect in p for p in problems), problems
 
 
-def test_a_gpu_report_with_the_deterministic_flag_is_clean():
+def test_a_gpu_report_with_the_deterministic_flag_is_clean(tmp_path):
     rep = _report_from("B", "jax")
     rep["run_meta"].update(device_kind="gpu", deterministic_ops=True)
     assert summarise_validate(rep)[1] == []
+    assert summarise_validate(rep, expect_device="gpu")[1] == []
+    # the device each path expects: the user's GPU sign-off (--validate) refuses any other
+    # device -- a CPU fallback included -- and the local gate refuses a GPU report
+    assert any("device_kind 'gpu'; need 'cpu'" in p for p in summarise_validate(rep, expect_device="cpu")[1])
+    cpu = _report_from("B", "jax")
+    assert any("device_kind 'cpu'; need 'gpu'" in p for p in summarise_validate(cpu, expect_device="gpu")[1])
+    no_flag = copy.deepcopy(rep)
+    no_flag["run_meta"]["deterministic_ops"] = False
+    assert any("deterministic_ops" in p for p in summarise_validate(no_flag, expect_device="gpu")[1])
+    ed11 = _report_from("B", "jax")                      # E-D11's CPU-JAX report: no flag at all
+    ed11["run_meta"] = {"backend": "jax", "device_kind": "cpu", "x64": True, "deterministic_ops": False,
+                        "XLA_FLAGS": None}
+    probs = summarise_validate(ed11, expect_device="gpu")[1]
+    assert any("need 'gpu'" in p for p in probs) and any("a CPU run without" in p for p in probs)
+    with pytest.raises(ValueError, match="expect_device"):
+        summarise_validate(rep, expect_device="tpu")
+    # main(): --validate is the GPU sign-off; the problems name the device
+    xml = tmp_path / "j.xml"
+    xml.write_text(_XML)
+    for report, refused in ((cpu, True), (rep, False)):
+        path, out = tmp_path / "validate.json", tmp_path / "s4.json"
+        path.write_text(json.dumps(report))
+        assert main(["--validate", str(path), "--junit", str(xml), "--out", str(out)]) == 1   # the junit fails
+        got = json.loads(out.read_text())
+        assert got["expect_device"] == "gpu"
+        assert any("need 'gpu'" in p for p in got["problems"]) is refused, got["problems"]
 
 
 def test_out_inside_the_release_tree_is_refused():

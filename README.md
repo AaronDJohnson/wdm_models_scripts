@@ -44,9 +44,12 @@ samples; the run evaluates the G1/G2 goldens only (45 targets, a few minutes).
    export PYTHONPATH=$PWD:$PWD/packages/wdm/src:$PWD/packages/domainia/src:$PWD/packages/wdm_models/src
    export PYTHONSAFEPATH=1 PYTHONDONTWRITEBYTECODE=1 JAX_ENABLE_X64=true XLA_PYTHON_CLIENT_PREALLOCATE=false
    export XLA_FLAGS=--xla_gpu_deterministic_ops=true
+   export JAX_PLATFORMS=cuda
    python -P -m scripts.sinusoid.validate --backend jax --tier fast --report /content/drive/MyDrive/wdm_release/validate_sinusoid_jax_gpu_fast.json
    ```
    Exit status 0 and `"ok": true` in the report mean every target passed its approved JAX gate.
 3. Download the report and summarise it locally next to the CPU gates:
    `$PY -m scripts.golden.s4_report --validate ~/Downloads/validate_sinusoid_jax_gpu_fast.json --out "$TMPDIR/s4_gpu.json"`
-   (its `run_meta` must read `"device_kind": "gpu"` and `"deterministic_ops": true`).
+   (its `run_meta` must read `"device_kind": "gpu"` and `"deterministic_ops": true`; `--validate`
+   refuses a report from any other device, a CPU fallback included -- the cell's
+   `JAX_PLATFORMS=cuda` makes a runtime without a usable GPU fail instead of falling back).

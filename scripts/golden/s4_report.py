@@ -17,8 +17,13 @@ Four sources, each required:
    elsewhere, e.g. the user's Colab GPU run): its own verdict (``ok``, no failed target, no
    problem) and, independently, the 45 targets with G1 and G2 entries, no NaN/+inf, exactly
    one -inf G1 point per edge-exact target and none elsewhere, a finite positive
-   ``ms_per_eval`` everywhere, ``run_meta`` with x64 on (and, on a GPU, the
-   deterministic-ops flag set: spec section 3.4).
+   ``ms_per_eval`` everywhere, ``run_meta`` with x64 on and the device's determinism flag
+   (spec section 3.4; GPU: ``deterministic_ops`` true; CPU: ``--xla_cpu_multi_thread_eigen=false``
+   in ``XLA_FLAGS``, ``cpu_single_thread_eigen`` true -- validate.py's ``main`` sets it).  The
+   device is required too (``expect_device``): ``--validate`` is the user's GPU sign-off and
+   refuses any report whose ``run_meta.device_kind`` is not ``"gpu"`` (a CPU fallback
+   included); the run made here is the local CPU-JAX gate and must say ``"cpu"``.  The pytest
+   subprocess does NOT get the CPU flag (its threaded-Eigen test would be vacuous).
 3. with ``--full``: **validate.py --backend numpy --tier fast** (the S3 gate after the S4
    domainia changes, lineage A bitwise on the recording build) and **s2_report --full
    --strict** (the S2 gate).
@@ -103,6 +108,9 @@ EC_REQUIRED: tuple[tuple[str, int, int], ...] = (
 REQUIRED = ED_REQUIRED + EC_REQUIRED
 #: The lineage each backend's values are compared with (spec section 7.1): WT for NumPy, WG for JAX.
 ORACLE = {"numpy": "A", "jax": "B"}
+#: The CPU-JAX determinism flag (spec section 3.4; set by ``scripts/sinusoid/validate.py main``).
+CPU_FLAG = "--xla_cpu_multi_thread_eigen=false"
+DEVICES = ("cpu", "gpu")
 
 
 def collect(xml_path: Path) -> tuple[dict[str, int], set[str]]:
@@ -135,10 +143,16 @@ def _vals(xs: list) -> list[float]:
     return [to_float(x) if isinstance(x, str) else float(x) for x in xs]
 
 
-def summarise_validate(rep: dict, *, backend: str = "jax") -> tuple[dict, list[str]]:
+def summarise_validate(rep: dict, *, backend: str = "jax",
+                       expect_device: str | None = None) -> tuple[dict, list[str]]:
     """Per-model deltas of a ``scripts/sinusoid/validate.py`` report (E-B's schema: targets
     ``"<case>/<model>"`` with ``g1``/``g2`` entries) against G1, G2 and the backend's oracle
-    lineage, and its problems (fail closed)."""
+    lineage, and its problems (fail closed).  On JAX the report's device must carry its
+    determinism flag (GPU: ``deterministic_ops``; CPU: :data:`CPU_FLAG`) and, with
+    ``expect_device`` (``"gpu"``: the user's ``--validate`` sign-off; ``"cpu"``: the local
+    gate), be that device."""
+    if expect_device is not None and expect_device not in DEVICES:
+        raise ValueError(f"expect_device must be one of {DEVICES} or None; got {expect_device!r}")
     problems = []
     if rep.get("backend") != backend or rep.get("tier") != "fast":
         problems.append(f"validate report is backend {rep.get('backend')!r} tier {rep.get('tier')!r}; "
@@ -155,8 +169,14 @@ def summarise_validate(rep: dict, *, backend: str = "jax") -> tuple[dict, list[s
     elif backend == "jax":
         if meta.get("x64") is not True:
             problems.append(f"validate: run_meta x64 is {meta.get('x64')!r}")
-        if meta.get("device_kind") == "gpu" and meta.get("deterministic_ops") is not True:
-            problems.append("validate: a GPU run without XLA_FLAGS=--xla_gpu_deterministic_ops=true")
+        if expect_device is not None and meta.get("device_kind") != expect_device:
+            problems.append(f"validate: run_meta device_kind {meta.get('device_kind')!r}; need {expect_device!r}")
+        if meta.get("device_kind") == "gpu":
+            if meta.get("deterministic_ops") is not True:
+                problems.append("validate: a GPU run without XLA_FLAGS=--xla_gpu_deterministic_ops=true")
+        elif meta.get("cpu_single_thread_eigen") is not True or CPU_FLAG not in (meta.get("XLA_FLAGS") or ""):
+            problems.append(f"validate: a CPU run without XLA_FLAGS={CPU_FLAG} "
+                            f"(XLA_FLAGS {meta.get('XLA_FLAGS')!r})")
     targets = rep.get("targets", {})
     want = {f"{c}/{m}" for c in CASES for m in MODELS}
     if set(targets) != want:
@@ -269,13 +289,13 @@ def main(argv: list[str] | None = None) -> int:
         (f"{counts['errors']} test error(s)", counts["errors"] > 0),
         (f"{counts['skipped']} test(s) skipped (the S4 gate runs every test)", counts["skipped"] > 0)) if bad]
     problems += required_problems(passed, full=a.full)
-    if a.validate is not None:
-        jax_rep, rc = json.loads(a.validate.read_text()), 0
-    else:
-        jax_rep, rc = run_validate("jax")
+    if a.validate is not None:                     # the user's GPU sign-off: a GPU report only
+        jax_rep, rc, expect = json.loads(a.validate.read_text()), 0, "gpu"
+    else:                                          # the local gate: CPU-JAX, validate.main's CPU flag
+        (jax_rep, rc), expect = run_validate("jax"), "cpu"
     if rc != 0:
         problems.append(f"validate --backend jax exited {rc}")
-    models, vp = summarise_validate(jax_rep)
+    models, vp = summarise_validate(jax_rep, expect_device=expect)
     problems += vp
     extra: dict = {}
     if a.full:
@@ -290,15 +310,17 @@ def main(argv: list[str] | None = None) -> int:
         extra["s2_gate_exit"] = run_s2_gate()
         if extra["s2_gate_exit"] != 0:
             problems.append(f"s2_report --full --strict exited {extra['s2_gate_exit']}")
-    rep = {"schema": 1, "kind": "s4_report", "full": bool(a.full), "tests": counts,
+    rep = {"schema": 1, "kind": "s4_report", "full": bool(a.full), "tests": counts, "expect_device": expect,
            "run_meta": jax_rep.get("run_meta"), "models": models, **extra,
            "problems": problems, "ok": not problems}
     text = json.dumps(rep, indent=1, allow_nan=True)
     if out is not None:
         out.write_text(text + "\n")
     print(text)
+    device = (jax_rep.get("run_meta") or {}).get("device_kind")
     print(f"[s4_report] tests {counts['tests']} ({counts['failures']} failed, {counts['errors']} errors, "
-          f"{counts['skipped']} skipped); {len(models)} models; {len(problems)} problem(s)", file=sys.stderr)
+          f"{counts['skipped']} skipped); {len(models)} models; device {device} (need {expect}); "
+          f"{len(problems)} problem(s)", file=sys.stderr)
     if problems:
         print("[s4_report] FAIL: " + "; ".join(problems[:10]), file=sys.stderr)
         return 1

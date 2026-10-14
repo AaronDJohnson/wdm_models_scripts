@@ -39,11 +39,18 @@ run here: edge-exact ~3-5 s per point) needs the user's approval locally (spec s
 JAX (S4): ``--backend jax`` turns on float64 first (``wdm.backend.enable_x64``), gates at
 ``approved.jax`` (no lineage comparison; lineage B is ``scripts.golden.s4_report``'s), and
 records ``run_meta`` (``wdm_models.sampling.device``: device kind, platform, jax/jaxlib, x64,
-``XLA_FLAGS`` and whether ``--xla_gpu_deterministic_ops=true`` is set) plus, per target and
-golden kind, ``ms_per_eval`` from a second, warm call (fresh counters and cache, the
-programs compiled) and ``repeat_max_abs``, its largest difference from the gated call --
-both reported, never gated.  On NumPy ``ms_per_eval`` is the gated call's.  Each target
-is released before the next (an edge-exact target holds ~2.8 GB of Phi).
+``XLA_FLAGS``, whether ``--xla_gpu_deterministic_ops=true`` is set (``deterministic_ops``)
+and whether ``--xla_cpu_multi_thread_eigen=false`` is (``cpu_single_thread_eigen``)) plus,
+per target and golden kind, ``ms_per_eval`` from a second, warm call (fresh counters and
+cache, the programs compiled) and ``repeat_max_abs``, its largest difference from the gated
+call -- both reported, never gated.  On NumPy ``ms_per_eval`` is the gated call's.  Each
+target is released before the next (an edge-exact target holds ~2.8 GB of Phi).
+
+CPU determinism (spec section 3.4): before JAX starts, ``main`` appends
+``--xla_cpu_multi_thread_eigen=false`` to ``XLA_FLAGS`` unless an
+``--xla_cpu_multi_thread_eigen`` setting is already there (:func:`cpu_determinism`; importing
+this module imports no JAX).  On a GPU the flag is a no-op.  The in-process :func:`run` (the
+tests) uses its process's flags.
 
 Colab GPU (user-run, S4): see ``COLAB`` below and the README.
 """
@@ -54,6 +61,7 @@ import argparse
 import gc
 import hashlib
 import json
+import os
 import sys
 import time
 import traceback
@@ -72,6 +80,7 @@ On a Colab GPU runtime (T4/L4/A100), the release tree unzipped at /content/wdm_m
   export PYTHONPATH=$PWD:$PWD/packages/wdm/src:$PWD/packages/domainia/src:$PWD/packages/wdm_models/src
   export PYTHONSAFEPATH=1 PYTHONDONTWRITEBYTECODE=1 JAX_ENABLE_X64=true XLA_PYTHON_CLIENT_PREALLOCATE=false
   export XLA_FLAGS=--xla_gpu_deterministic_ops=true
+  export JAX_PLATFORMS=cuda
   python -P -m scripts.sinusoid.validate --backend jax --tier fast \\
       --report /content/drive/MyDrive/wdm_release/validate_sinusoid_jax_gpu_fast.json
 """
@@ -85,7 +94,7 @@ for _src in reversed(SOURCES):
         sys.path.insert(0, str(_src))
 
 from wdm_models.registry import MODELS, TARGETS  # noqa: E402  (after the path bootstrap)
-from wdm_models.sampling.device import run_meta  # noqa: E402
+from wdm_models.sampling.device import CPU_DETERMINISM, run_meta  # noqa: E402
 from wdm_models.sampling.validate import (Gate, ValidationError, build_fingerprint, check_counters,  # noqa: E402
                                           check_reference, compare, evaluate, same_build, wrap_periodic,
                                           write_report)
@@ -368,6 +377,17 @@ def run(*, backend: str = "numpy", tier: str = "fast", cases: Sequence[str] | No
             "problems": problems, "ok": not failed and n_points > 0 and not problems}
 
 
+def cpu_determinism() -> str:
+    """Append :data:`CPU_DETERMINISM` to ``XLA_FLAGS`` unless an ``--xla_cpu_multi_thread_eigen``
+    setting is already there (an explicit choice wins); returns the flags in force.  It acts only
+    before JAX starts (``main`` calls it first; importing this module does not import JAX)."""
+    flags = os.environ.get("XLA_FLAGS", "").strip()
+    if "--xla_cpu_multi_thread_eigen" not in flags:
+        flags = f"{flags} {CPU_DETERMINISM}".strip()
+        os.environ["XLA_FLAGS"] = flags
+    return flags
+
+
 def main(argv: list[str] | None = None) -> int:
     if not sys.flags.safe_path:                      # spec section 1, guard 5
         raise SystemExit("run with python -P or PYTHONSAFEPATH=1 (source env/activate.sh)")
@@ -384,6 +404,7 @@ def main(argv: list[str] | None = None) -> int:
     report = a.report.resolve() if a.report is not None else None
     if report is not None and report.is_relative_to(REL.resolve()):
         ap.error("--report must lie outside the release tree")
+    cpu_determinism()                                # spec section 3.4: before JAX starts
     try:
         rep = run(backend=a.backend, tier=a.tier, cases=a.case, models=a.model, goldens=a.goldens,
                   golden=a.golden_root, data_root=a.data_root,
@@ -400,7 +421,8 @@ def main(argv: list[str] | None = None) -> int:
                   f"inf_mismatch={m['inf_mismatch']}")
     verdict = "PASS" if rep["ok"] else "FAIL"
     print(f"[validate] {verdict}: {rep['n_targets']} targets, {rep['n_points']} points, backend {rep['backend']}, "
-          f"tier {rep['tier']}, recording build {rep['recording_build']}; failed {rep['failed_targets']}")
+          f"tier {rep['tier']}, recording build {rep['recording_build']}; failed {rep['failed_targets']}; "
+          f"device {rep['run_meta']['device_kind']}")
     for p in rep["problems"][:20]:
         print(f"[validate]   {p}", file=sys.stderr)
     return 0 if rep["ok"] else 1

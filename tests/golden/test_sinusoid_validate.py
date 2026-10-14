@@ -226,3 +226,6 @@ def test_cli_fails_closed(tmp_path):
     assert p.returncode == 2 and "invalid choice" in p.stderr
     p = _cli("-c", "from scripts.sinusoid.validate import main; main([])", safe_path=False)
     assert p.returncode == 1 and "python -P" in p.stderr
+    probe = "import sys, scripts.sinusoid.validate; print(sorted(m for m in sys.modules if m.startswith('jax')))"
+    p = _cli("-P", "-c", probe)
+    assert p.returncode == 0 and p.stdout.strip() == "[]", p.stdout + p.stderr     # main() sets XLA_FLAGS first

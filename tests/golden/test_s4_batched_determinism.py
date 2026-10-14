@@ -9,11 +9,16 @@ reproducible bit for bit -- across fresh builds in one process and across proces
   relative, the exact model's PCG); -inf masks and ``last_failed`` identical.
 * Determinism: two fresh builds give identical bytes; two fresh interpreters give
   identical bytes (``float.hex``) for six models (``slow``) with single-threaded Eigen
-  (``XLA_FLAGS=--xla_cpu_multi_thread_eigen=false``).  With XLA-CPU's default threaded
-  Eigen the Whittle programs (one 16384-point rfft per row) are NOT bitwise run to run:
-  repeated calls differ by up to 1.6e-16 relative (measured: 3-13 of 20 calls at
-  manuscript_low/high), which the last test pins as <= 1e-15; every other model repeated
-  bitwise in the same measurement.
+  (``XLA_FLAGS=--xla_cpu_multi_thread_eigen=false``, spec section 3.4; validate.py's
+  ``main`` sets it for every validation run).  With XLA-CPU's default threaded Eigen the
+  values are NOT bitwise run to run: the Whittle programs (one 16384-point rfft per row)
+  differ by up to 1.6e-16 relative (measured: 3-13 of 20 calls at manuscript_low/high),
+  which the last test pins as <= 1e-15, and the WDM diagonals drift at the same ulp level
+  under load (the part-3 final review measured ``repeat_max_abs`` 1.22e-4 for band_raw,
+  about 2.6e-16 relative at its stress points, 7.3e-12 for mid_raw and 5.8e-11 for mid_cut,
+  with 21-39 of 60 repeated calls differing; 0 of 60 with the flag).  This module's
+  pytest process runs with the default threading on purpose (``s4_report`` does not set
+  the flag for it), so the last test measures the threaded case.
 """
 
 from __future__ import annotations
