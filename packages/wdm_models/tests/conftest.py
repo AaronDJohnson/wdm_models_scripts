@@ -137,3 +137,63 @@ def facts(golden_io):
     """golden/sinusoid/model_facts.json (E-A2): the oracle's configs, prior tables, noise
     bounds, signal sha256, PSD sample and the 45 final runs' prior records."""
     return golden_io.read_json(SIN_GOLDEN / "model_facts.json")
+
+
+# --- galactic binary (S5, section F-A) ---------------------------------------------------------
+GB_GOLDEN = GOLDEN / "galactic_binary"
+#: The keys of a golden ``build`` record that decide whether templates/PSDs may be bitwise
+#: (binary_galactica runs on JAX, so jax/jaxlib join the NumPy build keys).
+GB_BUILD_KEYS = ("machine", "python", "numpy", "scipy", "jax", "jaxlib")
+
+
+@pytest.fixture
+def bg():
+    """``binary_galactica`` with float64 JAX on; skips in the NumPy-only lane (bg is JAX-only)."""
+    _jax_or_skip()
+    return pytest.importorskip("binary_galactica", reason="binary_galactica not installed")
+
+
+@pytest.fixture
+def s5(record_property):
+    """``s5(item, observed, gate)``: one ``s5`` junit property ``{"item", "observed", "gate"}``
+    (the S5 report's records; the ``s3``/``s4`` convention)."""
+    import json
+
+    def rec(item: str, observed: float, gate: float) -> None:
+        record_property("s5", json.dumps({"item": item, "observed": float(observed), "gate": float(gate)}))
+
+    return rec
+
+
+@pytest.fixture(scope="session")
+def gb_products(golden_io):
+    """golden/galactic_binary/products.json (G5, lineage C: templates, describe counts,
+    snr_full, prior boxes, the envelope's C and Table III, the constants)."""
+    return golden_io.read_json(GB_GOLDEN / "products.json")
+
+
+@pytest.fixture(scope="session")
+def gb_recording_build(gb_products, golden_io):
+    """True when this process matches products.json's build on every :data:`GB_BUILD_KEYS`."""
+    current = golden_io.runtime_fingerprint()
+    rec = gb_products["build"]
+    return all(rec.get(k) == current.get(k) for k in GB_BUILD_KEYS)
+
+
+@pytest.fixture(scope="session")
+def gb_g6(golden_io):
+    """``gb_g6(case) -> (json, npz arrays)``: golden/galactic_binary/intermediates_<case>."""
+    def load(case: str):
+        with np.load(GB_GOLDEN / f"intermediates_{case}.npz", allow_pickle=False) as z:
+            arrays = {k: np.array(z[k]) for k in z.files}
+        return golden_io.read_json(GB_GOLDEN / f"intermediates_{case}.json"), arrays
+
+    return load
+
+
+@pytest.fixture(scope="session")
+def gb_psd_window():
+    """golden/galactic_binary/psd_window.npz: lineage C's ``prepare.psd_components`` (the
+    ``_nora`` instrument PSD and ``fit_foreground.s_fg_glass``) on each window's bins."""
+    with np.load(GB_GOLDEN / "psd_window.npz", allow_pickle=False) as z:
+        return {k: np.array(z[k]) for k in z.files}
