@@ -308,8 +308,9 @@ def map_fit_binned(Pbar, M, fc, x0=GLASS_START, *, iterations: int = 20000, ntem
         try:
             from impulse import PTSampler as sampler_cls
         except ImportError as exc:
-            raise ImportError("map_fit_glass needs impulse (impulse-mcmc v2 964283c, the "
-                              "wdm-models[sampling] extra)") from exc
+            raise ImportError("the GLASS foreground MAP (map_fit_binned, map_fit_glass) needs "
+                              "impulse (impulse-mcmc v2 964283c, the wdm-models[sampling] extra)"
+                              ) from exc
     lo, hi = GLASS_PRIOR[:, 0], GLASS_PRIOR[:, 1]
     lnlike, lnprior = glass_objective(Pbar, M, fc)
     x0 = np.clip(np.asarray(x0, float), lo + 1e-9, hi - 1e-9)
