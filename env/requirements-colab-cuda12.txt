@@ -1,0 +1,8 @@
+# Colab GPU runtime for the release (spec section 1). First, in the notebook:
+#     pip uninstall -y jax-cuda13-plugin jax-cuda13-pjrt
+# (Colab preinstalls jax-cuda13 0.11.x, which clashes with the pinned CUDA-12 build at random:
+# "No supported configs found for HLO".)  Then: pip install -r env/requirements-colab-cuda12.txt
+jax[cuda12]==0.9.0.1
+numpy==2.3.5
+scipy==1.16.3
+pytest==8.4.2

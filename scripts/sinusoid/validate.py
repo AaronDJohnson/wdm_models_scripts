@@ -44,6 +44,8 @@ golden kind, ``ms_per_eval`` from a second, warm call (fresh counters and cache,
 programs compiled) and ``repeat_max_abs``, its largest difference from the gated call --
 both reported, never gated.  On NumPy ``ms_per_eval`` is the gated call's.  Each target
 is released before the next (an edge-exact target holds ~2.8 GB of Phi).
+
+Colab GPU (user-run, S4): see ``COLAB`` below and the README.
 """
 
 from __future__ import annotations
@@ -60,6 +62,19 @@ from pathlib import Path
 from typing import Any
 
 import numpy as np
+
+COLAB = """\
+On a Colab GPU runtime (T4/L4/A100), the release tree unzipped at /content/wdm_models_scripts
+(README.md, "GPU validation of the sinusoid"):
+  cd /content/wdm_models_scripts
+  pip uninstall -y jax-cuda13-plugin jax-cuda13-pjrt
+  pip install -q -r env/requirements-colab-cuda12.txt
+  export PYTHONPATH=$PWD:$PWD/packages/wdm/src:$PWD/packages/domainia/src:$PWD/packages/wdm_models/src
+  export PYTHONSAFEPATH=1 PYTHONDONTWRITEBYTECODE=1 JAX_ENABLE_X64=true XLA_PYTHON_CLIENT_PREALLOCATE=false
+  export XLA_FLAGS=--xla_gpu_deterministic_ops=true
+  python -P -m scripts.sinusoid.validate --backend jax --tier fast \\
+      --report /content/drive/MyDrive/wdm_release/validate_sinusoid_jax_gpu_fast.json
+"""
 
 REL = Path(__file__).resolve().parents[2]
 #: The release sources, in front of sys.path unless already there (explicit and
