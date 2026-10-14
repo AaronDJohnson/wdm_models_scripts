@@ -68,6 +68,24 @@ def test_the_pipeline_clis_refuse_bad_arguments(tmp_path, monkeypatch, capsys):
     assert e.value.code == 2
 
 
+def test_fit_foreground_refuses_impulse_1x_with_what_to_install(tmp_path, monkeypatch, capsys):
+    """P4P: a stand-in impulse 1.0.0 (PyPI's pre-rewrite API) is refused at the usage check, before
+    the HDF5 is opened, instead of a TypeError in the MAP fit."""
+    import sys
+    import types
+
+    old = types.ModuleType("impulse")
+    old.PTSampler = object
+    old.__version__ = "1.0.0"
+    monkeypatch.setitem(sys.modules, "impulse", old)
+    assert FF._impulse_available() is False
+    with pytest.raises(SystemExit) as e:
+        FF.main(["--sangria-h5", __file__, "--out", str(tmp_path)])
+    assert e.value.code == 2
+    err = capsys.readouterr().err
+    assert "1.0.0" in err and "impulse-mcmc v2 964283c" in err and "git+https://" in err
+
+
 def test_fit_foreground_cli_on_the_synthetic_record(synthetic, tmp_path, monkeypatch, capsys):
     h5, root, syn, F = synthetic
     monkeypatch.setattr(FF, "_impulse_available", lambda: True)

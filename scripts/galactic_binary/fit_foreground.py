@@ -10,8 +10,9 @@ From the release root, after ``source env/activate.sh``:
 binaries and their TDI from the private ``LDC2_sangria_training_v2.h5``, generates the
 45,443 / 63,898 / 89,366 candidates of 3 / 6 / 12 months, iterates, and runs the GLASS MAP
 (impulse PT, 100000 iterations x 8 temperatures, seed 0; ~30-40 s per duration).  Needs
-``h5py`` (``[pipeline]``) and ``impulse`` (``[sampling]``, impulse-mcmc v2 964283c), checked
-before the HDF5 is opened.  Writes ``foreground_<m>mo_snr<snr>.npz`` and ``.json`` into ``--out``.
+``h5py`` (``[pipeline]``) and ``impulse`` v2 (``[sampling]``, impulse-mcmc v2 964283c from git,
+``env/constraints.txt``; impulse 1.x, PyPI's 1.0.0, is refused), checked before the HDF5 is
+opened.  Writes ``foreground_<m>mo_snr<snr>.npz`` and ``.json`` into ``--out``.
 
 The release default waveform backend is ``onfly``; ``--backend fourier`` (gbonfly's algorithm)
 reproduces the shipped fits, and ``--compare-shipped`` then gates each written npz against
@@ -52,12 +53,18 @@ from wdm_models.galactic_binary.pipeline import foreground_fit as F  # noqa: E40
 resolve = F.resolve
 
 
-def _impulse_available() -> bool:
+def _impulse_problem() -> str | None:
+    """Why the GLASS MAP cannot run (impulse missing, or not v2: ``foreground_fit.impulse_sampler``),
+    or None."""
     try:
-        import impulse  # noqa: F401
-    except ImportError:
-        return False
-    return True
+        F.impulse_sampler()
+    except ImportError as err:
+        return str(err)
+    return None
+
+
+def _impulse_available() -> bool:
+    return _impulse_problem() is None
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -81,7 +88,8 @@ def main(argv: list[str] | None = None) -> int:
     if not a.sangria_h5.is_file():
         ap.error(f"--sangria-h5 {a.sangria_h5} is not a file")
     if not _impulse_available():
-        ap.error("the GLASS MAP needs impulse (pip install the wdm-models[sampling] extra: impulse-mcmc v2 964283c)")
+        ap.error(_impulse_problem() or f"the GLASS MAP needs impulse ({F.IMPULSE_PIN}, the wdm-models[sampling] "
+                 f"extra): pip install 'impulse-mcmc @ {F.IMPULSE_URL}'")
     if a.compare_shipped and a.snr != [7.0]:
         ap.error("--compare-shipped needs --snr 7 (the shipped threshold)")
     from wdm.backend import enable_x64

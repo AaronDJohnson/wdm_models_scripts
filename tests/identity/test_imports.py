@@ -188,6 +188,16 @@ def test_constraints_pin_binary_galactica():
     assert "binary-galactica==0.5.0" in lines
 
 
+def test_constraints_pin_impulse_v2_by_git():
+    """impulse v2 (964283c, on origin/v2) is not on PyPI, whose impulse-mcmc 1.0.0 is the
+    pre-rewrite API: the release pins the commit by its git URL (P4P)."""
+    lines = [ln.strip() for ln in CONSTRAINTS.read_text().splitlines()
+             if ln.strip() and not ln.lstrip().startswith("#")]
+    assert "impulse-mcmc @ git+https://github.com/AaronDJohnson/impulse_mcmc@964283c" in lines
+    assert [ln for ln in lines if ln.startswith("impulse")] == [
+        "impulse-mcmc @ git+https://github.com/AaronDJohnson/impulse_mcmc@964283c"]
+
+
 def test_binary_galactica_is_the_physical_amplitude_release():
     pytest.importorskip("binary_galactica", reason="binary_galactica not installed (spec: wdm_models[gb])")
     env = {k: v for k, v in os.environ.items() if not k.startswith(("PYTHON", "JAX_"))}

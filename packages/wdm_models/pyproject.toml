@@ -19,7 +19,10 @@ dependencies = [
 [project.optional-dependencies]
 gb = ["binary_galactica>=0.5.0"]
 pipeline = ["h5py"]
-sampling = ["impulse-mcmc"]
+# impulse v2 (commit 964283c) is not on PyPI, whose impulse-mcmc 1.0.0 is the pre-rewrite API:
+# the extra asks for v2 (no PyPI release satisfies it) and the release's env/constraints.txt
+# pins the commit by its git URL (pip install -c env/constraints.txt ...).
+sampling = ["impulse-mcmc>=2"]
 test = ["pytest>=8,<9"]
 
 [tool.hatch.build.targets.wheel]

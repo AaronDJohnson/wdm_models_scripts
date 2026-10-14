@@ -137,6 +137,54 @@ def test_map_fit_without_impulse_says_what_to_install(monkeypatch):
         F.map_fit_binned(z["fit_Pbar"], z["fit_M"], z["fit_f"], iterations=2)
 
 
+def _impulse_stub(version):
+    """A stand-in ``impulse`` module: ``version`` as ``__version__`` (None: no attribute, like
+    impulse-mcmc 1.0.0, whose ``__init__`` is ``from .base import PTSampler``)."""
+    import types
+
+    mod = types.ModuleType("impulse")
+
+    class PTSampler:
+        def __init__(self, *a, **k):
+            raise AssertionError("constructed")
+
+    mod.PTSampler = PTSampler
+    if version is not None:
+        mod.__version__ = version
+    return mod
+
+
+@pytest.mark.parametrize("version,metadata", [(None, "1.0.0"), ("1.0.0", None), ("1.2", "1.2"), (None, None),
+                                              ("v2", None)])
+def test_map_fit_refuses_impulse_1x_before_a_typeerror(monkeypatch, version, metadata):
+    """P4P: PyPI's impulse-mcmc 1.0.0 imports and has a PTSampler, but not v2's constructor (a
+    TypeError later): the guard refuses it -- and an unknown version -- with what to install."""
+    import importlib.metadata as md
+    import sys
+
+    def fake(name):
+        if metadata is None:
+            raise md.PackageNotFoundError(name)
+        return metadata
+
+    monkeypatch.setitem(sys.modules, "impulse", _impulse_stub(version))
+    monkeypatch.setattr(md, "version", fake)
+    with pytest.raises(ImportError, match=r"impulse-mcmc v2 964283c") as err:
+        F.impulse_sampler()
+    assert "git+https://github.com/AaronDJohnson/impulse_mcmc@964283c" in str(err.value)
+    z = _shipped(6)
+    with pytest.raises(ImportError, match=r"not impulse v2"):
+        F.map_fit_binned(z["fit_Pbar"], z["fit_M"], z["fit_f"], iterations=2)
+
+
+def test_impulse_v2_is_accepted(monkeypatch):
+    import sys
+
+    stub = _impulse_stub("2.0.0")
+    monkeypatch.setitem(sys.modules, "impulse", stub)
+    assert F.impulse_sampler() is stub.PTSampler
+
+
 @pytest.mark.golden
 @pytest.mark.slow
 @pytest.mark.parametrize("months", MONTHS)

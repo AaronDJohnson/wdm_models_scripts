@@ -37,9 +37,9 @@ Differences from the legacy module, none of which changes a number on the paper'
   comparison") is not ported; the GLASS MAP is the only fit, and GLASS's names, prior box and
   start are ``foreground``'s (one source);
 * the MAP fit is split: :func:`map_fit_binned` fits a binned periodogram and takes the sampler
-  class (impulse's ``PTSampler`` by default, imported lazily), :func:`map_fit_glass` bins the
-  data first -- so the shipped binned periodograms can be refitted and the wiring tested
-  without impulse;
+  class (impulse's ``PTSampler`` by default, imported lazily by :func:`impulse_sampler`, which
+  refuses impulse 1.x), :func:`map_fit_glass` bins the data first -- so the shipped binned
+  periodograms can be refitted and the wiring tested without impulse;
 * :func:`write` no longer copies ``foreground_<m>mo.npz`` (the segment builder takes the
   ``foreground_<m>mo_snr7.npz`` path explicitly) and records the waveform backend;
 * the batched generator takes the orbit as a ``jit`` argument (spec §3.3: constants are never
@@ -52,6 +52,7 @@ import json
 import tempfile
 import time
 from collections.abc import Callable, Iterator
+from importlib import metadata
 from pathlib import Path
 from typing import Any
 
@@ -62,13 +63,18 @@ from ..instrument import SANGRIA_NOISE_PARAMS, tdi_instrumental_psd_AE
 
 __all__ = ["BATCH_BINS", "BLOCK_DLNF", "BLOCK_MIN_BINS", "COMPONENTS", "DT", "FIELDS", "FIT_ATOL_KEYS",
            "FIT_BAND", "FIT_EXACT_KEYS", "FIT_RTOL_KEYS", "GLASS_NAMES", "GLASS_PRIOR", "GLASS_START",
-           "Generator", "NATIVE", "PROXY_MARGIN", "SMOOTH_BAND", "SMOOTH_BLOCKS", "YEAR", "accumulate",
+           "Generator", "IMPULSE_PIN", "IMPULSE_URL", "NATIVE", "PROXY_MARGIN", "SMOOTH_BAND", "SMOOTH_BLOCKS", "YEAR", "accumulate",
            "band_snr2", "binned_power", "block_mean", "blocks", "compare_fit", "confusion_psd",
-           "glass_objective", "labels", "map_fit_binned", "map_fit_glass", "native_of", "polish",
+           "glass_objective", "impulse_sampler", "labels", "map_fit_binned", "map_fit_glass", "native_of", "polish",
            "proxy_snr", "read_column", "read_gb_ae", "resolve", "s_inst", "write"]
 
 DT = 5.0
 YEAR = 31536000.0
+#: The MAP's sampler: impulse v2 (``impulse.__version__`` 2.0.0), commit 964283c on ``origin/v2``,
+#: pinned in ``env/constraints.txt``.  It is not on PyPI, whose ``impulse-mcmc`` 1.0.0 is the
+#: pre-rewrite API (no ``__version__``; a ``PTSampler`` with other arguments).
+IMPULSE_PIN = "impulse-mcmc v2 964283c"
+IMPULSE_URL = "git+https://github.com/AaronDJohnson/impulse_mcmc@964283c"
 COMPONENTS = ("dgb", "igb", "vgb")
 #: Native parameter columns written out (colatitude, not the catalogue's latitude).
 NATIVE = ("f0", "fdot", "amp", "phi0", "colat", "lon", "psi", "cos_iota")
@@ -293,6 +299,33 @@ def polish(x, lnlike: Callable, lnprior: Callable) -> np.ndarray:
                     options=dict(maxiter=20000, xatol=1e-9, fatol=1e-9)).x
 
 
+def impulse_sampler() -> Any:
+    """impulse's ``PTSampler`` (v2), or :class:`ImportError` saying what to install: when impulse
+    is missing, and when it is not v2 -- impulse-mcmc 1.x (PyPI's 1.0.0) imports and has a
+    ``PTSampler``, but its constructor would raise a ``TypeError`` inside the fit."""
+    install = f"pip install 'impulse-mcmc @ {IMPULSE_URL}' (env/constraints.txt)"
+    try:
+        import impulse
+    except ImportError as exc:
+        raise ImportError("the GLASS foreground MAP (map_fit_binned, map_fit_glass) needs impulse "
+                          f"({IMPULSE_PIN}, the wdm-models[sampling] extra): {install}") from exc
+    version = getattr(impulse, "__version__", None)
+    if not isinstance(version, str):
+        try:
+            version = metadata.version("impulse-mcmc")
+        except metadata.PackageNotFoundError:
+            version = None
+    try:
+        major = int(str(version).split(".")[0])
+    except ValueError:
+        major = None
+    if major is None or major < 2:
+        raise ImportError(f"impulse {version or '(version unknown)'} is not impulse v2: the GLASS foreground MAP "
+                          f"needs {IMPULSE_PIN} (PyPI's impulse-mcmc 1.0.0 is the pre-rewrite API, whose "
+                          f"PTSampler takes other arguments): {install}")
+    return impulse.PTSampler
+
+
 def map_fit_binned(Pbar, M, fc, x0=GLASS_START, *, iterations: int = 20000, ntemps: int = 4,
                    seed: int = 0, sampler_cls: Any = None):
     """MAP of GLASS's foreground model on a binned periodogram (``Pbar``, bins per block ``M``,
@@ -302,15 +335,11 @@ def map_fit_binned(Pbar, M, fc, x0=GLASS_START, *, iterations: int = 20000, ntem
     ``geomspace(1, 50, ntemps)``, proposal covariance ``diag((0.01 (hi - lo))^2)``, ``seed``);
     the highest-posterior cold sample is then polished with Nelder-Mead (:func:`polish`).
     Returns the MAP, the cold chain's posterior standard deviations (after 30% burn-in) and
-    the fit.  ``sampler_cls`` defaults to ``impulse.PTSampler`` (the ``[sampling]`` extra).
+    the fit.  ``sampler_cls`` defaults to impulse v2's ``PTSampler`` (:func:`impulse_sampler`,
+    the ``[sampling]`` extra; impulse 1.x is refused).
     """
     if sampler_cls is None:
-        try:
-            from impulse import PTSampler as sampler_cls
-        except ImportError as exc:
-            raise ImportError("the GLASS foreground MAP (map_fit_binned, map_fit_glass) needs "
-                              "impulse (impulse-mcmc v2 964283c, the wdm-models[sampling] extra)"
-                              ) from exc
+        sampler_cls = impulse_sampler()
     lo, hi = GLASS_PRIOR[:, 0], GLASS_PRIOR[:, 1]
     lnlike, lnprior = glass_objective(Pbar, M, fc)
     x0 = np.clip(np.asarray(x0, float), lo + 1e-9, hi - 1e-9)

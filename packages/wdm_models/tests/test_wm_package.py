@@ -110,7 +110,8 @@ def test_distribution_metadata():
     extras = proj["optional-dependencies"]
     assert extras["gb"] == ["binary_galactica>=0.5.0"]
     assert extras["pipeline"] == ["h5py"]
-    assert extras["sampling"] == ["impulse-mcmc"]
+    # impulse v2 (964283c, env/constraints.txt) is not on PyPI, whose 1.0.0 is the pre-rewrite API
+    assert extras["sampling"] == ["impulse-mcmc>=2"]
     ini = meta["tool"]["pytest"]["ini_options"]
     assert ini["pythonpath"] == ["src", "../domainia/src", "../wdm/src"]
     assert "-p no:cacheprovider" in ini["addopts"]

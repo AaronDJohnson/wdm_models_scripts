@@ -4,3 +4,9 @@
 # 0.5.0 at import of its waveform (wdm_models.galactic_binary.waveform.check_binary_galactica).
 binary-galactica==0.5.0
 # env/requirements-bg.txt installs this PyPI release on top of the env (pip --no-deps --force-reinstall).
+# impulse v2 (impulse-mcmc 2.0.0, commit 964283c on origin/v2) for the GLASS foreground MAP and the
+# sampling runners: not on PyPI, whose impulse-mcmc 1.0.0 is the pre-rewrite API.  The
+# wdm-models[sampling] extra asks for impulse-mcmc>=2 (no PyPI release satisfies it); this
+# constraint supplies the commit (pip >= 20.3 accepts a named URL constraint):
+#     $PY -m pip install -c env/constraints.txt "impulse-mcmc>=2"
+impulse-mcmc @ git+https://github.com/AaronDJohnson/impulse_mcmc@964283c
