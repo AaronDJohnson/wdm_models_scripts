@@ -24,7 +24,7 @@ model                  composition (``A_n`` outside; density ``RealGaussian``)
 =====================  =====================================================================
 
 Both backends (S4): ``resolved.backend`` selects NumPy (WT column, every domainia form
-``solve``) or JAX (WG column: gram + padded, whitened tri marginal, adaptive staged rows,
+``solve``) or JAX (WG column: gram + padded, whitened tri marginal, adaptive rows (staged on CPU),
 ``on_fail="nan"``, the alpha_d clamp, the ``table`` correction, the pads' ``reduce`` marginal
 and the ``scaled`` Schur complement over a diagonal interior -- E-C's WG-shaped states); on
 JAX the ``exact`` model also carries WG's validity mask as ``row_ok`` (:func:`_exact_row_ok`).
@@ -106,9 +106,12 @@ def likelihood(model: str, cfg: SinusoidConfig, d: Any, *, geometry: Geometry = 
     """``model`` on the record ``d`` (``cfg.N`` samples of ``cfg.dt``).
 
     ``resolved`` defaults to the NumPy historical strategies
-    (``options.resolve("sinusoid", model, "numpy")``); ``exact`` (the fitted assets) is required
-    for the ``exact`` model.  Returns a ``domainia`` ``GaussianLikelihood`` (``FourierWhittle``
-    for the Whittle forms) whose rows are ``priors.names(model)``.
+    (``options.resolve("sinusoid", model, "numpy")``); ``exact`` (the fitted assets, loaded in
+    ``resolved.correction``'s order -- ``ValueError`` otherwise) is required for the ``exact``
+    model.  Returns a ``domainia`` ``GaussianLikelihood`` (``FourierWhittle`` for the Whittle
+    forms) whose rows are ``priors.names(model)``, on ``resolved.backend``; in the JAX column
+    (``exact_on_fail="nan"``) the ``exact`` model's ``row_ok`` is WG's validity mask
+    (:func:`_exact_row_ok`).
     """
     base, edge = split_model(model)
     r = resolve("sinusoid", model, "numpy") if resolved is None else resolved
@@ -132,7 +135,8 @@ def likelihood(model: str, cfg: SinusoidConfig, d: Any, *, geometry: Geometry = 
     if model == "exact":
         if exact is None:
             raise ValueError("the exact model needs its fitted assets: pass "
-                             "exact=ProjectedExact.load(cfg) (shipped for the manuscript grid)")
+                             "exact=ProjectedExact.load(cfg, algorithm=resolved.correction) (shipped for "
+                             "the manuscript grid)")
         if exact.correction.algorithm != r.correction:
             raise ValueError(f"the exact assets evaluate the correction in {exact.correction.algorithm!r} "
                              f"order; the resolved strategies need {r.correction!r} "
