@@ -70,10 +70,10 @@ for _src in reversed(SOURCES):
         sys.path.insert(0, str(_src))
 
 from wdm_models.registry import MODELS, TARGETS  # noqa: E402  (after the path bootstrap)
+from wdm_models.sampling.device import run_meta  # noqa: E402
 from wdm_models.sampling.validate import (Gate, ValidationError, build_fingerprint, check_counters,  # noqa: E402
                                           check_reference, compare, evaluate, same_build, wrap_periodic,
                                           write_report)
-from wdm_models.sampling.device import run_meta
 from wdm_models.sinusoid import priors  # noqa: E402
 
 GOLDEN = REL / "golden"
