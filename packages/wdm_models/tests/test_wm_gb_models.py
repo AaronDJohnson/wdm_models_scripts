@@ -118,14 +118,15 @@ def test_refusals():
 
 
 def test_the_jax_build_is_s7s():
-    """The S7 guards (section F-D lifts them; ``build`` refuses JAX before ``resolve``, which
-    would import JAX; the skip is for the JAX build that replaces them)."""
+    """On JAX the signal must be F-A's ``GBTemplate`` pytree (S7, F-D3 lifted F-C's guards): a
+    plain callable template is refused with ``TypeError`` by ``likelihood`` and ``build`` alike
+    (the skip: the NumPy-only lane has no JAX)."""
     pytest.importorskip("jax", reason="jax not installed (NumPy-only lane)")
     prep = PreparedCase.load("gb_3mo")
     h = _g6("gb_3mo")[1]["store_template"]
-    with pytest.raises(NotImplementedError, match="S7"):
+    with pytest.raises(TypeError, match="GBTemplate"):        # S7 (F-D3): on JAX the signal is the pytree
         M.likelihood("band_raw", prep, template=lambda p8: h, resolved=SimpleNamespace(backend="jax"))
-    with pytest.raises(NotImplementedError, match="S7"):
+    with pytest.raises(TypeError, match="GBTemplate"):
         M.build("gb_3mo", "band_raw", backend="jax", template=lambda p8: h)
 
 

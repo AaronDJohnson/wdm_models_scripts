@@ -9,7 +9,7 @@ from pathlib import Path
 import pytest
 
 from domainia.likelihood import FourierWhittle, GaussianLikelihood
-from domainia.sampling import NoiseStateCache
+from domainia.sampling import BatchedLikelihood, NoiseStateCache
 from wdm_models import registry as R
 from wdm_models.options import ModelOptions
 
@@ -50,5 +50,5 @@ def test_build_returns_the_models():
     assert isinstance(w, FourierWhittle) and w.ndim == 10 and w.n_keep == 644
     c = R.build("galactic_binary", "gb_3mo", "tri_exact", options=ModelOptions(evaluator="cache"))
     assert isinstance(c, NoiseStateCache) and c.lik.strategy == "expanded"
-    with pytest.raises(NotImplementedError, match="S7"):
-        R.build("galactic_binary", "gb_3mo", "band_raw", backend="jax")
+    j = R.build("galactic_binary", "gb_3mo", "band_raw", backend="jax", options=ModelOptions(waveform_backend="fourier"))
+    assert isinstance(j, BatchedLikelihood) and j.count_states is False and j.lik.be.name == "jax"   # S7 (F-D3)

@@ -28,7 +28,11 @@ NumPy ``historical`` is lineage C's NumPy reference (``make_lnlike``: residual s
 dense assembly of the edge-exact matrix, dense Cholesky of the pad's ``A Lambda_R A^T``,
 the 12-month exact factor in ``NT/2``-bin blocks); ``evaluator="cache"`` is lineage C's
 NumPy cache classes (expanded strategy; band/mid_exact by the Schur complement of the
-diagonal interior, ``EdgeSchurCache``).
+diagonal interior, ``EdgeSchurCache``).  JAX ``historical`` (S7) is lineage C's
+``gpu/jax_models.build``: the cached models in a ``NoiseStateCache`` (rows batched except
+``exact``), the others in a ``BatchedLikelihood``; the signal there is the ``GBTemplate``
+pytree itself (:func:`signal_for`) and the pad's ``Lambda_R`` uses the jittable
+:data:`PAD_LAYOUT`.
 """
 
 from __future__ import annotations
@@ -47,7 +51,7 @@ from domainia.density import ComplexGaussian, RealGaussian
 from domainia.domains import CellSet, ChannelAxis, FourierDomain, WDMDomain
 from domainia.likelihood import FourierWhittle, GaussianLikelihood, StaticSignal
 from domainia.maps import BinSelect, FourierCrop, FourierToWDM, FourierZeroPad
-from domainia.sampling import NoiseStateCache
+from domainia.sampling import BatchedLikelihood, NoiseStateCache
 from domainia.spectra import SeparablePSD, TabulatedSpectrum
 from domainia.variance import BandAveragedVariance, MidpointVariance
 
@@ -59,8 +63,8 @@ from .config import CUT, ENV_NAMES, ENVELOPE_PERIOD, N_HARM, PAD_COLUMNS, PAD_ED
 from .envelope import AnnualEnvelope
 from .prepared import PreparedCase
 
-__all__ = ["CACHED", "CHANNELS", "Geometry", "NumpyTemplate", "SCHUR", "TARGET_MODELS", "build", "envelope",
-           "geometry", "likelihood", "pad_mask", "pad_psd", "store_psd", "wrap"]
+__all__ = ["CACHED", "CHANNELS", "Geometry", "NumpyTemplate", "PAD_LAYOUT", "SCHUR", "TARGET_MODELS", "build",
+           "envelope", "geometry", "likelihood", "pad_mask", "pad_psd", "signal_for", "store_psd", "wrap"]
 
 CHANNELS = ("A", "E")
 #: The edge-exact models lineage C's cache evaluated by the Schur complement (``matrix.SCHUR``).
@@ -217,21 +221,21 @@ def _diag_base(base: str, psd: SeparablePSD, cells: CellSet, c: int) -> Diagonal
 
 
 def likelihood(model: str, prep: Any, *, template: Any, resolved: Any) -> GaussianLikelihood | FourierWhittle:
-    """``model`` of ``prep`` on NumPy (``resolved``: ``options.resolve("galactic_binary", model,
-    "numpy", ...)``).  ``template``: ``p8 -> (2, store_n)`` complex in prepared units (the
+    """``model`` of ``prep`` on ``resolved.backend`` (``resolved``: ``options.resolve("galactic_binary",
+    model, backend, ...)``; on JAX ``template`` must be the ``GBTemplate`` pytree on the store, see
+    :func:`signal_for`).  ``template``: ``p8 -> (2, store_n)`` complex in prepared units (the
     store window; ``waveform.GBTemplate(prep, backend=..., window="store")``, or a test's
     streamed table).  Rows are ``priors.names(model)``."""
     check_model(model)
     if model not in TARGET_MODELS[prep.case]:
         raise ValueError(f"{model!r} is not a target of galactic_binary/{prep.case}")
-    if resolved.backend != "numpy":
-        raise NotImplementedError("the GB JAX build is S7's (section F-D)")
     a = prep.arrays
     geo = geometry(prep)
     env = envelope(prep)
     psd = store_psd(prep, geo, env)
     store = FourierBins(np.asarray(a["store_z"]), geo.store, ChannelAxis(CHANNELS))
-    signal = StaticSignal(NumpyTemplate(template, geo.store.n))
+    signal = signal_for(template, geo, resolved.backend)
+    be = resolved.backend
     params = priors.params(model)
     lo, hi = np.asarray(a["prior_lo"], float), np.asarray(a["prior_hi"], float)
 
@@ -244,21 +248,21 @@ def likelihood(model: str, prep: Any, *, template: Any, resolved: Any) -> Gaussi
             k = slice(geo.nominal.k0 - geo.store.k0, geo.nominal.k0 - geo.store.k0 + geo.nominal.n)
             return FourierWhittle("complex", store, map=BinSelect(geo.store, geo.nominal),
                                   sI=np.asarray(a["store_sI"], float)[:, k], sG=np.asarray(a["store_sG"], float)[:, k],
-                                  signal=signal, params=params, row_ok=row_ok)
+                                  signal=signal, params=params, row_ok=row_ok, backend=be)
         stored = tuple(int(v) for v in np.atleast_1d(a["matrix_cut"]))
         if stored != geo.cut:
             raise ValueError(f"{prep.case}: the prepared whittle_cut crop is for cut {stored}, not {geo.cut}")
         factor = geo.crop.N / geo.N
         return FourierWhittle("complex", store, map=FourierCrop(geo.store, geo.crop, geo.crop_start),
                               sI=factor * np.asarray(a["crop_sI"], float), sG=factor * np.asarray(a["crop_sG"], float),
-                              signal=signal, params=params, row_ok=row_ok)
+                              signal=signal, params=params, row_ok=row_ok, backend=be)
     expanded = resolved.strategy == "expanded"
     if model == "exact":
         covs = tuple(HermitianCovariance(ExactFourierCovariance(psd, geo.nominal, channel=c),
                                          block=geo.NT // 2 if geo.periodic else None) for c in range(2))
         return GaussianLikelihood(store, BinSelect(geo.store, geo.nominal), ChannelStack(covs, len(ENV_NAMES)),
                                   ComplexGaussian(), signal=signal, params=params, strategy="expanded",
-                                  row_ok=row_ok)
+                                  row_ok=row_ok, backend=be)
     if edge == "pad":
         W = FourierToWDM(geo.pad_window, WDMDomain(geo.pad_kept))
         data_map = W.after(FourierZeroPad(geo.store, geo.pad_window))
@@ -267,7 +271,7 @@ def likelihood(model: str, prep: Any, *, template: Any, resolved: Any) -> Gaussi
         ppsd = pad_psd(prep, geo, env)
         covs = []
         for c in range(2):
-            lam_R = (Eq45Covariance(ppsd, R, builder="separable", assembly="blocktri", layout="ragged", channel=c)
+            lam_R = (Eq45Covariance(ppsd, R, builder="separable", assembly="blocktri", layout=PAD_LAYOUT, channel=c)
                      if base == "tri" else _diag_base(base, ppsd, R, c))
             covs.append(ZeroPadded(lam_R, strategy="cell_congruence", mask=mask, n_bands=len(geo.bands),
                                    n_columns=geo.NT, factor=resolved.pad_factor))
@@ -294,21 +298,52 @@ def likelihood(model: str, prep: Any, *, template: Any, resolved: Any) -> Gaussi
         quad = "elementwise" if base in ("band", "mid") and edge in ("raw", "cut") else "whiten"
     return GaussianLikelihood(store, data_map, ChannelStack(tuple(covs), len(ENV_NAMES)), RealGaussian(),
                               signal=signal, params=params, strategy="expanded" if expanded else "residual",
-                              quad_form=None if expanded else quad, row_ok=row_ok)
+                              quad_form=None if expanded else quad, row_ok=row_ok, backend=be)
+
+
+#: The block layout of the pad's ``Lambda_R`` (store bands x ``NT + 16`` columns).  Only its band
+#: blocks are read (``ZeroPadded`` factor ``"dense"``), identical in both layouts (bitwise on NumPy,
+#: F-D3); ``"padded"`` is jittable, ``"ragged"`` (a host loop) is not.
+PAD_LAYOUT = "padded"
+
+
+def signal_for(template: Any, geo: Geometry, backend: str) -> Any:
+    """The likelihood's signal.  NumPy: the template's host array (:class:`NumpyTemplate` in a
+    ``StaticSignal``).  JAX: the ``waveform.GBTemplate`` pytree itself on the store window -- its
+    orbit cache and ``DT sigma0`` are leaves, so they reach ``jit`` as arguments (spec section 3.3)
+    and the template traces under ``jit``/``vmap``; any other callable is refused (it would be
+    closed over, or fail on a tracer)."""
+    if backend == "numpy":
+        return StaticSignal(NumpyTemplate(template, geo.store.n))
+    from .waveform import GBTemplate
+
+    if not isinstance(template, GBTemplate):
+        raise TypeError(f"the GB JAX build needs the waveform.GBTemplate pytree; got {type(template).__name__}")
+    if (template.bin_lo, template.n_bins) != (geo.store.k0, geo.store.n):
+        raise ValueError(f"the JAX template must be on the store window [{geo.store.k0}, {geo.store.k0 + geo.store.n}); "
+                         f"got [{template.bin_lo}, {template.bin_lo + template.n_bins})")
+    return template
 
 
 def wrap(lik: Any, model: str, resolved: Any) -> Any:
     """``lik`` in its evaluator: ``"reference"`` -- the bare likelihood (each row factorises
     its own state, lineage C ``make_lnlike``); ``"cache"`` -- a ``NoiseStateCache`` of
     ``resolved.cache_size`` states (lineage C ``MatrixCache``/``EdgeSchurCache``/``FullCache``,
-    keyed by the flat noise slice)."""
+    keyed by the flat noise slice); ``"batched"`` (JAX) -- a ``BatchedLikelihood``, one
+    ``jit(vmap)`` per call (lineage C ``gpu/jax_models.BatchedLikelihood``) counting no noise
+    state: the legacy class had no counters and a diagonal or Whittle state has nothing to factor
+    (``evaluations`` and ``pd_failed_rows`` still count)."""
     if resolved.evaluator == "reference":
         return lik
     if resolved.evaluator == "cache":
         if model not in CACHED:
             raise ValueError(f"{model!r} has no cached evaluator")
         return NoiseStateCache(lik, resolved.cache_size, batch_rows=resolved.batch_rows)
-    raise NotImplementedError(f"evaluator {resolved.evaluator!r} is the JAX build's (S7, section F-D)")
+    if resolved.evaluator == "batched":
+        if model in CACHED:
+            raise ValueError(f"{model!r} is a cached model: its JAX evaluator is the cache")
+        return BatchedLikelihood(lik, count_states=False)
+    raise ValueError(f"unknown GB evaluator {resolved.evaluator!r}")
 
 
 def build(case: str, model: str, *, backend: str = "numpy", options: ModelOptions = ModelOptions(),
@@ -316,9 +351,7 @@ def build(case: str, model: str, *, backend: str = "numpy", options: ModelOption
     """``registry.build("galactic_binary", case, model, ...)``: the shipped prepared case, the
     template (``waveform.GBTemplate(prep, backend=options.waveform_backend, window="store")``
     unless ``template`` is given -- a test's streamed gbonfly table), the model and its
-    evaluator.  NumPy only here (S7 adds JAX)."""
-    if backend == "jax":                                  # before resolve(): it would import JAX
-        raise NotImplementedError("the GB JAX build is S7's (section F-D)")
+    evaluator, on NumPy or JAX (S7: on JAX the template must be the ``GBTemplate`` pytree)."""
     r = resolve("galactic_binary", model, backend, options)
     prep = PreparedCase.load(case, data_root=data_root)
     if model not in TARGET_MODELS[prep.case]:
