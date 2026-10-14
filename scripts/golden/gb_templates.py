@@ -26,12 +26,15 @@ __all__ = ["TemplateTable", "streamed_templates"]
 
 class TemplateTable:
     """``p8 -> (2, store_n)`` by exact lookup of the row's float64 bytes; a row that was not
-    streamed raises ``KeyError`` (never a silent fallback to another waveform)."""
+    streamed raises ``KeyError`` (never a silent fallback to another waveform).  The table
+    holds a private read-only copy of ``H``: a caller can neither change it afterwards nor
+    corrupt a later lookup by writing into a returned template."""
 
     def __init__(self, P8: np.ndarray, H: np.ndarray) -> None:
-        P8, H = np.atleast_2d(np.asarray(P8, dtype=np.float64)), np.asarray(H)
+        P8, H = np.atleast_2d(np.asarray(P8, dtype=np.float64)), np.array(H)
         if P8.shape[1] != 8 or H.ndim != 3 or H.shape[:2] != (len(P8), 2):
             raise ValueError(f"p8 {P8.shape} and templates {H.shape} do not pair up")
+        H.setflags(write=False)
         self._table = {p.tobytes(): h for p, h in zip(P8, H, strict=True)}
 
     def __len__(self) -> int:

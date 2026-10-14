@@ -29,6 +29,9 @@ def test_the_table_is_an_exact_fail_closed_lookup():
     H = np.arange(2 * 2 * 3).reshape(2, 2, 3) + 0j
     t = G.TemplateTable(P8, H)
     assert len(t) == 2 and np.array_equal(t(P8[1]), H[1])
+    assert not t(P8[1]).flags.writeable                   # a lookup cannot corrupt the table
+    H[1] += 1                                             # nor can the caller's array afterwards
+    assert np.array_equal(t(P8[1]), H[1] - 1)
     with pytest.raises(KeyError, match="no streamed gbonfly template"):
         t(P8[1] + np.r_[np.zeros(7), 1e-12])
     with pytest.raises(ValueError, match="pair up"):
