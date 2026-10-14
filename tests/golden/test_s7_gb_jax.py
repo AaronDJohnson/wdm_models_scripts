@@ -81,7 +81,8 @@ def test_g3_fast_tier_on_cpu_jax(case, model, record_property):
         results.append({"run": run, "shape": theta.shape, "stored_finite": bool(np.all(np.isfinite(stored))),
                         "values": values, "d": d, "failed": lik.last_failed.tolist(),
                         "counters": _counters(lik), "want": r["jax_counters"] if cached else _uncached(3)})
-        worst, worst_legacy = max(worst, float(d.max())), max(worst_legacy, float(np.abs(values - legacy).max()))
+        worst = float(np.maximum(worst, d.max()))              # np.maximum: a NaN is recorded, not dropped
+        worst_legacy = float(np.maximum(worst_legacy, np.abs(values - legacy).max()))
         n_rows += len(values)
     record_property("s7", json.dumps({"item": f"galactic_binary/{case}/{model}/jax/g3", "rows": n_rows,
                                       "max_abs": worst, "legacy_jax_max_abs": worst_legacy, "gate": gate}))
