@@ -10,7 +10,9 @@ abstract: >-
   and galactic-binary toy models), together with the scripts, shipped input data and
   golden reference values that reproduce the papers' toy-model results.
 type: software
-version: 0.9.0
+version: 0.10.0
+doi: 10.5281/zenodo.23347526
+date-released: "2026-10-14"
 license: MIT
 repository-code: "https://github.com/AaronDJohnson/wdm_models_scripts"
 authors:
