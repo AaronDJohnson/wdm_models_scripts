@@ -21,13 +21,17 @@ from wdm.backend import NUMPY, Backend, get_backend, require_x64
 __all__ = ["ExactFourierAt", "ExactFourierCovariance", "ghat"]
 
 
-def ghat(mu: Any, basis_L: Any, lags: np.ndarray, be: Backend) -> Any:
-    """``ghat`` at the static integer ``lags`` (GB ``likelihoods.ghat_at`` verbatim)."""
+def ghat(mu: Any, basis_L: Any, lags: np.ndarray, be: Backend, *, absl: Any = None, neg: Any = None) -> Any:
+    """``ghat`` at the static integer ``lags`` (GB ``likelihoods.ghat_at`` verbatim).  ``absl`` /
+    ``neg``: ``|lags|`` and ``lags < 0`` as arrays (constants passed to ``jit``, never literals);
+    built from ``lags`` when not given.  The same gather either way."""
     xp = be.xp
     L = basis_L.shape[1]
     R = be.fft.rfft(xp.exp(mu @ basis_L)) / L
-    out = R[np.abs(lags)]
-    return xp.where(np.asarray(lags) < 0, xp.conj(out), out)
+    if absl is None or neg is None:
+        absl, neg = np.abs(lags), np.asarray(lags) < 0
+    out = R[absl]
+    return xp.where(neg, xp.conj(out), out)
 
 
 class ExactFourierCovariance:
@@ -61,13 +65,15 @@ class ExactFourierCovariance:
         sI = np.asarray(tab_I.on(self.bins), float)[self.channel]        # (C, n) -> one channel
         sG = np.asarray(tab_G.on(self.bins), float)[self.channel]
         n = self.n
+        lags = np.arange(-(n - 1), n)
         return {"sI": sI, "sG": sG, "basis_L": np.asarray(self.envelope.basis_L, float),
-                "lag": np.arange(n)[None, :] - np.arange(n)[:, None] + n - 1}
+                "lag": np.arange(n)[None, :] - np.arange(n)[:, None] + n - 1,
+                "absl": np.abs(lags), "neg": lags < 0}           # constants, not program literals
 
     def evaluate(self, C: Any, mu: Any, be: Backend) -> Any:
-        """``M'(mu)``: GB ``full_covariance`` verbatim."""
+        """``M'(mu)``: GB ``full_covariance`` verbatim (the lag tables from ``C``)."""
         xp = be.xp
-        gh = ghat(mu, C["basis_L"], np.arange(-(self.n - 1), self.n), be)
+        gh = ghat(mu, C["basis_L"], np.arange(-(self.n - 1), self.n), be, absl=C["absl"], neg=C["neg"])
         root = xp.sqrt(C["sG"])
         return xp.diag(C["sI"].astype(complex)) + (root[:, None] * root[None, :]) * xp.conj(gh)[C["lag"]]
 
