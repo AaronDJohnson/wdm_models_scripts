@@ -78,7 +78,7 @@ def wrap_source(p8: Any, *, be: Backend | None = None) -> Any:
     be = be or get_backend(p8)
     xp = be.xp
     numpy = be.name == "numpy"
-    out = np.array(p8, dtype=np.float64, copy=True) if numpy else p8
+    out = np.array(p8, dtype=np.float64, copy=True) if numpy else be.asarray(p8)
     for i, (lo, hi) in PERIODIC.items():
         out = be.set(out, i, lo + xp.mod(p8[i] - lo, hi - lo), copy=not numpy)
     return out

@@ -95,5 +95,7 @@ def test_wrap_and_source_ok_trace_under_jit(jax_be):
     p = np.array([7900.0, 0.1, 7.0, -50.0, 0.2, -0.5, -1.0, 1e-4])
     w = jax.jit(lambda x: Pr.wrap_source(x, be=jax_be))(jnp.asarray(p))
     assert np.allclose(np.asarray(w), Pr.wrap_source(p), rtol=0, atol=1e-15)
+    # an explicit be= wins over a host row (get_backend's contract; legacy _set raised here)
+    assert np.allclose(np.asarray(Pr.wrap_source(p, be=jax_be)), Pr.wrap_source(p), rtol=0, atol=1e-15)
     ok = jax.jit(lambda x: Pr.source_ok(x, jnp.asarray(lo), jnp.asarray(hi), be=jax_be))
     assert bool(ok(jnp.asarray(p))) and not bool(ok(jnp.asarray(p).at[0].set(7859.0)))
