@@ -150,3 +150,56 @@ def test_fourier_whittle_complex_form_refuses_a_scaled_wdm_domain():
                                       **kw)(np.zeros((1, 3)))[0])
     with pytest.raises(ValueError, match=r"WDMDomain.scale = 2.0 is not honoured by FourierWhittle"):
         FourierWhittle("complex", SimpleNamespace(values=z, domain=WDMDomain(CELLS, 2.0)), **kw)
+
+
+# --- Fourier bins (owned by S5, spec section 4 "As built in S2"; task F-A10) --------------------
+def _fourier_toy(shift: int = 0):
+    """A two-channel complex-Fourier toy: store bins [4, 24) of an N = 64 record, an exact
+    covariance on the nominal bins [8, 16) shifted by ``shift``, read through
+    ``BinSelect(store, nominal)``."""
+    from domainia.covariance import ChannelStack, ExactFourierCovariance, HermitianCovariance
+    from domainia.data import FourierBins
+    from domainia.density import ComplexGaussian
+    from domainia.domains import ChannelAxis, FourierDomain
+    from domainia.maps import BinSelect
+    from domainia.spectra import SeparablePSD, TabulatedSpectrum
+
+    rng = np.random.default_rng(5)
+    store = FourierDomain(64, 1.0, 4, 20, "sigma0")
+    nominal = FourierDomain(64, 1.0, 8, 8, "sigma0")
+    env = SimpleNamespace(basis_L=np.vstack([np.ones(32), np.cos(2 * np.pi * np.arange(32) / 32)]))
+    psd = SeparablePSD(((TabulatedSpectrum(store, 1.0 + rng.random((2, 20))), None),
+                        (TabulatedSpectrum(store, 0.5 + rng.random((2, 20))), env)), ("A", "E"))
+    bins = FourierDomain(64, 1.0, 8 + shift, 8, "sigma0")
+    covs = tuple(HermitianCovariance(ExactFourierCovariance(psd, bins, channel=c)) for c in range(2))
+    z = rng.standard_normal((2, 20)) + 1j * rng.standard_normal((2, 20))
+    params = Params(("s", "mu_A0", "mu_A1", "mu_E0", "mu_E1"), (0,), (1, 2, 3, 4))
+    return (FourierBins(z, store, ChannelAxis(("A", "E"))), BinSelect(store, nominal), ChannelStack(covs, 2),
+            ComplexGaussian(), params, covs, bins)
+
+
+def test_hermitian_covariance_carries_its_bins():
+    from domainia.covariance import HermitianCovariance
+    from domainia.domains import FourierDomain
+
+    *_, covs, bins = _fourier_toy()
+    assert all(c.bins == bins for c in covs)
+    assert HermitianCovariance(np.eye(3, dtype=complex)).bins is None                  # an array: no bins
+    assert HermitianCovariance(lambda nu, be: np.eye(3, dtype=complex), 3).bins is None
+    assert HermitianCovariance(np.eye(8, dtype=complex), bins=bins).bins == bins       # declared bins
+    with pytest.raises(ValueError, match="are not the matrix's bins"):
+        HermitianCovariance(covs[0].matrix, bins=FourierDomain(64, 1.0, 9, 8, "sigma0"))
+    with pytest.raises(ValueError, match=r"the bins hold 8 bins; the matrix is \(3, 3\)"):
+        HermitianCovariance(np.eye(3, dtype=complex), bins=bins)
+
+
+def test_likelihood_refuses_covariance_bins_other_than_the_map_bins():
+    data, sel, stack, dens, params, _, _ = _fourier_toy()
+    theta = np.array([[0.0, 0.1, 0.2, -0.1, 0.05]])
+    sig = StaticSignal(lambda s: np.zeros((2, 20), dtype=complex))
+    assert np.isfinite(GaussianLikelihood(data, sel, stack, dens, signal=sig, params=params)(theta)[0])
+    for shift in (1, -1):
+        data, sel, stack, dens, params, _, _ = _fourier_toy(shift)
+        with pytest.raises(ValueError, match=r"channel 0: the covariance's bins \(FourierDomain\(N=64, dt=1\.0, "
+                                             rf"k0={8 + shift}, n=8"):
+            GaussianLikelihood(data, sel, stack, dens, signal=sig, params=params)

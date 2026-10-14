@@ -102,3 +102,41 @@ def test_cells_or_bins_other_than_the_maps_are_refused():
     moved = FourierDomain(Nr, dtg, store_dom.k0 + 1, store_dom.n, "sigma0")
     with pytest.raises(ValueError, match="domain"):
         lik(cells, map_src=moved)
+
+
+def test_exact_bins_other_than_the_maps_are_refused():
+    """S5 regression (task F-A10; spec section 4 "As built in S2"): the ``exact`` model with its
+    M' on the nominal bins shifted by one (360 bins, as many as the map's) gave lnL
+    -600.5157309322215 against the golden -600.5155231450001, silently; the likelihood now
+    refuses a ``HermitianCovariance`` whose ``bins`` are not the map's ``dst``."""
+    from domainia.covariance import ChannelStack, ExactFourierCovariance, HermitianCovariance
+    from domainia.data import FourierBins
+    from domainia.density import ComplexGaussian
+    from domainia.domains import ChannelAxis, FourierDomain
+    from domainia.likelihood import GaussianLikelihood, StaticSignal
+    from domainia.maps import BinSelect
+    from domainia.spectra import SeparablePSD, TabulatedSpectrum
+    from scripts.golden.s2_cases import ENV, GB_PARAMS, gb_envelope
+
+    g = gb_inputs(GB_CASE)
+    a = g.a
+    Nr, dtg = int(a["N"]), float(a["DT"])
+    store_dom = FourierDomain(Nr, dtg, int(a["store_offset"]), int(a["store_n"]), "sigma0")
+    store = FourierBins(a["store_z"], store_dom, ChannelAxis(("A", "E")))
+    nominal = FourierDomain(Nr, dtg, int(a["bin_offset"]) + int(a["freq_lo"]), int(a["freq_n"]), "sigma0")
+    psd = SeparablePSD(((TabulatedSpectrum(store_dom, a["store_sI"]), None),
+                        (TabulatedSpectrum(store_dom, a["store_sG"]), gb_envelope(GB_CASE))), ("A", "E"))
+
+    def lik(shift):
+        bins = FourierDomain(Nr, dtg, nominal.k0 + shift, nominal.n, "sigma0")
+        covs = ChannelStack(tuple(HermitianCovariance(ExactFourierCovariance(psd, bins, channel=c))
+                                  for c in range(2)), len(ENV))
+        return GaussianLikelihood(store, BinSelect(store_dom, nominal), covs, ComplexGaussian(),
+                                  signal=StaticSignal(lambda src, h=g.npz["store_template"]: h),
+                                  params=GB_PARAMS, strategy="expanded")
+
+    want = to_float(g.json["lnl_at_anchor"]["exact"]["lnl_make_lnlike"])
+    assert abs(float(lik(0)(g.anchor[None, :])[0]) - want) <= gb_gate(GB_CASE, "exact")
+    for shift in (1, -1):
+        with pytest.raises(ValueError, match="bins"):
+            lik(shift)

@@ -68,9 +68,21 @@ class HermitianCovariance(Covariance):
     ``matrix`` is an evaluator (``ExactFourierCovariance``), a callable ``fn(nu, be)`` or
     a fixed array.  ``n`` defaults to ``matrix.n`` (a fixed array: its size) and must
     agree with it when both are given.  ``logdet = 2 sum log Re diag L`` (GB ``logdet_of``).
+
+    ``bins`` is the ``FourierDomain`` the matrix is defined on: ``bins=``, else ``matrix.bins``
+    (an ``ExactFourierCovariance``'s), else ``None`` (an array or a callable); ``bins=`` other
+    than the matrix's own, or holding another bin count, raises ``ValueError``.
+    ``GaussianLikelihood`` refuses a map whose ``dst`` is other bins, which would otherwise pass
+    every shape check (S5: a one-bin shift of the GB ``exact`` model's bins gave lnL -600.51573
+    against the golden -600.51552, silently).
     """
 
-    def __init__(self, matrix: Any, n: int | None = None, *, block: int | None = None) -> None:
+    def __init__(self, matrix: Any, n: int | None = None, *, block: int | None = None,
+                 bins: Any = None) -> None:
+        own_bins = getattr(matrix, "bins", None)
+        if bins is not None and own_bins is not None and bins != own_bins:
+            raise ValueError(f"bins= ({bins!r}) are not the matrix's bins ({own_bins!r})")
+        self.bins = bins if bins is not None else own_bins
         self.matrix = as_evaluator(matrix)
         own = getattr(matrix, "n", None)
         if own is None and not (hasattr(matrix, "evaluate") or callable(matrix)):
@@ -80,6 +92,8 @@ class HermitianCovariance(Covariance):
         if n is not None and own is not None and int(n) != int(own):
             raise ValueError(f"n = {n} but the matrix is ({own}, {own})")
         self.n = int(own if n is None else n)
+        if self.bins is not None and int(self.bins.n) != self.n:
+            raise ValueError(f"the bins hold {self.bins.n} bins; the matrix is ({self.n}, {self.n})")
         if block is not None and (int(block) <= 0 or self.n % int(block)):
             raise ValueError(f"{self.n} bins are not whole blocks of {block}")
         self.block = None if block is None else int(block)

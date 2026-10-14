@@ -58,7 +58,7 @@ from wdm.backend import NUMPY, Backend, get_backend, pytree_dataclass
 from .covariance.base import concrete_failure
 from .covariance.stack import ChannelStack
 from .density import ComplexGaussian, RealGaussian
-from .domains import WDMDomain
+from .domains import FourierDomain, WDMDomain
 
 __all__ = ["COUNTERS", "DENSITY_ORDERS", "STRATEGIES", "FourierWhittle", "GaussianLikelihood",
            "NoiseState", "Params", "StaticSignal"]
@@ -197,10 +197,11 @@ def _check_pytree(parts: Any, what: str) -> None:
 
 def _check_composition(data: Any, map: Any, covs: tuple = (), *,
                        user: str = "GaussianLikelihood") -> None:
-    """Equal-sized but different domains or cell sets pass every shape check and give a
-    wrong lnL silently, so wherever the attributes exist require ``data.domain == map.src``
-    and each covariance's ``cells`` to be ``map.dst.cells`` (raw arrays, toy maps and
-    covariances without cells are not checked).  No map or covariance applies
+    """Equal-sized but different domains, cell sets or Fourier bins pass every shape check and
+    give a wrong lnL silently, so wherever the attributes exist require ``data.domain ==
+    map.src``, each covariance's ``cells`` to be ``map.dst.cells`` and, when ``map.dst`` is a
+    ``FourierDomain``, each covariance's ``bins`` to be ``map.dst`` (raw arrays, toy maps and
+    covariances without cells or bins are not checked).  No map or covariance applies
     ``WDMDomain.scale`` (gap G4) and ``Identity`` carries a scaled domain unchanged, so a
     ``WDMDomain`` with ``scale != 1`` as ``data.domain``, ``map.src`` or ``map.dst`` is
     refused here rather than ignored."""
@@ -210,7 +211,14 @@ def _check_composition(data: Any, map: Any, covs: tuple = (), *,
             d.require_unit_scale(user)
     if dom is not None and src is not None and dom != src:
         raise ValueError(f"data.domain {dom!r} is not the map's src {src!r}")
-    cells = getattr(getattr(map, "dst", None), "cells", None)
+    dst = getattr(map, "dst", None)
+    if isinstance(dst, FourierDomain):
+        for c, cov in enumerate(covs):
+            own = getattr(cov, "bins", None)
+            if own is not None and own != dst:
+                raise ValueError(f"channel {c}: the covariance's bins ({own!r}) are not the map's "
+                                 f"dst ({dst!r})")
+    cells = getattr(dst, "cells", None)
     if cells is None:
         return
     for c, cov in enumerate(covs):
@@ -273,9 +281,10 @@ class GaussianLikelihood(_CountersMixin):
     the amplitude folded into each term first, WT ``FastFullCovariance.lnlike``, the
     sinusoid ``exact`` model; an amplitude ``RealGaussian`` only).
 
-    Wherever the attributes exist, ``data.domain`` must be ``map.src`` and each channel's
-    ``cov.cells`` must be ``map.dst.cells`` (``ValueError`` otherwise): equal-sized but
-    different domains or cells would pass every shape check and give a wrong lnL.
+    Wherever the attributes exist, ``data.domain`` must be ``map.src``, each channel's
+    ``cov.cells`` must be ``map.dst.cells`` and each channel's ``cov.bins`` (Fourier
+    covariances) must be ``map.dst`` (``ValueError`` otherwise): equal-sized but different
+    domains, cells or bins would pass every shape check and give a wrong lnL.
     """
 
     def __init__(self, data: Any, map: Any, cov: Any, density: RealGaussian | ComplexGaussian, *,
